@@ -13,23 +13,23 @@ class ActivityError(RuntimeError):
 
 class History(object):
 
-    input_as_args = []
-    input_as_kwargs = {}
-
     def __init__(self, history):
         self.history = history
+
+    @property
+    def input(self):
+        return {'args': [], 'kwargs': {}}
 
     @property
     def task_token(self):
         return self.history['taskToken']
 
     @property
-    def workflow_name(self):
-        return self.history['workflowType']['name']
-
-    @property
-    def workflow_version(self):
-        return self.history['workflowType']['version']
+    def id(self):
+        return (
+            self.history['workflowType']['name'],
+            self.history['workflowType']['version']
+        )
 
     @property
     def events(self):
