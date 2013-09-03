@@ -22,7 +22,7 @@ class BaseClient(object):
     def process_next_job(self, domain, task_list):
         job_context = self.poll_next_job(domain, task_list)
         job_runner = self.select_job_runner(job_context.id)
-        job_context.execute(job_runner)
+        job_context.execute(self.client, job_runner)
 
     def poll_next_job(self, domain, task_list):
         raise NotImplemented()
