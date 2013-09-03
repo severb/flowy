@@ -51,12 +51,13 @@ class ActivityClient(BaseClient):
         return ActivityContext(response)
 
 
-class SWFClient(object):
+class DevSWFClient(object):
     def __init__(self, workflows=[], activities=[], client=None):
         self.workflow_client = WorkflowClient(workflows, client)
         self.activity_client = WorkflowClient(activities, client)
 
     def run(self):
+        # XXX: run with multiple threads
         while 1:
             self.workflow_client.process_next_job()
             self.activity_client.process_next_job()
@@ -66,8 +67,3 @@ class SWFClient(object):
 
     def register_workflow_runner(self, workflow):
         self.workflow_client.register_job_runner(workflow)
-
-
-class ThreadedSWFClient(SWFClient):
-    def run(self):
-        pass
