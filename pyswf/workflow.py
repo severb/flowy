@@ -124,12 +124,13 @@ class Workflow(object):
 class Activity(object):
     def __init__(self, name, version):
         self.name = name
-        self.version = version
+        self.version = str(version)
 
     def __get__(self, obj, objtype=None):
         if obj is None:
             return self
-        if (self.name, self.version) not in obj._proxy_cache:
+        # We need to cache the returned proxy for this.f1 is this.f1 to hold
+        if self.id not in obj._proxy_cache:
             def proxy(*args, **kwargs):
                 invocation_id = obj._next_invocation_id()
                 result = obj._result_for(invocation_id, MaybeResult())
@@ -140,16 +141,22 @@ class Activity(object):
                         input = self.serialize_input(args, kwargs)
                         obj._schedule(invocation_id, self, input)
                 return result
-            obj._proxy_cache[(self.name, self.version)] = proxy
-        return obj._proxy_cache[(self.name, self.version)]
+            obj._proxy_cache[self.id] = proxy
+        return obj._proxy_cache[self.id]
 
-    def no_placeholders(self, args, kwargs):
+    @property
+    def id(self):
+        return self.name, self.version
+
+    @static_method
+    def no_placeholders(args, kwargs):
         a = list(args) + list(kwargs.items())
         return all(
             not r._is_placeholder() for r in a if isinstance(r, MaybeResult)
         )
 
-    def serialize_input(self, args, kwargs):
+    @static_method
+    def serialize_input(args, kwargs):
         args = [
             isinstance(arg, MaybeResult) and arg.result() or arg
             for arg in args
