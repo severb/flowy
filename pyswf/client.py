@@ -22,12 +22,13 @@ class BaseClient(object):
     def process_next_job(self, domain, task_list):
         job_context = self.poll_next_job(domain, task_list)
         job_runner = self.select_job_runner(job_context.id)
-        job_context.execute(self.client, job_runner)
+        result = job_context.execute(self.client, job_runner)
+        self.save(job_context.token, result)
 
     def poll_next_job(self, domain, task_list):
         raise NotImplemented()
 
-    def save_result(self, job_result):
+    def save(self, job_result):
         raise NotImplemented()
 
 
@@ -40,6 +41,17 @@ class WorkflowClient(BaseClient):
         response = self.client.poll_for_decision_task(domain, task_list)
         return WorkflowContext(response)
 
+    def save(self, token, scheduled_activities):
+        l = Layer1Decisions()
+        for invocation_id, activity, input in scheduled:
+            l.schedule_activity_task(
+                invocation_id,
+                activity.name,
+                activity.version,
+                input=input
+            )
+        self.client.respond_decision_task_completed(token, decisions=l._data)
+
 
 class ActivityClient(BaseClient):
     def register_job_runner(self, activity):
@@ -49,6 +61,9 @@ class ActivityClient(BaseClient):
     def poll_next_job(self, domain, task_list):
         response = self.client.poll_for_activity_task(domain, task_list)
         return ActivityContext(response)
+
+    def save(self, token, activity_result):
+        self.client.respond_activity_task_completed(token, activity_result)
 
 
 class DevSWFClient(object):
