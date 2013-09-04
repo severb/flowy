@@ -2,10 +2,10 @@ import json
 
 
 class JSONArgsTransport(object):
-    def encode(self, agrs, kwargs):
+    def encode(self, args, kwargs):
         return json.dumps({'args': args, 'kwargs': kwargs})
 
-    def decode(input):
+    def decode(self, input):
         data = json.loads(input)
         return data['args'], data['kwargs']
 
@@ -18,7 +18,7 @@ class JSONResultTransport(object):
         return json.dumps({'error': True, 'value': message})
 
     def is_error(self, input):
-        return json.loads(input)['exception']
+        return json.loads(input)['error']
 
     def value(self, input):
-        return json.loads('input')['value']
+        return json.loads(input)['value']

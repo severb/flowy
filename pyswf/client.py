@@ -1,4 +1,7 @@
 from boto.swf.layer1 import Layer1
+from boto.swf.layer1_decisions import Layer1Decisions
+
+from pyswf.contexts import WorkflowContext, ActivityContext
 
 
 class BaseClient(object):
@@ -9,19 +12,19 @@ class BaseClient(object):
         self.client = client is not None and client or Layer1()
 
     def register_job_runner(self, job):
-        self.job_runners[job.id] = job
+        self.job_runners[(job.name, str(job.version))] = job
 
-    def select_job_runner(self, job_id):
-        return self.job_runners[job_id]
+    def select_job_runner(self, job):
+        return self.job_runners[(job.name, job.version)]
 
-    def run(self, domain, task_lits):
+    def run(self, domain, task_list):
         while 1:
             self.process_next_job(domain, task_list)
 
     def process_next_job(self, domain, task_list):
         job_context = self.poll_next_job(domain, task_list)
-        job_runner = self.select_job_runner(job_context.id)
-        result = job_context.execute(self.client, job_runner)
+        job_runner = self.select_job_runner(job_context)
+        result = job_context.execute(job_runner)
         self.save(job_context.token, result)
 
     def poll_next_job(self, domain, task_list):
@@ -33,7 +36,7 @@ class BaseClient(object):
 
 class WorkflowClient(BaseClient):
     def register_job_runner(self, workflow):
-        super(self, WorkflowClient).register_job_runner(workflow)
+        super(WorkflowClient, self).register_job_runner(workflow)
         # XXX: check if the workflow is registered
 
     def poll_next_job(self, domain, task_list):
@@ -42,11 +45,11 @@ class WorkflowClient(BaseClient):
 
     def save(self, token, scheduled_activities):
         l = Layer1Decisions()
-        for invocation_id, activity, input in scheduled:
+        for invocation_id, activity, input in scheduled_activities:
             l.schedule_activity_task(
                 invocation_id,
                 activity.name,
-                activity.version,
+                str(activity.version),
                 input=input
             )
         self.client.respond_decision_task_completed(token, decisions=l._data)
@@ -54,7 +57,7 @@ class WorkflowClient(BaseClient):
 
 class ActivityClient(BaseClient):
     def register_job_runner(self, activity):
-        super(self, WorkflowClient).register_job_runner(workflow)
+        super(ActivityClient, self).register_job_runner(activity)
         # XXX: check if the activity is registered
 
     def poll_next_job(self, domain, task_list):

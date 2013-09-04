@@ -1,89 +1,82 @@
+from pyswf.transport import JSONArgsTransport, JSONResultTransport
+from pyswf.activity import ActivityError
+from pyswf.datatypes import DecisionTask, ActivityTask
+
+
 class WorkflowContext(object):
 
     args_transport = JSONArgsTransport()
     result_transport = JSONResultTransport()
 
     def __init__(self, api_response):
-        self.api_response = api_response
+        self.decision_task = DecisionTask(api_response)
 
     @property
-    def id(self):
-        return (
-            self.api_response['workflowType']['name'],
-            self.api_response['workflowType']['version']
-        )
+    def name(self):
+        return self.decision_task.name
+
+    @property
+    def version(self):
+        return self.decision_task.version
+
+    @property
+    def token(self):
+        return self.decision_task.token
 
     @property
     def args(self):
         args, kwargs = self.args_transport.decode(
-            "{'args': [], 'kwargs': {}}"
+            '{"args": [], "kwargs": {}}'
         )
         return args
 
     @property
     def kwargs(self):
         args, kwargs = self.args_transport.decode(
-            "{'args': [], 'kwargs': {}}"
+            '{"args": [], "kwargs": {}}'
         )
         return kwargs
+
+    @property
+    def any_activity_running(self):
+        scheduled_activities = []
+        for scheduled_activity in self.decision_task.scheduled_activities:
+            scheduled_activities.append(scheduled_activity.activity_id)
+        return all(
+            self.decision_task.completed_activity_by_scheduled_id(
+                sa.activity_id
+            )
+            for sa in scheduled_activities
+        )
 
     def encode_args_kwargs(self, args, kwargs):
         return self.args_transport.encode(args, kwargs)
 
     def get_execution_state(self):
-        return WorkflowExecutionState(self.api_response)
+        return WorkflowExecutionState(self.decision_task)
 
-    def execute(self, client, runner):
+    def execute(self, runner):
         runner_instance = runner(self.get_execution_state())
-        scheduled_activities = runner_instance(*self.args, **self.kwargs)
+        scheduled_activities = runner_instance.invoke(
+            *self.args, **self.kwargs
+        )
         result = []
         for invocation_id, activity, args, kwargs in scheduled_activities:
             input = self.encode_args_kwargs(args, kwargs)
             result.append((invocation_id, activity, input))
-        return result
+        return result, self.any_activity_running
 
 
 class WorkflowExecutionState(object):
 
     result_transport = JSONResultTransport()
 
-    def __init__(self, api_response):
-        self.api_response = api_response
-
-    @property
-    def _events(self):
-        return self.api_response['events']
-
-    @property
-    def _scheduled_activities(self):
-        return filter(
-            lambda e: e['eventType'] == 'ActivityTaskScheduled',
-            self._events
-        )
-
-    @property
-    def _completed_activities(self):
-        return filter(
-            lambda e: e['eventType'] == 'ActivityTaskCompleted',
-            self._events
-        )
+    def __init__(self, decision_task):
+        self.decision_task = decision_task
 
     def is_scheduled(self, invocation_id):
-        ATSEA = 'activityTaskScheduledEventAttributes'
-        for event in self._scheduled_activities:
-            if event[ATSEA]['activityId'] == invocation_id:
-                return event
-        return False
-
-    def _event_result_by_invocation_id(self, invocation_id):
-        schedule = self.is_scheduled(invocation_id)
-        if not schedule:
-            return None
-        event_id = schedule['eventId']
-        ATCEA = 'activityTaskCompletedEventAttributes'
-        for event in self._completed_activities:
-            if event[ATCEA]['scheduledEventId'] == event_id:
-                    return event[ATCEA]['result']
+        a = self.decision_task.completed_activity_by_activity_id(invocation_id)
+        return a is not None
 
     def result_value(self, result):
         return self.result_transport.value(result)
@@ -92,16 +85,16 @@ class WorkflowExecutionState(object):
         return self.result_transport.is_error(result)
 
     def result_for(self, invocation_id, default=None):
-        event_result = self._event_result_by_invocation_id(invocation_id)
-        if event_result is None:
+        a = self.decision_task.completed_activity_by_activity_id(invocation_id)
+        if a is None:
             return default
-        return self.result_value(event_result)
+        return self.result_value(a.result)
 
     def is_error(self, invocation_id):
-        event_result = self._event_result_by_invocation_id(invocation_id)
-        if event_result is None:
+        a = self.decision_task.completed_activity_by_activity_id(invocation_id)
+        if a is None:
             return False
-        return self.is_result_error(event_result)
+        return self.is_result_error(a.result)
 
 
 class ActivityContext(object):
@@ -110,23 +103,28 @@ class ActivityContext(object):
     result_transport = JSONResultTransport()
 
     def __init__(self, api_response):
-        self.api_response = api_response
+        self.activity_task = ActivityTask(api_response)
 
     @property
-    def id(self):
-        return (
-            self.api_response['activityType']['name'],
-            self.api_response['activityType']['version']
-        )
+    def name(self):
+        return self.activity_task.name
+
+    @property
+    def version(self):
+        return self.activity_task.version
+
+    @property
+    def token(self):
+        return self.activity_task.token
 
     @property
     def args(self):
-        args, kwargs = self.args_transport.decode(self.api_response['input'])
+        args, kwargs = self.args_transport.decode(self.activity_task.input)
         return args
 
     @property
     def kwargs(self):
-        args, kwargs = self.args_transport.decode(self.api_response['input'])
+        args, kwargs = self.args_transport.decode(self.activity_task.input)
         return kwargs
 
     def encode_result(self, result):
@@ -134,7 +132,7 @@ class ActivityContext(object):
 
     def execute(self, runner):
         try:
-            result = runner(*self.args, **self.kwargs)
+            result = runner.invoke(*self.args, **self.kwargs)
             return self.result_transport.encode_result(result)
         except ActivityError as e:
             return self.result_transport.encode_error(e.message)

@@ -24,7 +24,7 @@ class Workflow(object):
     def __init__(self, execution_context):
         self._execution_context = execution_context
         self._current_invocation = 0
-        self._scheduled = set()
+        self._scheduled = []
         self._proxy_cache = dict()
 
     def _next_invocation_id(self):
@@ -41,10 +41,10 @@ class Workflow(object):
     def _is_error(self, invocation_id):
         return self._execution_context.is_error(invocation_id)
 
-    def _schedule(self, invocation_id, activity, input):
-        self._scheduled.add((invocation_id, activity, input))
+    def _schedule(self, invocation_id, activity, args, kwargs):
+        self._scheduled.append((invocation_id, activity, args, kwargs))
 
-    def __call__(self, *args, **kwargs):
+    def invoke(self, *args, **kwargs):
         try:
             self.run()
         except SyncNeeded:
@@ -60,13 +60,13 @@ class ActivityProxy(object):
 
     def __init__(self, name, version):
         self.name = name
-        self.version = str(version)
+        self.version = version
 
     def __get__(self, obj, objtype=None):
         if obj is None:
             return self
         # We need to cache the returned proxy for this.f1 is this.f1 to hold
-        if self.id not in obj._proxy_cache:
+        if (self.name, self.version) not in obj._proxy_cache:
             def proxy(*args, **kwargs):
                 invocation_id = obj._next_invocation_id()
                 result = obj._result_for(invocation_id, self._sentinel)
@@ -79,14 +79,10 @@ class ActivityProxy(object):
                 if obj._is_error(invocation_id):
                     raise ActivityError(result)
                 return MaybeResult(result)
-            obj._proxy_cache[self.id] = proxy
-        return obj._proxy_cache[self.id]
+            obj._proxy_cache[(self.name, self.version)] = proxy
+        return obj._proxy_cache[(self.name, self.version)]
 
-    @property
-    def id(self):
-        return self.name, self.version
-
-    @static_method
+    @staticmethod
     def no_placeholders(args, kwargs):
         a = list(args) + list(kwargs.items())
         return all(
