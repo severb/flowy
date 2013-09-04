@@ -11,69 +11,6 @@ class ActivityError(RuntimeError):
     pass
 
 
-class History(object):
-
-    def __init__(self, history):
-        self.history = history
-
-    @property
-    def input(self):
-        return {'args': [], 'kwargs': {}}
-
-    @property
-    def task_token(self):
-        return self.history['taskToken']
-
-    @property
-    def id(self):
-        return (
-            self.history['workflowType']['name'],
-            self.history['workflowType']['version']
-        )
-
-    @property
-    def events(self):
-        return self.history['events']
-
-    @property
-    def scheduled_activities(self):
-        return filter(
-            lambda e: e['eventType'] == 'ActivityTaskScheduled',
-            self.events
-        )
-
-    @property
-    def completed_activities(self):
-        return filter(
-            lambda e: e['eventType'] == 'ActivityTaskCompleted',
-            self.events
-        )
-
-    def is_scheduled(self, invocation_id):
-        ATSEA = 'activityTaskScheduledEventAttributes'
-        for event in self.scheduled_activities:
-            if event[ATSEA]['activityId'] == invocation_id:
-                return event
-        return False
-
-    def result_for(self, invocation_id, default=None):
-        schedule = self.is_scheduled(invocation_id)
-        if not schedule:
-            return default
-        event_id = schedule['eventId']
-        ATCEA = 'activityTaskCompletedEventAttributes'
-        for event in self.completed_activities:
-            if event[ATCEA]['scheduledEventId'] == event_id:
-                return MaybeResult(
-                    self.deserialize_input(event[ATCEA]['result'])
-                )
-        return default
-
-    def deserialize_input(self, input):
-        return int(input[4:6])
-        return json.loads(input)
-
-
 class MaybeResult(object):
 
     sentinel = object()
@@ -91,8 +28,8 @@ class MaybeResult(object):
 
 
 class Workflow(object):
-    def __init__(self, history):
-        self._history = history
+    def __init__(self, execution_context):
+        self._execution_context = execution_context
         self._current_invocation = 0
         self._scheduled = set()
         self._proxy_cache = dict()
@@ -103,10 +40,13 @@ class Workflow(object):
         return str(result)
 
     def _is_scheduled(self, invocation_id):
-        return self._history.is_scheduled(invocation_id)
+        return self._execution_context.is_scheduled(invocation_id)
 
     def _result_for(self, invocation_id, default=None):
-        return self._history.result_for(invocation_id, default)
+        return self._execution_context.result_for(invocation_id, default)
+
+    def _is_error(self, invocation_id):
+        return self._execution_context.is_error(invocation_id)
 
     def _schedule(self, invocation_id, activity, input):
         self._scheduled.add((invocation_id, activity, input))
@@ -116,12 +56,15 @@ class Workflow(object):
             self.run()
         except SyncNeeded:
             pass
+        return self._scheduled
 
     def run(self, *args, **kwargs):
         raise NotImplemented()
 
 
-class Activity(object):
+class ActivityProxy(object):
+    _sentinel = object()
+
     def __init__(self, name, version):
         self.name = name
         self.version = str(version)
@@ -133,14 +76,16 @@ class Activity(object):
         if self.id not in obj._proxy_cache:
             def proxy(*args, **kwargs):
                 invocation_id = obj._next_invocation_id()
-                result = obj._result_for(invocation_id, MaybeResult())
-                if result._is_placeholder():
+                result = obj._result_for(invocation_id, self._sentinel)
+                if result is self._sentinel:
                     if (self.no_placeholders(args, kwargs)
                         and not obj._is_scheduled(invocation_id)
                     ):
-                        input = self.serialize_input(args, kwargs)
-                        obj._schedule(invocation_id, self, input)
-                return result
+                        obj._schedule(invocation_id, self, args, kwargs)
+                    return MaybeResult()
+                if obj._is_error(invocation_id):
+                    raise ActivityError(result)
+                return MaybeResult(result)
             obj._proxy_cache[self.id] = proxy
         return obj._proxy_cache[self.id]
 
@@ -154,18 +99,3 @@ class Activity(object):
         return all(
             not r._is_placeholder() for r in a if isinstance(r, MaybeResult)
         )
-
-    @static_method
-    def serialize_input(args, kwargs):
-        args = [
-            isinstance(arg, MaybeResult) and arg.result() or arg
-            for arg in args
-        ]
-        kwargs = dict(
-            (k, isinstance(v, MaybeResult) and v.result() or v)
-            for k, v in kwargs.items()
-        )
-        return json.dumps({
-            'args': args,
-            'kwargs': kwargs
-        })

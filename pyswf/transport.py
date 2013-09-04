@@ -19,5 +19,3 @@ class JSONResultTransport(object):
 
     def value(self, input):
         return json.loads('input')['value']
-
-
