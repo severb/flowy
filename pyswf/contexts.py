@@ -133,5 +133,8 @@ class ActivityContext(object):
         return self.result_transport.encode(result)
 
     def execute(self, runner):
-        result = runner(*self.args, **self.kwargs)
-        return self.result_transport(result)
+        try:
+            result = runner(*self.args, **self.kwargs)
+            return self.result_transport.encode_result(result)
+        except ActivityError as e:
+            return self.result_transport.encode_error(e.message)

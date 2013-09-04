@@ -1,4 +1,3 @@
-import json
 from boto.swf.layer1 import Layer1
 
 

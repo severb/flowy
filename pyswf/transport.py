@@ -1,3 +1,6 @@
+import json
+
+
 class JSONArgsTransport(object):
     def encode(self, agrs, kwargs):
         return json.dumps({'args': args, 'kwargs': kwargs})

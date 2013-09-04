@@ -1,13 +1,6 @@
-import json
-from boto.swf.layer1_decisions import Layer1Decisions
-from boto.swf.layer1 import Layer1
-
+from pyswf.activity import ActivityError
 
 class SyncNeeded(Exception):
-    pass
-
-
-class ActivityError(RuntimeError):
     pass
 
 
