@@ -1,3 +1,5 @@
+from threading import Thread
+
 from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
 from boto.swf.exceptions import SWFTypeAlreadyExistsError
@@ -103,21 +105,3 @@ class ActivityClient(BaseClient):
 
     def save(self, token, activity_result):
         self.client.respond_activity_task_completed(token, activity_result)
-
-
-class SWFClient(object):
-    def __init__(self, workflows=[], activities=[], client=None):
-        self.workflow_client = WorkflowClient(workflows, client)
-        self.activity_client = WorkflowClient(activities, client)
-
-    def run(self):
-        # XXX: run with multiple threads
-        while 1:
-            self.workflow_client.process_next_job()
-            self.activity_client.process_next_job()
-
-    def register_activity_runner(self, activity):
-        self.activity_client.register_job_runner(activity)
-
-    def register_workflow_runner(self, workflow):
-        self.workflow_client.register_job_runner(workflow)
