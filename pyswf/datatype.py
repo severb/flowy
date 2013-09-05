@@ -43,6 +43,9 @@ class DecisionTask(object):
     def __init__(self, api_response):
         self.api_response = api_response
 
+    def is_empty_response(self):
+        return 'taskToken' not in self.api_response
+
     @property
     def name(self):
         return self.api_response['workflowType']['name']
@@ -123,3 +126,6 @@ class ActivityTask(object):
     @property
     def input(self):
         return self.api_response['input']
+
+    def is_empty_response(self):
+        return 'taskToken' not in self.api_response

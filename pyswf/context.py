@@ -11,6 +11,9 @@ class WorkflowContext(object):
     def __init__(self, api_response):
         self.decision_task = DecisionTask(api_response)
 
+    def is_empty(self):
+        return self.decision_task.is_empty_response()
+
     @property
     def name(self):
         return self.decision_task.name
@@ -100,6 +103,9 @@ class ActivityContext(object):
 
     def __init__(self, api_response):
         self.activity_task = ActivityTask(api_response)
+
+    def is_empty(self):
+        return self.activity_task.is_empty_response()
 
     @property
     def name(self):

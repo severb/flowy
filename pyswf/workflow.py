@@ -21,6 +21,11 @@ class MaybeResult(object):
 
 
 class Workflow(object):
+
+    child_policy = 'TERMINATE'
+    execution_start_to_close = 3600
+    task_start_to_close = 60
+
     def __init__(self, execution_context):
         self._execution_context = execution_context
         self._current_invocation = 0

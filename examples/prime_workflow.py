@@ -3,7 +3,7 @@ from pyswf.client import WorkflowClient
 
 
 class PrimeTest(Workflow):
-    name = 'PrimeTestWorkflow'
+    name = 'PrimeTestWorkflow2'
     version = 1
 
     div = ActivityProxy('Divider', 1)
@@ -17,5 +17,5 @@ class PrimeTest(Workflow):
 
 
 
-c = WorkflowClient([PrimeTest])
-c.run('SeversTest', 'prime_task_list')
+c = WorkflowClient('SeversTest', 'prime_task_list', [PrimeTest])
+c.run()
