@@ -47,6 +47,12 @@ class DecisionTask(object):
         return 'taskToken' not in self.api_response
 
     @property
+    def input(self):
+        # This is a very naive approach for getting the workflow input.
+        WESEA = 'workflowExecutionStartedEventAttributes'
+        return self.api_response['events'][0][WESEA]['input']
+
+    @property
     def name(self):
         return self.api_response['workflowType']['name']
 

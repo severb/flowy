@@ -52,7 +52,7 @@ class Workflow(object):
     def invoke(self, *args, **kwargs):
         result = None
         try:
-            result = self.run()
+            result = self.run(*args, **kwargs)
         except SyncNeeded:
             pass
         return self._scheduled, result

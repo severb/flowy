@@ -28,16 +28,12 @@ class WorkflowContext(object):
 
     @property
     def args(self):
-        args, kwargs = self.args_transport.decode(
-            '{"args": [], "kwargs": {}}'
-        )
+        args, kwargs = self.args_transport.decode(self.decision_task.input)
         return args
 
     @property
     def kwargs(self):
-        args, kwargs = self.args_transport.decode(
-            '{"args": [], "kwargs": {}}'
-        )
+        args, kwargs = self.args_transport.decode(self.decision_task.input)
         return kwargs
 
     def encode_args_kwargs(self, args, kwargs):
