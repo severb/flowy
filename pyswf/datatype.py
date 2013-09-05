@@ -12,11 +12,11 @@ class HistoryEvent(object):
 
     @property
     def event_type(self):
-        return self._my_attributes['eventType']
+        return self.api_response['eventType']
 
     @property
     def event_id(self):
-        return self._my_attributes['eventId']
+        return self.api_response['eventId']
 
 
 class ActivityScheduled(HistoryEvent):
@@ -57,20 +57,25 @@ class DecisionTask(object):
 
     @property
     def events(self):
+        m = {
+            'ActivityTaskScheduled': ActivityScheduled,
+            'ActivityTaskCompleted': ActivityCompleted
+        }
         for event in self.api_response['events']:
-            yield HistoryEvent(event)
+            history_event = HistoryEvent(event)
+            yield m.get(history_event.event_type, HistoryEvent)(event)
 
     @property
     def scheduled_activities(self):
         for event in self.events:
             if event.event_type == 'ActivityTaskScheduled':
-                yield ActivityScheduled(event)
+                yield event
 
     @property
     def completed_activities(self):
         for event in self.events:
             if event.event_type == 'ActivityTaskCompleted':
-                yield ActivityCompleted(event)
+                yield event
 
     def scheduled_activity_by_event_id(self, id, default=None):
         for scheduled_activity in self.scheduled_activities:
@@ -80,7 +85,7 @@ class DecisionTask(object):
 
     def scheduled_activity_by_activity_id(self, id, default=None):
         for scheduled_activity in self.scheduled_activities:
-            if scheduled_activity.event_id == id:
+            if scheduled_activity.activity_id == id:
                 return scheduled_activity
         return default
 

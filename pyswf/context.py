@@ -1,6 +1,6 @@
 from pyswf.transport import JSONArgsTransport, JSONResultTransport
 from pyswf.activity import ActivityError
-from pyswf.datatypes import DecisionTask, ActivityTask
+from pyswf.datatype import DecisionTask, ActivityTask
 
 
 class WorkflowContext(object):
@@ -37,34 +37,30 @@ class WorkflowContext(object):
         )
         return kwargs
 
-    @property
-    def any_activity_running(self):
-        scheduled_activities = []
-        for scheduled_activity in self.decision_task.scheduled_activities:
-            scheduled_activities.append(scheduled_activity.activity_id)
-        return all(
-            self.decision_task.completed_activity_by_scheduled_id(
-                sa.activity_id
-            )
-            for sa in scheduled_activities
-        )
-
     def encode_args_kwargs(self, args, kwargs):
         return self.args_transport.encode(args, kwargs)
 
     def get_execution_state(self):
         return WorkflowExecutionState(self.decision_task)
 
+    def any_activity_still_running(self):
+        for sa in self.decision_task.scheduled_activities:
+            eid = sa.event_id
+            ca = self.decision_task.completed_activity_by_scheduled_id(eid)
+            if ca is None:
+                return True
+        return False
+
     def execute(self, runner):
         runner_instance = runner(self.get_execution_state())
-        scheduled_activities = runner_instance.invoke(
+        scheduled_activities, result = runner_instance.invoke(
             *self.args, **self.kwargs
         )
-        result = []
+        scheduled = []
         for invocation_id, activity, args, kwargs in scheduled_activities:
             input = self.encode_args_kwargs(args, kwargs)
-            result.append((invocation_id, activity, input))
-        return result, self.any_activity_running
+            scheduled.append((invocation_id, activity, input))
+        return scheduled, self.any_activity_still_running(), result
 
 
 class WorkflowExecutionState(object):

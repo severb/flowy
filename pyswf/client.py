@@ -1,7 +1,7 @@
 from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
 
-from pyswf.contexts import WorkflowContext, ActivityContext
+from pyswf.context import WorkflowContext, ActivityContext
 
 
 class BaseClient(object):
@@ -43,15 +43,18 @@ class WorkflowClient(BaseClient):
         response = self.client.poll_for_decision_task(domain, task_list)
         return WorkflowContext(response)
 
-    def save(self, token, scheduled_activities):
+    def save(self, token, (scheduled, still_running, result)):
         l = Layer1Decisions()
-        for invocation_id, activity, input in scheduled_activities:
-            l.schedule_activity_task(
-                invocation_id,
-                activity.name,
-                str(activity.version),
-                input=input
-            )
+        if scheduled or still_running:
+            for invocation_id, activity, input in scheduled:
+                l.schedule_activity_task(
+                    invocation_id,
+                    activity.name,
+                    str(activity.version),
+                    input=input
+                )
+        else:
+            l.complete_workflow_execution(result=result)
         self.client.respond_decision_task_completed(token, decisions=l._data)
 
 
@@ -68,7 +71,7 @@ class ActivityClient(BaseClient):
         self.client.respond_activity_task_completed(token, activity_result)
 
 
-class DevSWFClient(object):
+class SWFClient(object):
     def __init__(self, workflows=[], activities=[], client=None):
         self.workflow_client = WorkflowClient(workflows, client)
         self.activity_client = WorkflowClient(activities, client)

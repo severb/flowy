@@ -45,11 +45,12 @@ class Workflow(object):
         self._scheduled.append((invocation_id, activity, args, kwargs))
 
     def invoke(self, *args, **kwargs):
+        result = None
         try:
-            self.run()
+            result = self.run()
         except SyncNeeded:
             pass
-        return self._scheduled
+        return self._scheduled, result
 
     def run(self, *args, **kwargs):
         raise NotImplemented()
