@@ -2,6 +2,10 @@ class ActivityError(RuntimeError):
     pass
 
 
+class ActivityTimedout(RuntimeError):
+    pass
+
+
 class activity(object):
     def __init__(self, name, version,
         schedule_to_close=300, schedule_to_start=60,

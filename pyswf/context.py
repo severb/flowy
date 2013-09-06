@@ -45,13 +45,15 @@ class WorkflowContext(object):
     def any_activity_still_running(self):
         for sa in self.decision_task.scheduled_activities:
             eid = sa.event_id
-            ca = self.decision_task.completed_activity_by_scheduled_id(eid)
-            if ca is None:
+            a1 = self.decision_task.completed_activity_by_scheduled_id(eid)
+            a2 = self.decision_task.timedout_activity_by_scheduled_id(eid)
+            if a1 is None and a2 is None:
                 return True
         return False
 
     def execute(self, runner):
         runner_instance = runner(self.get_execution_state())
+        # XXX: What happens when the workflow throws exceptions?
         scheduled_activities, result = runner_instance.invoke(
             *self.args, **self.kwargs
         )
@@ -59,6 +61,7 @@ class WorkflowContext(object):
         for invocation_id, activity, args, kwargs in scheduled_activities:
             input = self.encode_args_kwargs(args, kwargs)
             scheduled.append((invocation_id, activity, input))
+        result = self.result_transport.encode_result(result)
         return scheduled, self.any_activity_still_running(), result
 
 
@@ -90,6 +93,10 @@ class WorkflowExecutionState(object):
         if a is None:
             return False
         return self.is_result_error(a.result)
+
+    def is_timedout(self, invocation_id):
+        a = self.decision_task.timedout_activity_by_activity_id(invocation_id)
+        return a is not None
 
 
 class ActivityContext(object):

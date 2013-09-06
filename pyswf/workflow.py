@@ -1,4 +1,4 @@
-from pyswf.activity import ActivityError
+from pyswf.activity import ActivityError, ActivityTimedout
 
 class SyncNeeded(Exception):
     pass
@@ -46,6 +46,9 @@ class Workflow(object):
     def _is_error(self, invocation_id):
         return self._execution_context.is_error(invocation_id)
 
+    def _is_timedout(self, invocation_id):
+        return self._execution_context.is_timedout(invocation_id)
+
     def _schedule(self, invocation_id, activity, args, kwargs):
         self._scheduled.append((invocation_id, activity, args, kwargs))
 
@@ -75,6 +78,8 @@ class ActivityProxy(object):
         if (self.name, self.version) not in obj._proxy_cache:
             def proxy(*args, **kwargs):
                 invocation_id = obj._next_invocation_id()
+                if obj._is_timedout(invocation_id):
+                    raise ActivityTimedout()
                 result = obj._result_for(invocation_id, self._sentinel)
                 if result is self._sentinel:
                     if (self.no_placeholders(args, kwargs)

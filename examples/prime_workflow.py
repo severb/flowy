@@ -13,7 +13,8 @@ class PrimeTest(Workflow):
         for i in range(2, n/2 + 1):
             if self.div(n, i).result():
                 print '%s is divisible by %s' % (n, i)
-                break
+                return 'not prime'
+        return 'prime'
 
 
 

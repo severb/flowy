@@ -39,6 +39,18 @@ class ActivityCompleted(HistoryEvent):
         return self._my_attributes['result']
 
 
+class ActivityTimedOut(HistoryEvent):
+    subdict = 'activityTaskTimedOutEventAttributes'
+
+    @property
+    def scheduled_event_id(self):
+        return self._my_attributes['scheduledEventId']
+
+    @property
+    def type(self):
+        return self._my_attributes['timeoutType']
+
+
 class DecisionTask(object):
     def __init__(self, api_response):
         self.api_response = api_response
@@ -79,7 +91,8 @@ class DecisionTask(object):
     def events(self):
         m = {
             'ActivityTaskScheduled': ActivityScheduled,
-            'ActivityTaskCompleted': ActivityCompleted
+            'ActivityTaskCompleted': ActivityCompleted,
+            'ActivityTaskTimedOut': ActivityTimedOut
         }
         for event in self.api_response['events']:
             history_event = HistoryEvent(event)
@@ -98,6 +111,12 @@ class DecisionTask(object):
     def completed_activities(self):
         for event in self.events:
             if event.event_type == 'ActivityTaskCompleted':
+                yield event
+
+    @property
+    def timedout_activities(self):
+        for event in self.events:
+            if event.event_type == 'ActivityTaskTimedOut':
                 yield event
 
     def scheduled_activity_by_event_id(self, id, default=None):
@@ -122,6 +141,20 @@ class DecisionTask(object):
         sa = self.scheduled_activity_by_activity_id(id)
         if sa is not None:
             ca = self.completed_activity_by_scheduled_id(sa.event_id)
+            if ca is not None:
+                return ca
+        return default
+
+    def timedout_activity_by_scheduled_id(self, id, default=None):
+        for timedout_activity in self.timedout_activities:
+            if timedout_activity.scheduled_event_id == id:
+                return timedout_activity
+        return default
+
+    def timedout_activity_by_activity_id(self, id, default=None):
+        sa = self.scheduled_activity_by_activity_id(id)
+        if sa is not None:
+            ca = self.timedout_activity_by_scheduled_id(sa.event_id)
             if ca is not None:
                 return ca
         return default
