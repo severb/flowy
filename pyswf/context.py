@@ -8,8 +8,8 @@ class WorkflowContext(object):
     args_transport = JSONArgsTransport()
     result_transport = JSONResultTransport()
 
-    def __init__(self, api_response):
-        self.decision_task = DecisionTask(api_response)
+    def __init__(self, decision_task):
+        self.decision_task = decision_task
 
     def is_empty(self):
         return self.decision_task.is_empty_response()
@@ -97,8 +97,8 @@ class ActivityContext(object):
     args_transport = JSONArgsTransport()
     result_transport = JSONResultTransport()
 
-    def __init__(self, api_response):
-        self.activity_task = ActivityTask(api_response)
+    def __init__(self, activity_task):
+        self.activity_task = activity_task
 
     def is_empty(self):
         return self.activity_task.is_empty_response()

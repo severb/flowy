@@ -4,6 +4,7 @@ from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
 from boto.swf.exceptions import SWFTypeAlreadyExistsError
 
+from pyswf.datatype import DecisionTask, ActivityTask
 from pyswf.context import WorkflowContext, ActivityContext
 
 
@@ -62,7 +63,16 @@ class WorkflowClient(BaseClient):
         response = self.client.poll_for_decision_task(
             self.domain, self.task_list
         )
-        return WorkflowContext(response)
+        decision_task = DecisionTask(response)
+        while decision_task.next_page:
+            next_response = self.client.poll_for_decision_task(
+                self.domain, self.task_list,
+                next_page_token=decision_task.next_page
+            )
+            next_decision = DecisionTask(next_response)
+            next_decision.chain_with(decision_task)
+            decision_task = next_decision
+        return WorkflowContext(decision_task)
 
     def save(self, token, (scheduled, still_running, result)):
         l = Layer1Decisions()
@@ -101,7 +111,8 @@ class ActivityClient(BaseClient):
         response = self.client.poll_for_activity_task(
             self.domain, self.task_list
         )
-        return ActivityContext(response)
+        activity_task = ActivityTask(response)
+        return ActivityContext(activity_task)
 
     def save(self, token, activity_result):
         self.client.respond_activity_task_completed(token, activity_result)

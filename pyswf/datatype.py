@@ -42,15 +42,26 @@ class ActivityCompleted(HistoryEvent):
 class DecisionTask(object):
     def __init__(self, api_response):
         self.api_response = api_response
+        self.next_decision_task = None
 
     def is_empty_response(self):
         return 'taskToken' not in self.api_response
 
+    def chain_with(self, decision_task):
+        self.next_decision_task = decision_task
+
+    @property
+    def next_page(self):
+        return self.api_response.get('nextPageToken')
+
     @property
     def input(self):
         # This is a very naive approach for getting the workflow input.
-        WESEA = 'workflowExecutionStartedEventAttributes'
-        return self.api_response['events'][0][WESEA]['input']
+        try:
+            WESEA = 'workflowExecutionStartedEventAttributes'
+            return self.api_response['events'][0][WESEA]['input']
+        except KeyError:
+            return self.next_decision_task.input
 
     @property
     def name(self):
@@ -73,6 +84,9 @@ class DecisionTask(object):
         for event in self.api_response['events']:
             history_event = HistoryEvent(event)
             yield m.get(history_event.event_type, HistoryEvent)(event)
+        if self.next_decision_task:
+            for event in self.next_decision_task.events:
+                yield event
 
     @property
     def scheduled_activities(self):
