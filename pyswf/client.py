@@ -98,12 +98,6 @@ class WorkflowClient(object):
         except SWFTypeAlreadyExistsError:
             pass # Check if the registered workflow has the same properties.
 
-    def schedule_activities(self, token, activities):
-        pass
-
-    def complete_workflow(self, token, result):
-        pass
-
     def run(self):
         while 1:
             response = self._poll()
@@ -113,20 +107,24 @@ class WorkflowClient(object):
             runner = self._query(response.name, response.version)
             runner.resume(response, context)
 
-    def _poll(self, domain, task_list):
+    def _poll(self):
         response = self.client.poll_for_decision_task(
             self.domain, self.task_list
         )
-        return IWorflowResponse(response, self.client)
+        return IWorkflowResponse(
+            response, self.domain, self.task_list, self.client
+        )
 
     def _query(self, name, version):
         return self.workflows[(name, version)]
 
 
-@implementer(IWorflowResponse)
+@implementer(IWorkflowResponse)
 class WorkflowResponse(object):
-    def __init__(self, api_response, client):
+    def __init__(self, api_response, domain, task_list, client):
         self.api_response = api_response
+        self.domain = domain
+        self.task_list = task_list
         self.scheduled = []
 
     @property
@@ -141,25 +139,42 @@ class WorkflowResponse(object):
     def context(self):
         pass
 
-    def schedule(self, activity_name, activity_version, input):
-        self.scheduled.append((activity_name, activity_version, input))
+    @property
+    def _t(self):
+        return self.api_response['taskToken']
+
+    def schedule(self, call_id, activity_name, activity_version, input):
+        self.scheduled.append(
+            (call_id, activity_name, activity_version, input)
+        )
 
     def suspend(self, context):
-        pass
+        d = Layer1Decisions()
+        for call_id, activity_name, activity_version, input in self.scheduled:
+            d.schedule_activity_task(
+                call_id, activity_name, activity_version, input
+            )
+        self.client.respond_decision_task_completed(self._t, decisions=d._data)
 
     def complete(self, result):
-        pass
+        d = Layer1Decisions()
+        d.complete_workflow_execution(result=result)
+        self.client.respond_decision_task_completed(self._t, decisions=d._data)
 
     def __iter__(self):
-        pass
+        for event in self._events:
+            yield IWorkflowEvent(event)
 
+    @property
     def _events(self):
         api_response = self.api_response
         for event in api_response['events']:
             yield event
         while api_response['nextPageToken']:
             api_response = self.client.poll_for_decision_task(
-                domain, task_list,
+                self.domain,
+                self.task_list,
+                next_page_token=api_response['nextPageToken']
             )
             for event in api_response['events']:
                 yield event
