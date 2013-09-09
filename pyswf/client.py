@@ -111,13 +111,15 @@ class WorkflowClient(object):
         response = self.client.poll_for_decision_task(
             self.domain, self.task_list
         )
-        return IWorflowResponse(response, self.client)
+        return IWorkflowResponse(
+            response, self.domain, self.task_list, self.client
+        )
 
     def _query(self, name, version):
         return self.workflows[(name, version)]
 
 
-@implementer(IWorflowResponse)
+@implementer(IWorkflowResponse)
 class WorkflowResponse(object):
     def __init__(self, api_response, domain, task_list, client):
         self.api_response = api_response
