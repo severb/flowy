@@ -1,3 +1,5 @@
+from zope.interface import implementer
+
 from pyswf.transport import JSONArgsTransport, JSONResultTransport
 from pyswf.activity import ActivityError
 from pyswf.datatype import DecisionTask, ActivityTask
@@ -141,3 +143,40 @@ class ActivityContext(object):
             return self.result_transport.encode_result(result)
         except ActivityError as e:
             return self.result_transport.encode_error(e.message)
+
+
+@implementer(IWorkflowContext)
+class WorkflowContext2(object):
+    def __init__(self):
+        self.event_to_call_id = {}
+        self.scheduled = []
+        self.activity_results = {}
+        self.with_errors = {}
+        self.timed_out = []
+
+    def is_activity_scheduled(self, call_id, event_id):
+        self.event_to_call_id[event_id] = call_id
+        return call_id in self.scheduled
+
+    def activity_result(self, call_id, default=None):
+        if call_id in self.activity_results:
+            return activity_results[call_id]
+        return default
+
+    def is_activity_result_error(self, call_id):
+        return call_id in self.with_errors
+
+    def is_activity_timeout(self, call_id):
+        return call_id in self.timed_out
+
+    def set_scheduled(self, event_id):
+        self.scheduled.append(self.event_to_call_id[event_id])
+
+    def set_result(self, call_id, event_id):
+        self.activity_results[self.event_to_call_id[event_id]] = result
+
+    def set_timed_out(self, event_id):
+        self.timed_out.append(self.event_to_call_id[event_id])
+
+    def set_error(self, event_id, error):
+        self.with_error[self.event_to_call_id(call_id)] = error
