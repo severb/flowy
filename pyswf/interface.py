@@ -32,7 +32,7 @@ class IWorkflowResponse(Interface):
 
     def __iter__():
         """Iterate trough all new IWorkflowEvent instances since the last
-        decision.
+        decision in the order they happened.
 
         """
 
@@ -84,7 +84,7 @@ class IWorkflowContext(Interface):
 
     def serialize():
         """Returns a string representation for this context suited for
-        persistance between decisions.
+        persistence between decisions.
 
         """
 
