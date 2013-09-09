@@ -1,11 +1,9 @@
-from threading import Thread
+from zope.interface import implementer
 
 from boto.swf.layer1 import Layer1
-from boto.swf.layer1_decisions import Layer1Decisions
 from boto.swf.exceptions import SWFTypeAlreadyExistsError
 
-from pyswf.datatype import DecisionTask, ActivityTask
-from pyswf.context import WorkflowContext, ActivityContext
+from pyswf.interface import IWorkflowClient
 
 
 class BaseClient(object):
@@ -42,53 +40,6 @@ class BaseClient(object):
         raise NotImplemented()
 
 
-class WorkflowClient(BaseClient):
-    def register_job_runner(self, workflow):
-        super(WorkflowClient, self).register_job_runner(workflow)
-        try:
-            self.client.register_workflow_type(
-                self.domain,
-                workflow.name,
-                str(workflow.version),
-                self.task_list,
-                workflow.child_policy,
-                str(workflow.execution_start_to_close),
-                str(workflow.task_start_to_close),
-                workflow.__doc__
-            )
-        except SWFTypeAlreadyExistsError:
-            pass # Check if the registered workflow has the same properties.
-
-    def poll_next_job(self):
-        response = self.client.poll_for_decision_task(
-            self.domain, self.task_list
-        )
-        decision_task = DecisionTask(response)
-        while decision_task.next_page:
-            next_response = self.client.poll_for_decision_task(
-                self.domain, self.task_list,
-                next_page_token=decision_task.next_page
-            )
-            next_decision = DecisionTask(next_response)
-            next_decision.chain_with(decision_task)
-            decision_task = next_decision
-        return WorkflowContext(decision_task)
-
-    def save(self, token, (scheduled, still_running, result)):
-        l = Layer1Decisions()
-        if scheduled or still_running:
-            for invocation_id, activity, input in scheduled:
-                l.schedule_activity_task(
-                    invocation_id,
-                    activity.name,
-                    str(activity.version),
-                    input=input
-                )
-        else:
-            l.complete_workflow_execution(result=result)
-        self.client.respond_decision_task_completed(token, decisions=l._data)
-
-
 class ActivityClient(BaseClient):
     def register_job_runner(self, activity):
         super(ActivityClient, self).register_job_runner(activity)
@@ -116,3 +67,99 @@ class ActivityClient(BaseClient):
 
     def save(self, token, activity_result):
         self.client.respond_activity_task_completed(token, activity_result)
+
+
+@implementer(IWorkflowClient)
+class WorkflowClient(object):
+    def __init__(self, domain, task_list, client=None):
+        self.client = client if client is not None else Layer1()
+        self.domain = domain
+        self.task_list = task_list
+        self.workflows = {}
+
+    def register(self, name, version, workflow_runner,
+        execution_start_to_close=3600,
+        task_start_to_close=60,
+        child_policy='TERMINATE',
+        doc=None
+    ):
+        self.workflows[(name, version)] = workflow_runner
+        try:
+            self.client.register_workflow_type(
+                self.domain,
+                name,
+                version,
+                self.task_list,
+                child_policy,
+                execution_start_to_close,
+                task_start_to_close,
+                doc
+            )
+        except SWFTypeAlreadyExistsError:
+            pass # Check if the registered workflow has the same properties.
+
+    def schedule_activities(self, token, activities):
+        pass
+
+    def complete_workflow(self, token, result):
+        pass
+
+    def run(self):
+        while 1:
+            response = self._poll()
+            context = IWorkflowContext(response.context)
+            for event in response.events:
+                event.update(context)
+            runner = self._query(response.name, response.version)
+            runner.resume(response, context)
+
+    def _poll(self, domain, task_list):
+        response = self.client.poll_for_decision_task(
+            self.domain, self.task_list
+        )
+        return IWorflowResponse(response, self.client)
+
+    def _query(self, name, version):
+        return self.workflows[(name, version)]
+
+
+@implementer(IWorflowResponse)
+class WorkflowResponse(object):
+    def __init__(self, api_response, client):
+        self.api_response = api_response
+        self.scheduled = []
+
+    @property
+    def name(self):
+        return self.api_response['workflowType']['name']
+
+    @property
+    def version(self):
+        return self.api_response['workflowType']['version']
+
+    @property
+    def context(self):
+        pass
+
+    def schedule(self, activity_name, activity_version, input):
+        self.scheduled.append((activity_name, activity_version, input))
+
+    def suspend(self, context):
+        pass
+
+    def complete(self, result):
+        pass
+
+    def __iter__(self):
+        pass
+
+    def _events(self):
+        api_response = self.api_response
+        for event in api_response['events']:
+            yield event
+        while api_response['nextPageToken']:
+            api_response = self.client.poll_for_decision_task(
+                domain, task_list,
+            )
+            for event in api_response['events']:
+                yield event
