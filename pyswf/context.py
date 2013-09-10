@@ -1,3 +1,5 @@
+import pickle
+
 from zope.interface import implementer
 
 from pyswf.transport import JSONArgsTransport, JSONResultTransport
@@ -154,8 +156,7 @@ class WorkflowContext2(object):
         self.with_errors = {}
         self.timed_out = []
 
-    def is_activity_scheduled(self, call_id, event_id):
-        self.event_to_call_id[event_id] = call_id
+    def is_activity_scheduled(self, call_id):
         return call_id in self.scheduled
 
     def activity_result(self, call_id, default=None):
@@ -169,10 +170,11 @@ class WorkflowContext2(object):
     def is_activity_timeout(self, call_id):
         return call_id in self.timed_out
 
-    def set_scheduled(self, event_id):
-        self.scheduled.append(self.event_to_call_id[event_id])
+    def set_scheduled(self, call_id, event_id):
+        self.event_to_call_id[event_id] = call_id
+        self.scheduled.append(call_id)
 
-    def set_result(self, call_id, event_id):
+    def set_result(self, call_id, result):
         self.activity_results[self.event_to_call_id[event_id]] = result
 
     def set_timed_out(self, event_id):
@@ -180,3 +182,6 @@ class WorkflowContext2(object):
 
     def set_error(self, event_id, error):
         self.with_error[self.event_to_call_id(call_id)] = error
+
+    def serialize(self):
+        return pickle.dumps(self)
