@@ -189,7 +189,7 @@ class WorkflowResponse(object):
         api_response = self.api_response
         for event in api_response['events']:
             yield event
-        while api_response['nextPageToken']:
+        while api_response.get('nextPageToken'):
             api_response = self.client.poll(
                 next_page_token=api_response['nextPageToken'],
             )
