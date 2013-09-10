@@ -47,7 +47,6 @@ class WorkflowResponseTest(unittest.TestCase):
 
 class WorkflowNewEventsTest(unittest.TestCase):
 
-
     def _get_uut(self, api_response, client=None):
         from pyswf.client import WorkflowResponse
         return WorkflowResponse(api_response, client)
