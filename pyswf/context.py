@@ -6,6 +6,8 @@ from pyswf.transport import JSONArgsTransport, JSONResultTransport
 from pyswf.activity import ActivityError
 from pyswf.datatype import DecisionTask, ActivityTask
 
+from pyswf.interface import IWorkflowContext
+
 
 class WorkflowContext(object):
 
@@ -152,16 +154,16 @@ class WorkflowContext2(object):
     def __init__(self):
         self.event_to_call_id = {}
         self.scheduled = []
-        self.activity_results = {}
-        self.with_errors = {}
+        self.results = {}
         self.timed_out = []
+        self.with_errors = {}
 
     def is_activity_scheduled(self, call_id):
         return call_id in self.scheduled
 
     def activity_result(self, call_id, default=None):
-        if call_id in self.activity_results:
-            return activity_results[call_id]
+        if call_id in self.results:
+            return self.results[call_id]
         return default
 
     def is_activity_result_error(self, call_id):
@@ -174,14 +176,14 @@ class WorkflowContext2(object):
         self.event_to_call_id[event_id] = call_id
         self.scheduled.append(call_id)
 
-    def set_result(self, call_id, result):
-        self.activity_results[self.event_to_call_id[event_id]] = result
+    def set_result(self, event_id, result):
+        self.results[self.event_to_call_id[event_id]] = result
 
     def set_timed_out(self, event_id):
         self.timed_out.append(self.event_to_call_id[event_id])
 
     def set_error(self, event_id, error):
-        self.with_error[self.event_to_call_id(call_id)] = error
+        self.with_errors[self.event_to_call_id[event_id]] = error
 
     def serialize(self):
         return pickle.dumps(self)
