@@ -3,7 +3,7 @@ from zope.interface import implementer
 from boto.swf.layer1 import Layer1
 from boto.swf.exceptions import SWFTypeAlreadyExistsError
 
-from pyswf.interface import IWorkflowClient
+from pyswf.interface import IWorkflowClient, IWorkflowResponse
 
 
 class BaseClient(object):
@@ -98,21 +98,35 @@ class WorkflowClient(object):
         except SWFTypeAlreadyExistsError:
             pass # Check if the registered workflow has the same properties.
 
+    def schedule_activities(self, token, activities, context=None):
+        d = Layer1Decisions()
+        for call_id, activity_name, activity_version, input in activities:
+            d.schedule_activity_task(
+                call_id, activity_name, activity_version, input
+            )
+        self.client.respond_decision_task_completed(
+            token, decisions=d._data, execution_context=context
+        )
+
+    def complete_workflow(self, token, result):
+        d = Layer1Decisions()
+        d.complete_workflow_execution(result=result)
+        self.client.respond_decision_task_completed(token, decisions=d._data)
+
     def run(self):
         while 1:
-            response = self._poll()
+            response = IWorkflowResponse(self.poll(), self)
             context = IWorkflowContext(response.context)
-            for event in response.events:
+            for event_data in response.new_events:
+                event = IWorkflowEvent(event_data)
                 event.update(context)
             runner = self._query(response.name, response.version)
             runner.resume(response, context)
 
-    def _poll(self):
-        response = self.client.poll_for_decision_task(
-            self.domain, self.task_list
-        )
-        return IWorkflowResponse(
-            response, self.domain, self.task_list, self.client
+    def poll(self, next_page_token=None):
+        return self.client.poll_for_decision_task(
+            self.domain, self.task_list,
+            reverse_order=True, next_page_token=next_page_token
         )
 
     def _query(self, name, version):
@@ -121,10 +135,9 @@ class WorkflowClient(object):
 
 @implementer(IWorkflowResponse)
 class WorkflowResponse(object):
-    def __init__(self, api_response, domain, task_list, client):
+    def __init__(self, api_response, client):
         self.api_response = api_response
-        self.domain = domain
-        self.task_list = task_list
+        self.client = client
         self.scheduled = []
 
     @property
@@ -137,7 +150,14 @@ class WorkflowResponse(object):
 
     @property
     def context(self):
-        pass
+        for event in self.new_events:
+            if event['eventType'] == 'DecisionTaskCompleted':
+                prev_id = self.api_response.get('previousStartedEventId')
+                DTCEA = 'decisionTaskCompletedEventAttributes'
+                if prev_id:
+                    assert event[DTCEA]['previousStartedEventId'] == prev_id
+                return event[DTCEA]['executionContext']
+        return None
 
     @property
     def _t(self):
@@ -149,21 +169,20 @@ class WorkflowResponse(object):
         )
 
     def suspend(self, context):
-        d = Layer1Decisions()
-        for call_id, activity_name, activity_version, input in self.scheduled:
-            d.schedule_activity_task(
-                call_id, activity_name, activity_version, input
-            )
-        self.client.respond_decision_task_completed(self._t, decisions=d._data)
+        self.client.schedule_activities(self._t, self.scheduled, context)
 
     def complete(self, result):
-        d = Layer1Decisions()
-        d.complete_workflow_execution(result=result)
-        self.client.respond_decision_task_completed(self._t, decisions=d._data)
+        self.client.complete_workflow(self._t, result)
 
-    def __iter__(self):
+    @property
+    def new_events(self):
+        events = []
+        prev_id = self.api_response.get('previousStartedEventId')
         for event in self._events:
-            yield IWorkflowEvent(event)
+            if prev_id and event['eventId'] == prev_id:
+                break
+            events.append(event)
+        return reversed(events)
 
     @property
     def _events(self):
@@ -171,10 +190,8 @@ class WorkflowResponse(object):
         for event in api_response['events']:
             yield event
         while api_response['nextPageToken']:
-            api_response = self.client.poll_for_decision_task(
-                self.domain,
-                self.task_list,
-                next_page_token=api_response['nextPageToken']
+            api_response = self.client.poll(
+                next_page_token=api_response['nextPageToken'],
             )
             for event in api_response['events']:
                 yield event

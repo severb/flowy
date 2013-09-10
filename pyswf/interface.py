@@ -12,6 +12,15 @@ class IWorkflowClient(Interface):
     def run():
         """Kick-start the workflow polling and running cycle."""
 
+    def poll(next_page_token=None):
+        pass
+
+    def schedule_activities(token, activities, context=None):
+        pass
+
+    def complete_workflow(token, result):
+        pass
+
 
 class IWorkflowResponse(Interface):
     name = Attribute("The name of the workflow.")
@@ -30,9 +39,9 @@ class IWorkflowResponse(Interface):
     def complete(result):
         """Finishes the workflow process with the specified result."""
 
-    def __iter__():
-        """Iterate trough all new IWorkflowEvent instances since the last
-        decision in the order they happened.
+    def new_events():
+        """Iterate trough all new events since the last decision in the order
+        they happened.
 
         """
 
