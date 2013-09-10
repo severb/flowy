@@ -182,3 +182,34 @@ class ActivityTask(object):
 
     def is_empty_response(self):
         return 'taskToken' not in self.api_response
+
+
+@implementer(IWorkflowEvent)
+class WorkflowEvent(object):
+    def __init__(self, api_response):
+        self.api_response = api_response
+
+    def update(self, context):
+        raise NotImplementedError()
+
+
+class ActivityScheduled(WorkflowEvent):
+    def update(self, context):
+        context.set_scheduled(self.api_response['scheduledEventId'])
+
+
+class ActivityStarted(WorkflowEvent):
+    def update(self, context):
+        pass
+
+
+class ActivityCompleted(WorkflowEvent):
+    def update(self, context):
+        context.set_result(
+            self.api_response['scheduledEventId'], self.api_response['result']
+        )
+
+
+class SubworkflowStarted(WorkflowEvent):
+    def update(self, context):
+        pass
