@@ -11,12 +11,15 @@ class MaybeResult(object):
 
     sentinel = object()
 
-    def __init__(self, result=sentinel):
+    def __init__(self, result=sentinel, is_error=False):
         self.r = result
+        self.is_error = is_error
 
     def result(self):
         if self._is_placeholder():
             raise SyncNeeded()
+        if self.is_error:
+            raise ActivityError(self.r)
         return self.r
 
     def _is_placeholder(self):
@@ -119,7 +122,7 @@ class ActivityProxy(object):
                     )
                 return MaybeResult()
             if error is not _sentinel:
-                raise ActivityError(error)
+                return MaybeResult(error, is_error=True)
             return MaybeResult(self.deserialize_activity_result(result))
 
         return proxy

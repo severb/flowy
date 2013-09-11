@@ -133,6 +133,27 @@ class TestWorkflow(unittest.TestCase):
             ('0', 'f1', 'v1', '{"args": [], "kwargs": {}}'),
         ]))
 
+    def test_activity_error(self):
+        from pyswf.activity import ActivityError
+
+        class MyWorkflow(Workflow):
+            f1 = ActivityProxy('f1', 'v1')
+            f2 = ActivityProxy('f2', 'v2')
+            def run(self):
+                a = self.f1()
+                try:
+                    a.result()
+                except ActivityError:
+                    self.f1()
+                else:
+                    self.f2()
+
+        response = DummyResponse()
+        MyWorkflow(DummyContext(errors={'0': 'error msg'}), response).resume()
+        self.assertEquals(response.scheduled, set([
+            ('1', 'f1', 'v1', '{"args": [], "kwargs": {}}'),
+        ]))
+
 
 class DummyResponse(object):
     def __init__(self):
