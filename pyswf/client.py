@@ -152,10 +152,7 @@ class WorkflowResponse(object):
     def context(self):
         for event in self.new_events:
             if event['eventType'] == 'DecisionTaskCompleted':
-                prev_id = self.api_response.get('previousStartedEventId')
                 DTCEA = 'decisionTaskCompletedEventAttributes'
-                if prev_id:
-                    assert event[DTCEA]['previousStartedEventId'] == prev_id
                 return event[DTCEA]['executionContext']
         return None
 
@@ -176,12 +173,16 @@ class WorkflowResponse(object):
 
     @property
     def new_events(self):
+        decisions_completed = 0
         events = []
         prev_id = self.api_response.get('previousStartedEventId')
         for event in self._events:
+            if event['eventType'] == 'DecisionTaskCompleted':
+                decisions_completed += 1
             if prev_id and event['eventId'] == prev_id:
                 break
             events.append(event)
+        assert decisions_completed <= 1
         return reversed(events)
 
     @property

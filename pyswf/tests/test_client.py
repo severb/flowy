@@ -92,16 +92,46 @@ class WorkflowNewEventsTest(unittest.TestCase):
 
 class WorkflowContextTest(unittest.TestCase):
 
-    def _get_uut(self, api_response, domain=None, task_list=None, client=None):
+    def _get_uut(self, api_response, client=None):
         from pyswf.client import WorkflowResponse
         return WorkflowResponse(api_response, client)
 
     def test_no_context(self):
-        dtc = {
-            'executionContext': 'context',
-            'scheduledEventId': '10',
-            'startedEventId': '16'
-        }
+        dummy_client = DummyClient()
+        for _ in range(4):
+            dummy_client.add_dummy_event()
+        api_response = dummy_client.poll()
+        workflow_response = self._get_uut(api_response)
+        self.assertEqual(workflow_response.context, None)
+
+    def test_no_context_paginated(self):
+        dummy_client = DummyClient()
+        for _ in range(44):
+            dummy_client.add_dummy_event()
+        api_response = dummy_client.poll()
+        workflow_response = self._get_uut(api_response, client=dummy_client)
+        self.assertEqual(workflow_response.context, None)
+
+    def test_context(self):
+        dummy_client = DummyClient(previous_started_event_id='5')
+        dummy_client.add_dummy_event()
+        dummy_client.add_decision_completed('context', '4', '3')
+        for _ in range(5):
+            dummy_client.add_dummy_event()
+        api_response = dummy_client.poll()
+        workflow_response = self._get_uut(api_response)
+        self.assertEqual(workflow_response.context, 'context')
+
+    def test_context_paginated(self):
+        dummy_client = DummyClient(previous_started_event_id='20', page_size=5)
+        for _ in range(13):
+            dummy_client.add_dummy_event()
+        dummy_client.add_decision_completed('context', '4', '3')
+        for _ in range(12):
+            dummy_client.add_dummy_event()
+        api_response = dummy_client.poll()
+        workflow_response = self._get_uut(api_response, client=dummy_client)
+        self.assertEqual(workflow_response.context, 'context')
 
 
 class DummyClient(object):
