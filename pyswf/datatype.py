@@ -2,6 +2,7 @@ from zope.interface import implementer
 
 from pyswf.interface import IWorkflowEvent
 
+
 class HistoryEvent(object):
     subdict = None
 
@@ -206,6 +207,20 @@ class ActivityCompleted(WorkflowEvent):
     def update(self, context):
         context.set_result(
             self.api_response['scheduledEventId'], self.api_response['result']
+        )
+
+
+class ActivityFailed(WorkflowEvent):
+    def update(self, context):
+        context.set_error(
+            self.api_response['scheduledEventId'], self.api_response['reason']
+        )
+
+
+class ActivityTimedOut(WorkflowEvent):
+    def update(self, context):
+        context.set_timeout(
+            self.api_response['scheduledEventId']
         )
 
 
