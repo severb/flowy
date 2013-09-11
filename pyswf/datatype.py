@@ -195,7 +195,7 @@ class WorkflowEvent(object):
         self.api_response = api_response
 
     def update(self, context):
-        raise NotImplementedError()
+        pass
 
 
 class ActivityScheduled(WorkflowEvent):
@@ -222,8 +222,3 @@ class ActivityTimedOut(WorkflowEvent):
         context.set_timeout(
             self.api_response['scheduledEventId']
         )
-
-
-class SubworkflowStarted(WorkflowEvent):
-    def update(self, context):
-        pass

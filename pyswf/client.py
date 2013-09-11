@@ -115,7 +115,7 @@ class WorkflowClient(object):
 
     def run(self):
         while 1:
-            response = IWorkflowResponse(self.poll(), self)
+            response = IWorkflowResponse(self)
             context = IWorkflowContext(response.context)
             for event_data in response.new_events:
                 event = IWorkflowEvent(event_data)
@@ -135,18 +135,24 @@ class WorkflowClient(object):
 
 @implementer(IWorkflowResponse)
 class WorkflowResponse(object):
-    def __init__(self, api_response, client):
-        self.api_response = api_response
+    def __init__(self, client):
         self.client = client
         self.scheduled = []
+        self._cached_api_response = None
+
+    @property
+    def _api_response(self):
+        if self._cached_api_response is None:
+            self._cached_api_response = self.client.poll()
+        return self._cached_api_response
 
     @property
     def name(self):
-        return self.api_response['workflowType']['name']
+        return self._api_response['workflowType']['name']
 
     @property
     def version(self):
-        return self.api_response['workflowType']['version']
+        return self._api_response['workflowType']['version']
 
     @property
     def context(self):
@@ -158,7 +164,7 @@ class WorkflowResponse(object):
 
     @property
     def _t(self):
-        return self.api_response['taskToken']
+        return self._api_response['taskToken']
 
     def schedule(self, call_id, activity_name, activity_version, input):
         self.scheduled.append(
@@ -175,7 +181,7 @@ class WorkflowResponse(object):
     def new_events(self):
         decisions_completed = 0
         events = []
-        prev_id = self.api_response.get('previousStartedEventId')
+        prev_id = self._api_response.get('previousStartedEventId')
         for event in self._events:
             if event['eventType'] == 'DecisionTaskCompleted':
                 decisions_completed += 1
@@ -187,7 +193,7 @@ class WorkflowResponse(object):
 
     @property
     def _events(self):
-        api_response = self.api_response
+        api_response = self._api_response
         for event in api_response['events']:
             yield event
         while api_response.get('nextPageToken'):

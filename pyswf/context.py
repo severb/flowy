@@ -157,17 +157,17 @@ class WorkflowContext2(object):
         self.results = {}
         self.timed_out = []
         self.with_errors = {}
+        self.args = []
+        self.kwargs = {}
 
     def is_activity_scheduled(self, call_id):
         return call_id in self.scheduled
 
     def activity_result(self, call_id, default=None):
-        if call_id in self.results:
-            return self.results[call_id]
-        return default
+        return self.results.get(call_id, default)
 
-    def is_activity_result_error(self, call_id):
-        return call_id in self.with_errors
+    def activity_error(self, call_id, default=None):
+        return self.with_errors.get(call_id, default)
 
     def is_activity_timeout(self, call_id):
         return call_id in self.timed_out

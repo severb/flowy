@@ -33,6 +33,6 @@ class TestWorkflowContext(unittest.TestCase):
     def test_activity_error(self):
         workflow = self._get_uut()
         workflow.set_scheduled('act1234', 'a1')
-        self.assertFalse(workflow.is_activity_result_error('act1234'))
+        self.assertEquals(workflow.activity_error('act1234'), None)
         workflow.set_error('a1', 'some error')
-        self.assertTrue(workflow.is_activity_result_error('act1234'))
+        self.assertEquals(workflow.activity_error('act1234'), 'some error')
