@@ -7,7 +7,7 @@ from pyswf.event import (
     ActivityTimedOut, WorkflowStarted
 )
 
-from pyswf.context import WorkflowContext
+from pyswf.context import ContextFactory
 from pyswf.activity import ActivityError
 from pyswf.workflow import _UnhandledActivityError
 
@@ -76,18 +76,14 @@ class WorkflowClient(object):
     def run(self):
         while 1:
             response = WorkflowResponse(self)
-            context_data = response.context
-            if context_data:
-                import pickle
-                context = pickle.loads(context_data)
-            else:
-                context = WorkflowContext()
+            context = ContextFactory(response.context)
             for event_data in response.new_events:
                 event = self.query_event(event_data)
                 event.update(context)
-            runner = self._query(response.name, response.version)
+            runner_klass = self._query(response.name, response.version)
+            workflow_runner = runner_klass(context, response)
             try:
-                result = runner(context, response).resume()
+                workflow_runner.resume()
             except ActivityError as e:
                 response.terminate(e.message)
             except _UnhandledActivityError as e:
@@ -101,10 +97,13 @@ class WorkflowClient(object):
                     response.suspend(context.serialize())
 
     def poll(self, next_page_token=None):
-        return self.client.poll_for_decision_task(
-            self.domain, self.task_list,
-            reverse_order=True, next_page_token=next_page_token
-        )
+        response = {}
+        while 'taskToken' not in response or not response['taskToken']:
+            response = self.client.poll_for_decision_task(
+                self.domain, self.task_list,
+                reverse_order=True, next_page_token=next_page_token
+            )
+        return response
 
     def _query(self, name, version):
         return self.workflows[(name, version)]

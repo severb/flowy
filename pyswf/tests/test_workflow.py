@@ -210,6 +210,23 @@ class TestWorkflow(unittest.TestCase):
         )
         self.assertRaises(_UnhandledActivityError, my_workflow.resume)
 
+    def test_manual_activity_error_propagation(self):
+        from pyswf.activity import ActivityError
+        from pyswf.workflow import _UnhandledActivityError
+
+        class MyWorkflow(Workflow):
+            f1 = ActivityProxy('f1', 'v1')
+            def run(self):
+                with self.error_handling():
+                    a = self.f1()
+                a.result()
+
+        my_workflow = MyWorkflow(
+            DummyContext(errors={'0': 'error msg'}),
+            DummyResponse()
+        )
+        self.assertRaises(ActivityError, my_workflow.resume)
+
 
 class DummyResponse(object):
     def __init__(self):

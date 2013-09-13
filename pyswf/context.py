@@ -1,6 +1,13 @@
 import pickle
 
 
+def ContextFactory(context_data=None):
+    if context_data is None:
+        return WorkflowContext()
+    else:
+        return pickle.loads(context_data)
+
+
 class WorkflowContext(object):
     def __init__(self):
         self.event_to_call_id = {}
