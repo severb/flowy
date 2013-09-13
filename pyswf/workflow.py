@@ -1,9 +1,14 @@
 import json
+from contextlib import contextmanager
 
 from pyswf.activity import ActivityError, ActivityTimedout
 
 
-class SyncNeeded(Exception):
+class _SyncNeeded(Exception):
+    pass
+
+
+class _UnhandledActivityError(Exception):
     pass
 
 
@@ -13,16 +18,16 @@ class MaybeResult(object):
 
     def __init__(self, result=sentinel, is_error=False):
         self.r = result
-        self.is_error = is_error
+        self._is_error = is_error
 
     def result(self):
-        if self._is_placeholder():
-            raise SyncNeeded()
-        if self.is_error:
+        if self.is_placeholder():
+            raise _SyncNeeded()
+        if self._is_error:
             raise ActivityError(self.r)
         return self.r
 
-    def _is_placeholder(self):
+    def is_placeholder(self):
         return self.r is self.sentinel
 
 
@@ -37,6 +42,17 @@ class Workflow(object):
         self._response = response
         self._current_call_id = 0
         self._proxy_cache = dict()
+        self.error_handling_nesting_level = 0
+
+    @contextmanager
+    def error_handling(self):
+        self.error_handling_nesting_level += 1
+        yield
+        self.error_handling_nesting_level -= 1
+
+    @property
+    def manual_exception_handling(self):
+        return self.error_handling_nesting_level > 0
 
     def _next_call_id(self):
         result = self._current_call_id
@@ -48,7 +64,7 @@ class Workflow(object):
         args, kwargs = self.deserialize_workflow_input(self._context.input)
         try:
             result = self.run(*args, **kwargs)
-        except SyncNeeded:
+        except _SyncNeeded:
             pass
         return self.serialize_workflow_result(result)
 
@@ -92,8 +108,17 @@ class ActivityProxy(object):
     def has_placeholders(args, kwargs):
         a = list(args) + list(kwargs.items())
         return any(
-            r._is_placeholder() for r in a if isinstance(r, MaybeResult)
+            r.is_placeholder() for r in a if isinstance(r, MaybeResult)
         )
+
+    @staticmethod
+    def get_args_error(args, kwargs):
+        a = list(args) + list(kwargs.items())
+        for r in filter(lambda x: isinstance(x, MaybeResult), a):
+            try:
+                r.result()
+            except ActivityError as e:
+                return e.message
 
     def make_proxy(self, workflow):
 
@@ -113,6 +138,11 @@ class ActivityProxy(object):
             error = context.activity_error(call_id, _sentinel)
 
             if result is _sentinel and error is _sentinel:
+                args_error = self.get_args_error(args, kwargs)
+                if args_error:
+                    raise _UnhandledActivityError(
+                        'Error when calling activity: %s' % args_error
+                    )
                 placeholders = self.has_placeholders(args, kwargs)
                 scheduled = context.is_activity_scheduled(call_id)
                 if not placeholders and not scheduled:
@@ -122,7 +152,10 @@ class ActivityProxy(object):
                     )
                 return MaybeResult()
             if error is not _sentinel:
-                return MaybeResult(error, is_error=True)
+                if workflow.manual_exception_handling:
+                    return MaybeResult(error, is_error=True)
+                else:
+                    raise _UnhandledActivityError(error)
             return MaybeResult(self.deserialize_activity_result(result))
 
         return proxy

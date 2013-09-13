@@ -135,24 +135,80 @@ class TestWorkflow(unittest.TestCase):
 
     def test_activity_error(self):
         from pyswf.activity import ActivityError
+        from pyswf.workflow import _UnhandledActivityError
+
+        class MyWorkflow(Workflow):
+            f1 = ActivityProxy('f1', 'v1')
+            def run(self):
+                a = self.f1()
+
+        my_workflow = MyWorkflow(
+            DummyContext(errors={'0': 'error msg'}),
+            DummyResponse()
+        )
+        self.assertRaises(_UnhandledActivityError, my_workflow.resume)
+
+    def test_manual_activity_error(self):
+        from pyswf.activity import ActivityError
 
         class MyWorkflow(Workflow):
             f1 = ActivityProxy('f1', 'v1')
             f2 = ActivityProxy('f2', 'v2')
             def run(self):
-                a = self.f1()
+                with self.error_handling():
+                    a = self.f1()
                 try:
                     a.result()
                 except ActivityError:
-                    self.f1()
-                else:
                     self.f2()
 
         response = DummyResponse()
-        MyWorkflow(DummyContext(errors={'0': 'error msg'}), response).resume()
+        context = DummyContext(errors={'0': 'error msg'})
+        MyWorkflow(context, response).resume()
         self.assertEquals(response.scheduled, set([
-            ('1', 'f1', 'v1', '{"args": [], "kwargs": {}}'),
+            ('1', 'f2', 'v2', '{"args": [], "kwargs": {}}'),
         ]))
+
+    def test_manual_activity_error_nesting(self):
+        from pyswf.activity import ActivityError
+
+        class MyWorkflow(Workflow):
+            f1 = ActivityProxy('f1', 'v1')
+            f2 = ActivityProxy('f2', 'v2')
+            def run(self):
+                with self.error_handling():
+                    with self.error_handling():
+                        with self.error_handling():
+                            pass
+                    a = self.f1()
+                try:
+                    a.result()
+                except ActivityError:
+                    self.f2()
+
+        response = DummyResponse()
+        context = DummyContext(errors={'0': 'error msg'})
+        MyWorkflow(context, response).resume()
+        self.assertEquals(response.scheduled, set([
+            ('1', 'f2', 'v2', '{"args": [], "kwargs": {}}'),
+        ]))
+
+    def test_manual_activity_error_args(self):
+        from pyswf.activity import ActivityError
+        from pyswf.workflow import _UnhandledActivityError
+
+        class MyWorkflow(Workflow):
+            f1 = ActivityProxy('f1', 'v1')
+            def run(self):
+                with self.error_handling():
+                    a = self.f1()
+                b = self.f1(a)
+
+        my_workflow = MyWorkflow(
+            DummyContext(errors={'0': 'error msg'}),
+            DummyResponse()
+        )
+        self.assertRaises(_UnhandledActivityError, my_workflow.resume)
 
 
 class DummyResponse(object):
