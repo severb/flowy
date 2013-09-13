@@ -1,10 +1,15 @@
 from boto.swf.layer1 import Layer1
+from boto.swf.layer1_decisions import Layer1Decisions
 from boto.swf.exceptions import SWFTypeAlreadyExistsError
 
 from pyswf.event import (
     WorkflowEvent, ActivityScheduled, ActivityCompleted, ActivityFailed,
     ActivityTimedOut, WorkflowStarted
 )
+
+from pyswf.context import WorkflowContext
+from pyswf.activity import ActivityError
+from pyswf.workflow import _UnhandledActivityError
 
 
 class WorkflowClient(object):
@@ -24,8 +29,8 @@ class WorkflowClient(object):
         self.workflows = {}
 
     def register(self, name, version, workflow_runner,
-        execution_start_to_close=3600,
-        task_start_to_close=60,
+        execution_start_to_close='3600',
+        task_start_to_close='60',
         child_policy='TERMINATE',
         doc=None
     ):
@@ -48,7 +53,7 @@ class WorkflowClient(object):
         d = Layer1Decisions()
         for call_id, activity_name, activity_version, input in activities:
             d.schedule_activity_task(
-                call_id, activity_name, activity_version, input
+                call_id, activity_name, activity_version, input=input
             )
         self.client.respond_decision_task_completed(
             token, decisions=d._data, execution_context=context
@@ -66,18 +71,23 @@ class WorkflowClient(object):
 
     def query_event(self, event_data, default=WorkflowEvent):
         event_type = event_data['eventType']
-        return self.events.get(event_type, default)
+        return self.events.get(event_type, default)(event_data)
 
     def run(self):
         while 1:
             response = WorkflowResponse(self)
-            context = WorkflowContext(response.context)
+            context_data = response.context
+            if context_data:
+                import pickle
+                context = pickle.loads(context_data)
+            else:
+                context = WorkflowContext()
             for event_data in response.new_events:
                 event = self.query_event(event_data)
                 event.update(context)
             runner = self._query(response.name, response.version)
             try:
-                result = runner.resume(response, context)
+                result = runner(context, response).resume()
             except ActivityError as e:
                 response.terminate(e.message)
             except _UnhandledActivityError as e:

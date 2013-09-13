@@ -4,12 +4,13 @@ import pickle
 class WorkflowContext(object):
     def __init__(self):
         self.event_to_call_id = {}
-        self.scheduled = []
+        self.scheduled = set()
         self.results = {}
-        self.timed_out = []
+        self.timed_out = set()
         self.with_errors = {}
         self.args = []
         self.kwargs = {}
+        self.input = None
 
     def any_activity_running(self):
         return bool(self.scheduled)
@@ -28,13 +29,15 @@ class WorkflowContext(object):
 
     def set_scheduled(self, call_id, event_id):
         self.event_to_call_id[event_id] = call_id
-        self.scheduled.append(call_id)
+        self.scheduled.add(call_id)
 
     def set_result(self, event_id, result):
+        self.scheduled.remove(self.event_to_call_id[event_id])
         self.results[self.event_to_call_id[event_id]] = result
 
     def set_timed_out(self, event_id):
-        self.timed_out.append(self.event_to_call_id[event_id])
+        self.scheduled.remove(self.event_to_call_id[event_id])
+        self.timed_out.add(self.event_to_call_id[event_id])
 
     def set_error(self, event_id, error):
         self.with_errors[self.event_to_call_id[event_id]] = error

@@ -127,11 +127,11 @@ class ActivityProxy(object):
             context = workflow._context
             response = workflow._response
 
-            if context.is_activity_timedout(call_id):
+#             if context.is_activity_timedout(call_id):
                 # Reschedule if needed
                 # return MaybeResult
                 # raise ActivityTimedout
-                pass
+#                 pass
 
             _sentinel = object()
             result = context.activity_result(call_id, _sentinel)
