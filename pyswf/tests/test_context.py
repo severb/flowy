@@ -4,8 +4,8 @@ import unittest
 class TestWorkflowContext(unittest.TestCase):
 
     def _get_uut(self):
-        from pyswf.context import WorkflowContext2
-        return WorkflowContext2()
+        from pyswf.context import WorkflowContext
+        return WorkflowContext()
 
     def test_activity_scheduled(self):
         workflow = self._get_uut()
