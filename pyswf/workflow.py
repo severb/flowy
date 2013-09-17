@@ -1,6 +1,14 @@
+import json
+from contextlib import contextmanager
+
 from pyswf.activity import ActivityError, ActivityTimedout
 
-class SyncNeeded(Exception):
+
+class _SyncNeeded(Exception):
+    pass
+
+
+class _UnhandledActivityError(Exception):
     pass
 
 
@@ -8,15 +16,18 @@ class MaybeResult(object):
 
     sentinel = object()
 
-    def __init__(self, result=sentinel):
+    def __init__(self, result=sentinel, is_error=False):
         self.r = result
+        self._is_error = is_error
 
     def result(self):
-        if self._is_placeholder():
-            raise SyncNeeded()
+        if self.is_placeholder():
+            raise _SyncNeeded()
+        if self._is_error:
+            raise ActivityError(self.r)
         return self.r
 
-    def _is_placeholder(self):
+    def is_placeholder(self):
         return self.r is self.sentinel
 
 
@@ -26,47 +37,49 @@ class Workflow(object):
     execution_start_to_close = 3600
     task_start_to_close = 60
 
-    def __init__(self, execution_context):
-        self._execution_context = execution_context
-        self._current_invocation = 0
-        self._scheduled = []
+    def __init__(self):
+        self._current_call_id = 0
         self._proxy_cache = dict()
+        self.error_handling_nesting_level = 0
 
-    def _next_invocation_id(self):
-        result = self._current_invocation
-        self._current_invocation += 1
+    @contextmanager
+    def error_handling(self):
+        self.error_handling_nesting_level += 1
+        yield
+        self.error_handling_nesting_level -= 1
+
+    @property
+    def manual_exception_handling(self):
+        return self.error_handling_nesting_level > 0
+
+    def _next_call_id(self):
+        result = self._current_call_id
+        self._current_call_id += 1
         return str(result)
 
-    def _is_scheduled(self, invocation_id):
-        return self._execution_context.is_scheduled(invocation_id)
-
-    def _result_for(self, invocation_id, default=None):
-        return self._execution_context.result_for(invocation_id, default)
-
-    def _is_error(self, invocation_id):
-        return self._execution_context.is_error(invocation_id)
-
-    def _is_timedout(self, invocation_id):
-        return self._execution_context.is_timedout(invocation_id)
-
-    def _schedule(self, invocation_id, activity, args, kwargs):
-        self._scheduled.append((invocation_id, activity, args, kwargs))
-
-    def invoke(self, *args, **kwargs):
-        result = None
+    def resume(self, context, response):
+        self._context, self._response, result = context, response, None
+        args, kwargs = self.deserialize_workflow_input(self._context.input)
         try:
             result = self.run(*args, **kwargs)
-        except SyncNeeded:
+        except _SyncNeeded:
             pass
-        return self._scheduled, result
+        return self.serialize_workflow_result(result)
 
     def run(self, *args, **kwargs):
         raise NotImplemented()
 
+    @staticmethod
+    def deserialize_workflow_input(data):
+        args_dict = json.loads(data)
+        return args_dict['args'], args_dict['kwargs']
+
+    @staticmethod
+    def serialize_workflow_result(result):
+        return json.dumps(result)
+
 
 class ActivityProxy(object):
-    _sentinel = object()
-
     def __init__(self, name, version):
         self.name = name
         self.version = version
@@ -74,28 +87,73 @@ class ActivityProxy(object):
     def __get__(self, obj, objtype=None):
         if obj is None:
             return self
-        # We need to cache the returned proxy for this.f1 is this.f1 to hold
-        if (self.name, self.version) not in obj._proxy_cache:
-            def proxy(*args, **kwargs):
-                invocation_id = obj._next_invocation_id()
-                if obj._is_timedout(invocation_id):
-                    raise ActivityTimedout()
-                result = obj._result_for(invocation_id, self._sentinel)
-                if result is self._sentinel:
-                    if (self.no_placeholders(args, kwargs)
-                        and not obj._is_scheduled(invocation_id)
-                    ):
-                        obj._schedule(invocation_id, self, args, kwargs)
-                    return MaybeResult()
-                if obj._is_error(invocation_id):
-                    raise ActivityError(result)
-                return MaybeResult(result)
-            obj._proxy_cache[(self.name, self.version)] = proxy
-        return obj._proxy_cache[(self.name, self.version)]
+        # Cache the returned proxy for this.f1 is this.f1 to hold.
+        proxy_key = (self.name, self.version)
+        if proxy_key not in obj._proxy_cache:
+            proxy = self.make_proxy(obj)
+            obj._proxy_cache[proxy_key] = proxy
+        return obj._proxy_cache[proxy_key]
 
     @staticmethod
-    def no_placeholders(args, kwargs):
+    def serialize_activity_input(*args, **kwargs):
+        return json.dumps({'args': args, 'kwargs': kwargs})
+
+    @staticmethod
+    def deserialize_activity_result(result):
+        return json.loads(result)
+
+    @staticmethod
+    def has_placeholders(args, kwargs):
         a = list(args) + list(kwargs.items())
-        return all(
-            not r._is_placeholder() for r in a if isinstance(r, MaybeResult)
+        return any(
+            r.is_placeholder() for r in a if isinstance(r, MaybeResult)
         )
+
+    @staticmethod
+    def get_args_error(args, kwargs):
+        a = list(args) + list(kwargs.items())
+        for r in filter(lambda x: isinstance(x, MaybeResult), a):
+            try:
+                r.result()
+            except ActivityError as e:
+                return e.message
+
+    def make_proxy(self, workflow):
+
+        def proxy(*args, **kwargs):
+            call_id = workflow._next_call_id()
+            context = workflow._context
+            response = workflow._response
+
+#             if context.is_activity_timedout(call_id):
+                # Reschedule if needed
+                # return MaybeResult
+                # raise ActivityTimedout
+#                 pass
+
+            _sentinel = object()
+            result = context.activity_result(call_id, _sentinel)
+            error = context.activity_error(call_id, _sentinel)
+
+            if result is _sentinel and error is _sentinel:
+                args_error = self.get_args_error(args, kwargs)
+                if args_error:
+                    raise _UnhandledActivityError(
+                        'Error when calling activity: %s' % args_error
+                    )
+                placeholders = self.has_placeholders(args, kwargs)
+                scheduled = context.is_activity_scheduled(call_id)
+                if not placeholders and not scheduled:
+                    input = self.serialize_activity_input(*args, **kwargs)
+                    workflow._response.schedule(
+                        call_id, self.name, self.version, input
+                    )
+                return MaybeResult()
+            if error is not _sentinel:
+                if workflow.manual_exception_handling:
+                    return MaybeResult(error, is_error=True)
+                else:
+                    raise _UnhandledActivityError(error)
+            return MaybeResult(self.deserialize_activity_result(result))
+
+        return proxy

@@ -1,3 +1,6 @@
+import json
+
+
 class ActivityError(RuntimeError):
     pass
 
@@ -6,28 +9,27 @@ class ActivityTimedout(RuntimeError):
     pass
 
 
-class activity(object):
-    def __init__(self, name, version,
-        schedule_to_close=300, schedule_to_start=60,
-        heartbeat=30, task_start_to_close=120
-    ):
-        self.name = name
-        self.version = version
-        self.heartbeat = heartbeat
-        self.schedule_to_close = schedule_to_close
-        self.schedule_to_start = schedule_to_start
-        self.task_start_to_close = task_start_to_close
+class Activity(object):
 
-    @property
-    def id(self):
-        return self.name, self.version
+    schedule_to_close = 300
+    schedule_to_start = 60
+    heartbeat = 30
+    task_start_to_close = 120
+    name = None
+    version = None
 
-    def __call__(self, activity):
-        self.activity = activity
-        return self
+    def run(self, *args, **kwargs):
+        raise NotImplemented()
 
-    def invoke(self, *args, **kwargs):
-        try:
-            return self.activity(*args, **kwargs)
-        except Exception as e:
-            raise ActivityError(e.message)
+    def call(self, response):
+        args, kwargs = self.deserialize_activity_input(response.input)
+        return self.serialize_activity_result(self.run(*args, **kwargs))
+
+    @staticmethod
+    def deserialize_activity_input(input):
+        args_dict = json.loads(input)
+        return args_dict['args'], args_dict['kwargs']
+
+    @staticmethod
+    def serialize_activity_result(result):
+        return json.dumps(result)
