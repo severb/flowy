@@ -1,11 +1,14 @@
-from pyswf.activity import activity
+from pyswf.activity import Activity
 from pyswf.client import ActivityClient
 
 
-@activity('Divider2', 1)
-def divider(n, x):
-    return n % x == 0
+
+class MyActivity(Activity):
+
+    def run(self, n, x):
+        return n % x == 0
 
 
-c = ActivityClient('SeversTest', 'prime_task_list', [divider])
+c = ActivityClient('SeversTest', 'prime_task_list')
+c.register('Divider2', '1', MyActivity)
 c.run()

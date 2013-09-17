@@ -37,9 +37,7 @@ class Workflow(object):
     execution_start_to_close = 3600
     task_start_to_close = 60
 
-    def __init__(self, context, response):
-        self._context = context
-        self._response = response
+    def __init__(self):
         self._current_call_id = 0
         self._proxy_cache = dict()
         self.error_handling_nesting_level = 0
@@ -59,8 +57,8 @@ class Workflow(object):
         self._current_call_id += 1
         return str(result)
 
-    def resume(self):
-        result = None
+    def resume(self, context, response):
+        self._context, self._response, result = context, response, None
         args, kwargs = self.deserialize_workflow_input(self._context.input)
         try:
             result = self.run(*args, **kwargs)

@@ -1,6 +1,8 @@
 from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
-from boto.swf.exceptions import SWFTypeAlreadyExistsError
+from boto.swf.exceptions import (
+    SWFTypeAlreadyExistsError, SWFTypeAlreadyExistsError
+)
 
 from pyswf.event import (
     WorkflowEvent, ActivityScheduled, ActivityCompleted, ActivityFailed,
@@ -81,9 +83,9 @@ class WorkflowClient(object):
                 event = self.query_event(event_data)
                 event.update(context)
             runner_klass = self._query(response.name, response.version)
-            workflow_runner = runner_klass(context, response)
+            workflow_runner = runner_klass()
             try:
-                workflow_runner.resume()
+                result = workflow_runner.resume(context, response)
             except ActivityError as e:
                 response.terminate(e.message)
             except _UnhandledActivityError as e:
@@ -156,8 +158,8 @@ class WorkflowResponse(object):
         self.client.complete_workflow(self._t, result)
 
     def terminate(self, reason):
-        workflow_id = self.api_response['workflowExecution']['workflowId']
-        self.client.terminate_workflow_execution(workflow_id ,reason)
+        workflow_id = self._api_response['workflowExecution']['workflowId']
+        self.client.terminate_workflow(workflow_id ,reason)
 
     @property
     def new_events(self):
@@ -184,3 +186,98 @@ class WorkflowResponse(object):
             )
             for event in api_response['events']:
                 yield event
+
+
+class ActivityClient(object):
+
+    def __init__(self, domain, task_list, client=None):
+        self.client = client if client is not None else Layer1()
+        self.domain = domain
+        self.task_list = task_list
+        self.activities = {}
+
+    def register(self, name, version, activity_runner,
+        heartbeat='30',
+        schedule_to_close='300',
+        schedule_to_start='60',
+        task_start_to_close='120',
+        doc=None
+    ):
+        self.activities[(name, version)] = activity_runner
+        try:
+            self.client.register_activity_type(
+                self.domain,
+                name,
+                version,
+                self.task_list,
+                heartbeat,
+                schedule_to_close,
+                schedule_to_start,
+                task_start_to_close,
+                doc
+            )
+        except SWFTypeAlreadyExistsError:
+            pass # Check if the registered activity has the same properties.
+
+    def poll(self):
+        response = {}
+        while 'taskToken' not in response or not response['taskToken']:
+            response = self.client.poll_for_activity_task(
+                self.domain, self.task_list
+            )
+        return response
+
+    def complete(self, token, result):
+        self.client.respond_activity_task_completed(token, result)
+
+    def terminate(self, token, reason):
+        self.client.respond_activity_task_failed(token, reason=reason)
+
+    def run(self):
+        while 1:
+            response = ActivityResponse(self)
+            runner_klass = self._query(response.name, response.version)
+            activity_runner = runner_klass()
+            try:
+                result = activity_runner.call(response)
+            except Exception as e:
+                response.terminate(e.message)
+            else:
+                response.complete(result)
+
+    def _query(self, name, version):
+        return self.activities[(name, version)]
+
+
+class ActivityResponse(object):
+    def __init__(self, client):
+        self.client = client
+        self._cached_api_response = None
+
+    @property
+    def name(self):
+        return self._api_response['activityType']['name']
+
+    @property
+    def version(self):
+        return self._api_response['activityType']['version']
+
+    @property
+    def input(self):
+        return self._api_response['input']
+
+    def complete(self, result):
+        self.client.complete(self._token, result)
+
+    def terminate(self, reason):
+        self.client.terminate(self._token, reason)
+
+    @property
+    def _token(self):
+        return self._api_response['taskToken']
+
+    @property
+    def _api_response(self):
+        if self._cached_api_response is None:
+            self._cached_api_response = self.client.poll()
+        return self._cached_api_response
