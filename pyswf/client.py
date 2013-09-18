@@ -225,9 +225,6 @@ class ActivityClient(object):
     def terminate(self, token, reason):
         self.client.respond_activity_task_failed(token, reason=reason)
 
-    def request(self):
-        return ActivityResponse(self)
-
 
 class ActivityResponse(object):
     def __init__(self, client):
