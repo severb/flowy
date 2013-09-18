@@ -21,8 +21,8 @@ class Activity(object):
     def run(self, *args, **kwargs):
         raise NotImplemented()
 
-    def call(self, response):
-        args, kwargs = self.deserialize_activity_input(response.input)
+    def call(self, input):
+        args, kwargs = self.deserialize_activity_input(input)
         return self.serialize_activity_result(self.run(*args, **kwargs))
 
     @staticmethod

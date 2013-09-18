@@ -2,7 +2,14 @@ from pyswf.workflow import Workflow, ActivityProxy
 from pyswf.client import WorkflowClient
 
 
+my_client = WorkflowClient('SeversTest', 'prime_task_list')
+
+
+@my_client
 class PrimeTest(Workflow):
+    name = 'a'
+    version = '123'
+
     div = ActivityProxy('Divider2', '1')
 
     def run(self, n=None):
@@ -15,7 +22,4 @@ class PrimeTest(Workflow):
         return 'prime'
 
 
-
-c = WorkflowClient('SeversTest', 'prime_task_list')
-c.register('PrimeTestWorkflow2', '1', PrimeTest)
-c.run()
+my_client.run()

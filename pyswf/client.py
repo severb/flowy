@@ -189,12 +189,10 @@ class WorkflowResponse(object):
 
 
 class ActivityClient(object):
-
     def __init__(self, domain, task_list, client=None):
         self.client = client if client is not None else Layer1()
         self.domain = domain
         self.task_list = task_list
-        self.activities = {}
 
     def register(self, name, version, activity_runner,
         heartbeat='30',
@@ -203,7 +201,6 @@ class ActivityClient(object):
         task_start_to_close='120',
         doc=None
     ):
-        self.activities[(name, version)] = activity_runner
         try:
             self.client.register_activity_type(
                 self.domain,
@@ -220,12 +217,7 @@ class ActivityClient(object):
             pass # Check if the registered activity has the same properties.
 
     def poll(self):
-        response = {}
-        while 'taskToken' not in response or not response['taskToken']:
-            response = self.client.poll_for_activity_task(
-                self.domain, self.task_list
-            )
-        return response
+        return self.client.poll_for_activity_task(self.domain, self.task_list)
 
     def complete(self, token, result):
         self.client.respond_activity_task_completed(token, result)
@@ -233,20 +225,8 @@ class ActivityClient(object):
     def terminate(self, token, reason):
         self.client.respond_activity_task_failed(token, reason=reason)
 
-    def run(self):
-        while 1:
-            response = ActivityResponse(self)
-            runner_klass = self._query(response.name, response.version)
-            activity_runner = runner_klass()
-            try:
-                result = activity_runner.call(response)
-            except Exception as e:
-                response.terminate(e.message)
-            else:
-                response.complete(result)
-
-    def _query(self, name, version):
-        return self.activities[(name, version)]
+    def request(self):
+        return ActivityResponse(self)
 
 
 class ActivityResponse(object):
@@ -273,11 +253,50 @@ class ActivityResponse(object):
         self.client.terminate(self._token, reason)
 
     @property
+    def _api_response(self):
+        if self._cached_api_response is None:
+            response = self.client.poll()
+            while 'taskToken' not in response or not response['taskToken']:
+                response = self.client.poll()
+            self._cached_api_response = response
+        return self._cached_api_response
+
+    @property
     def _token(self):
         return self._api_response['taskToken']
 
-    @property
-    def _api_response(self):
-        if self._cached_api_response is None:
-            self._cached_api_response = self.client.poll()
-        return self._cached_api_response
+
+class ActivityLoop(object):
+    def __init__(self, client=None):
+        self.client = client if client is not None else ActivityClient()
+        self.activities = {}
+
+    def register(self, name, version, activity_runner,
+        heartbeat='30',
+        schedule_to_close='300',
+        schedule_to_start='60',
+        task_start_to_close='120',
+        doc=None
+    ):
+        self.activities[(name, version)] = activity_runner
+        self.client.register(
+            name, version, activity_runner, heartbeat,
+            schedule_to_close, schedule_to_start, task_start_to_close, doc
+        )
+
+    def start(self):
+        while 1:
+            response = self._get_response()
+            activity_runner = self._query(response.name, response.version)
+            try:
+                result = activity_runner.call(response.input)
+            except Exception as e:
+                response.terminate(e.message)
+            else:
+                response.complete(result)
+
+    def _query(self, name, version):
+        return self.activities[(name, version)]
+
+    def _get_response(self):
+        return ActivityResponse(self.client)
