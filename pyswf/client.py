@@ -225,6 +225,9 @@ class ActivityClient(object):
     def terminate(self, token, reason):
         self.client.respond_activity_task_failed(token, reason=reason)
 
+    def request(self):
+        return ActivityResponse(self)
+
 
 class ActivityResponse(object):
     def __init__(self, client):
@@ -283,7 +286,7 @@ class ActivityLoop(object):
 
     def start(self):
         while 1:
-            response = self._get_response()
+            response = self.client.request()
             activity_runner = self._query(response.name, response.version)
             try:
                 result = activity_runner.call(response.input)
@@ -294,6 +297,3 @@ class ActivityLoop(object):
 
     def _query(self, name, version):
         return self.activities[(name, version)]
-
-    def _get_response(self):
-        return ActivityResponse(self.client)
