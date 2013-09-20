@@ -1,42 +1,28 @@
+import json
+
 from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
 from boto.swf.exceptions import (
     SWFTypeAlreadyExistsError, SWFTypeAlreadyExistsError
 )
 
-from pyswf.event import (
-    WorkflowEvent, ActivityScheduled, ActivityCompleted, ActivityFailed,
-    ActivityTimedOut, WorkflowStarted
-)
-
-from pyswf.context import ContextFactory
 from pyswf.activity import ActivityError
 from pyswf.workflow import _UnhandledActivityError
 
 
-class WorkflowClient(object):
-
-    events = {
-        'ActivityTaskScheduled': ActivityScheduled,
-        'ActivityTaskCompleted': ActivityCompleted,
-        'ActivityTaskFailed': ActivityFailed,
-        'ActivityTaskTimedOut': ActivityTimedOut,
-        'WorkflowExecutionStarted': WorkflowStarted
-    }
-
+class SWFClient(object):
     def __init__(self, domain, task_list, client=None):
         self.client = client if client is not None else Layer1()
         self.domain = domain
         self.task_list = task_list
-        self.workflows = {}
+        self.scheduled_activities = []
 
-    def register(self, name, version, workflow_runner,
+    def register_workflow(self, name, version, workflow_runner,
         execution_start_to_close='3600',
         task_start_to_close='60',
         child_policy='TERMINATE',
         doc=None
     ):
-        self.workflows[(name, version)] = workflow_runner
         try:
             self.client.register_workflow_type(
                 self.domain,
@@ -51,15 +37,20 @@ class WorkflowClient(object):
         except SWFTypeAlreadyExistsError:
             pass # Check if the registered workflow has the same properties.
 
-    def schedule_activities(self, token, activities, context=None):
+    def queue_activity(self, call_id, name, version, input):
+        self.scheduled_activities.append((call_id, name, version, input))
+
+    def schedule_activities(self, token, context=None):
         d = Layer1Decisions()
-        for call_id, activity_name, activity_version, input in activities:
+        scheduled = self.scheduled_activities
+        for call_id, activity_name, activity_version, input in scheduled:
             d.schedule_activity_task(
                 call_id, activity_name, activity_version, input=input
             )
         self.client.respond_decision_task_completed(
             token, decisions=d._data, execution_context=context
         )
+        self.scheduled_activities = []
 
     def complete_workflow(self, token, result):
         d = Layer1Decisions()
@@ -71,130 +62,16 @@ class WorkflowClient(object):
             self.domain, workflow_id, reason=reason
         )
 
-    def query_event(self, event_data, default=WorkflowEvent):
-        event_type = event_data['eventType']
-        return self.events.get(event_type, default)(event_data)
-
-    def run(self):
-        while 1:
-            response = WorkflowResponse(self)
-            context = ContextFactory(response.context)
-            for event_data in response.new_events:
-                event = self.query_event(event_data)
-                event.update(context)
-            runner_klass = self._query(response.name, response.version)
-            workflow_runner = runner_klass()
-            try:
-                result = workflow_runner.resume(context, response)
-            except ActivityError as e:
-                response.terminate(e.message)
-            except _UnhandledActivityError as e:
-                response.terminate(e.message)
-            else:
-                running = context.any_activity_running()
-                scheduled = response.any_activity_scheduled()
-                if not (running or scheduled):
-                    response.complete(result)
-                else:
-                    response.suspend(context.serialize())
-
-    def poll(self, next_page_token=None):
-        response = {}
-        while 'taskToken' not in response or not response['taskToken']:
-            response = self.client.poll_for_decision_task(
-                self.domain, self.task_list,
-                reverse_order=True, next_page_token=next_page_token
-            )
-        return response
-
-    def _query(self, name, version):
-        return self.workflows[(name, version)]
-
-
-class WorkflowResponse(object):
-    def __init__(self, client):
-        self.client = client
-        self.scheduled = []
-        self._cached_api_response = None
-
-    @property
-    def _api_response(self):
-        if self._cached_api_response is None:
-            self._cached_api_response = self.client.poll()
-        return self._cached_api_response
-
-    @property
-    def name(self):
-        return self._api_response['workflowType']['name']
-
-    @property
-    def version(self):
-        return self._api_response['workflowType']['version']
-
-    @property
-    def context(self):
-        for event in self.new_events:
-            if event['eventType'] == 'DecisionTaskCompleted':
-                DTCEA = 'decisionTaskCompletedEventAttributes'
-                return event[DTCEA]['executionContext']
-        return None
-
-    def any_activity_scheduled(self):
-        return bool(self.scheduled)
-
-    @property
-    def _t(self):
-        return self._api_response['taskToken']
-
-    def schedule(self, call_id, activity_name, activity_version, input):
-        self.scheduled.append(
-            (call_id, activity_name, activity_version, input)
+    def poll_workflow(self, next_page_token=None):
+        return self.client.poll_for_decision_task(
+            self.domain, self.task_list,
+            reverse_order=True, next_page_token=next_page_token
         )
 
-    def suspend(self, context):
-        self.client.schedule_activities(self._t, self.scheduled, context)
+    def request_workflow(self):
+        return WorkflowResponse(self)
 
-    def complete(self, result):
-        self.client.complete_workflow(self._t, result)
-
-    def terminate(self, reason):
-        workflow_id = self._api_response['workflowExecution']['workflowId']
-        self.client.terminate_workflow(workflow_id ,reason)
-
-    @property
-    def new_events(self):
-        decisions_completed = 0
-        events = []
-        prev_id = self._api_response.get('previousStartedEventId')
-        for event in self._events:
-            if event['eventType'] == 'DecisionTaskCompleted':
-                decisions_completed += 1
-            if prev_id and event['eventId'] == prev_id:
-                break
-            events.append(event)
-        assert decisions_completed <= 1
-        return reversed(events)
-
-    @property
-    def _events(self):
-        api_response = self._api_response
-        for event in api_response['events']:
-            yield event
-        while api_response.get('nextPageToken'):
-            api_response = self.client.poll(
-                next_page_token=api_response['nextPageToken'],
-            )
-            for event in api_response['events']:
-                yield event
-
-
-class ActivityClient(object):
-    def __init__(self, domain, task_list, client=None):
-        self.client = client if client is not None else Layer1()
-        self.domain = domain
-        self.task_list = task_list
-
-    def register(self, name, version, activity_runner,
+    def register_activity(self, name, version, activity_runner,
         heartbeat='30',
         schedule_to_close='300',
         schedule_to_start='60',
@@ -216,23 +93,225 @@ class ActivityClient(object):
         except SWFTypeAlreadyExistsError:
             pass # Check if the registered activity has the same properties.
 
-    def poll(self):
+    def poll_activity(self):
         return self.client.poll_for_activity_task(self.domain, self.task_list)
 
-    def complete(self, token, result):
+    def complete_activity(self, token, result):
         self.client.respond_activity_task_completed(token, result)
 
-    def terminate(self, token, reason):
+    def terminate_activity(self, token, reason):
         self.client.respond_activity_task_failed(token, reason=reason)
 
-    def request(self):
+    def request_activity(self):
         return ActivityResponse(self)
+
+
+class WorkflowResponse(object):
+    def __init__(self, client):
+        self.client = client
+        self._event_to_call_id = {}
+        self._scheduled = set()
+        self._results = {}
+        self._timed_out = set()
+        self._with_errors = {}
+        self.input = None
+
+        response = {}
+        while 'taskToken' not in response or not response['taskToken']:
+            response = self.client.poll_workflow()
+        self._api_response = response
+
+        if self._context is not None:
+            initial_state = json.loads(self._context)
+            self._event_to_call_id = initial_state['event_to_call_id']
+            self._scheduled = set(initial_state['scheduled'])
+            self._results = initial_state['results']
+            self._timed_out = set(initial_state['timed_out'])
+            self._with_errors = initial_state['with_errors']
+            self.input = initial_state['input']
+
+        # Update the context with all new events
+        for new_event in self._new_events:
+            event_type = new_event['eventType']
+            getattr(self, '_%s' % event_type, lambda x: 0)(new_event)
+
+        # Assuming workflow started is always the first event
+        assert self.input is not None
+
+    @property
+    def name(self):
+        return self._api_response['workflowType']['name']
+
+    @property
+    def version(self):
+        return self._api_response['workflowType']['version']
+
+    def queue_activity(self, call_id, name, version, input):
+        self.client.queue_activity(call_id, name, version, input)
+
+    def schedule_activities(self):
+        self.client.schedule_activities(self._token, self._serialize_context())
+
+    def complete_workflow(self, result):
+        self.client.complete_workflow(self._token, result)
+
+    def terminate_workflow(self, reason):
+        workflow_id = self._api_response['workflowExecution']['workflowId']
+        self.client.terminate_workflow(workflow_id ,reason)
+
+    def any_activity_running(self):
+        return bool(self.scheduled)
+
+    def is_activity_scheduled(self, call_id):
+        return call_id in self.scheduled
+
+    def activity_result(self, call_id, default=None):
+        return self.results.get(call_id, default)
+
+    def activity_error(self, call_id, default=None):
+        return self.with_errors.get(call_id, default)
+
+    def is_activity_timeout(self, call_id):
+        return call_id in self.timed_out
+
+    @property
+    def _token(self):
+        return self._api_response['taskToken']
+
+    @property
+    def _context(self):
+        for event in self._new_events:
+            if event['eventType'] == 'DecisionTaskCompleted':
+                DTCEA = 'decisionTaskCompletedEventAttributes'
+                return event[DTCEA]['executionContext']
+        return None
+
+    def _serialize_context(self):
+        return json.dumps({
+            'event_to_call_id': self._event_to_call_id,
+            'scheduled': list(self._scheduled),
+            'results': self._results,
+            'timed_out': list(self._timed_out),
+            'with_errors': self._with_errors,
+            'input': self.input,
+        })
+
+    @property
+    def _events(self):
+        if not hasattr(self, '_cached_events'):
+            events = []
+            api_response = self._api_response
+            while api_response.get('nextPageToken'):
+                for event in api_response['events']:
+                    events.append(event)
+                api_response = self.client.poll_workflow(
+                    next_page_token=api_response['nextPageToken']
+                )
+            for event in api_response['events']:
+                events.append(event)
+            self._cached_events = events
+        return self._cached_events
+
+    @property
+    def _new_events(self):
+        decisions_completed = 0
+        events = []
+        prev_id = self._api_response.get('previousStartedEventId')
+        for event in self._events:
+            if event['eventType'] == 'DecisionTaskCompleted':
+                decisions_completed += 1
+            if prev_id and event['eventId'] == prev_id:
+                break
+            events.append(event)
+        assert decisions_completed <= 1
+        return reversed(events)
+
+    def _ActivityTaskScheduled(self, event):
+        event_id = event['eventId']
+        subdict = self._api_response['activityTaskScheduledEventAttributes']
+        call_id = subdict['activityId']
+        self.event_to_call_id[event_id] = call_id
+        self.scheduled.add(call_id)
+
+    def _ActivityTaskCompleted(self, event):
+        subdict = event['activityTaskCompletedEventAttributes']
+        event_id, result = subdict['scheduledEventId'], subdict['result']
+        self.scheduled.remove(self.event_to_call_id[event_id])
+        self.results[self.event_to_call_id[event_id]] = result
+
+    def _ActivityTaskFailed(self, event):
+        subdict = event['activityTaskFailedEventAttributes']
+        event_id, reason = subdict['scheduledEventId'], subdict['reason']
+        self.with_errors[self.event_to_call_id[event_id]] = reason
+
+    def _ActivityTaskTimedOut(self, event):
+        subdict = event['activityTaskTimedOutEventAttributes']
+        event_id = subdict['scheduledEventId']
+        self.scheduled.remove(self.event_to_call_id[event_id])
+        self.timed_out.add(self.event_to_call_id[event_id])
+
+    def _WorkflowExecutionStarted(self, event):
+        subdict = event['workflowExecutionStartedEventAttributes']
+        self.input = subdict['input']
+
+
+class WorkflowLoop(object):
+    def __init__(self, client=None):
+        self.client = client if client is not None else WorkflowClient()
+        self.workflows = {}
+
+    def register(self, name, version, workflow_runner,
+        execution_start_to_close='3600',
+        task_start_to_close='60',
+        child_policy='TERMINATE',
+        doc=None
+    ):
+        self.workflows[(name, version)] = workflow_runner
+        self.client.register_workflow(name, version, workflow_runner,
+            execution_start_to_close, task_start_to_close, child_policy, doc
+        )
+
+    def start(self):
+        while 1:
+            response = self.client.request()
+            workflow_runner = self._query(response.name, response.version)
+            try:
+                result, activities = workflow_runner.resume(
+                    response.input, response
+                )
+            except ActivityError as e:
+                response.terminate_workflow(e.message)
+            except _UnhandledActivityError as e:
+                response.terminate_workflow(e.message)
+            else:
+                activities_running = response.any_activity_running()
+                activities_scheduled = bool(activities)
+                if activities_running or activities_scheduled:
+                    for a in activities:
+                        response.queue_activity(
+                            a.call_id, a.name, a.version, a.input
+                        )
+                    response.schedule_activities()
+                else:
+                    response.complete_workflow(result)
+
+    def _query(self, name, version):
+        return self.workflows[(name, version)]
 
 
 class ActivityResponse(object):
     def __init__(self, client):
         self.client = client
-        self._cached_api_response = None
+        response = self.client.poll()
+        while 'taskToken' not in response or not response['taskToken']:
+            response = self.client.poll()
+        self._api_response = response
+
+    def complete(self, result):
+        self.client.complete_activity(self._token, result)
+
+    def terminate(self, reason):
+        self.client.terminate_activity(self._token, reason)
 
     @property
     def name(self):
@@ -245,21 +324,6 @@ class ActivityResponse(object):
     @property
     def input(self):
         return self._api_response['input']
-
-    def complete(self, result):
-        self.client.complete(self._token, result)
-
-    def terminate(self, reason):
-        self.client.terminate(self._token, reason)
-
-    @property
-    def _api_response(self):
-        if self._cached_api_response is None:
-            response = self.client.poll()
-            while 'taskToken' not in response or not response['taskToken']:
-                response = self.client.poll()
-            self._cached_api_response = response
-        return self._cached_api_response
 
     @property
     def _token(self):
@@ -279,21 +343,21 @@ class ActivityLoop(object):
         doc=None
     ):
         self.activities[(name, version)] = activity_runner
-        self.client.register(
+        self.client.register_activity(
             name, version, activity_runner, heartbeat,
             schedule_to_close, schedule_to_start, task_start_to_close, doc
         )
 
     def start(self):
         while 1:
-            response = self.client.request()
+            response = self.client.request_activity()
             activity_runner = self._query(response.name, response.version)
             try:
                 result = activity_runner.call(response.input)
             except Exception as e:
-                response.terminate(e.message)
+                response.terminate_activity(e.message)
             else:
-                response.complete(result)
+                response.complete_activity(result)
 
     def _query(self, name, version):
         return self.activities[(name, version)]

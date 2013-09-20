@@ -1,4 +1,5 @@
 import json
+from collections import namedtuple
 from contextlib import contextmanager
 
 from pyswf.activity import ActivityError, ActivityTimedout
@@ -10,6 +11,9 @@ class _SyncNeeded(Exception):
 
 class _UnhandledActivityError(Exception):
     pass
+
+
+ActivityCall = namedtuple('ActivityCall', 'call_id name version input')
 
 
 class MaybeResult(object):
@@ -57,14 +61,18 @@ class Workflow(object):
         self._current_call_id += 1
         return str(result)
 
-    def resume(self, context, response):
-        self._context, self._response, result = context, response, None
-        args, kwargs = self.deserialize_workflow_input(self._context.input)
+    def _queue_activity(self, call_id, name, version, input):
+        self._scheduled.append(ActivityCall(call_id, name, version, input))
+
+    def resume(self, input, context):
+        self._context, result = context, None
+        self._scheduled = []
+        args, kwargs = self.deserialize_workflow_input(input)
         try:
             result = self.run(*args, **kwargs)
         except _SyncNeeded:
             pass
-        return self.serialize_workflow_result(result)
+        return self.serialize_workflow_result(result), self._scheduled
 
     def run(self, *args, **kwargs):
         raise NotImplemented()
@@ -123,7 +131,6 @@ class ActivityProxy(object):
         def proxy(*args, **kwargs):
             call_id = workflow._next_call_id()
             context = workflow._context
-            response = workflow._response
 
 #             if context.is_activity_timedout(call_id):
                 # Reschedule if needed
@@ -145,7 +152,7 @@ class ActivityProxy(object):
                 scheduled = context.is_activity_scheduled(call_id)
                 if not placeholders and not scheduled:
                     input = self.serialize_activity_input(*args, **kwargs)
-                    workflow._response.schedule(
+                    workflow._queue_activity(
                         call_id, self.name, self.version, input
                     )
                 return MaybeResult()
