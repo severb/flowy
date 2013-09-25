@@ -54,7 +54,7 @@ class Workflow(object):
     def _next_call_id(self):
         result = self._current_call_id
         self._current_call_id += 1
-        return str(result)
+        return result
 
     def _queue_activity(self, call_id, name, version, input):
         self._scheduled.append(ActivityCall(call_id, name, version, input))

@@ -5,7 +5,7 @@ from pyswf.client import ActivityClient
 my_client = ActivityClient.for_domain('SeversTest', 'prime_task_list')
 
 
-@my_client('NumberDivider', 2)
+@my_client('NumberDivider', 1)
 class NumberDivider(Activity):
     """
     Divide numbers.

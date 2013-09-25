@@ -38,7 +38,7 @@ class SWFClient(object):
             pass # Check if the registered workflow has the same properties.
 
     def queue_activity(self, call_id, name, version, input):
-        self.scheduled_activities.append((call_id, name, version, input))
+        self.scheduled_activities.append((str(call_id), name, version, input))
 
     def schedule_activities(self, token, context=None):
         d = Layer1Decisions()
@@ -123,11 +123,13 @@ class WorkflowResponse(object):
 
         if self._context is not None:
             initial_state = json.loads(self._context)
-            self._event_to_call_id = initial_state['event_to_call_id']
+            self._event_to_call_id = self.fix_keys(
+                initial_state['event_to_call_id']
+            )
             self._scheduled = set(initial_state['scheduled'])
-            self._results = initial_state['results']
+            self._results = self.fix_keys(initial_state['results'])
             self._timed_out = set(initial_state['timed_out'])
-            self._with_errors = initial_state['with_errors']
+            self._with_errors = self.fix_keys(initial_state['with_errors'])
             self.input = initial_state['input']
 
         # Update the context with all new events
@@ -137,6 +139,11 @@ class WorkflowResponse(object):
 
         # Assuming workflow started is always the first event
         assert self.input is not None
+
+    @staticmethod
+    def fix_keys(d):
+        # Fix json's stupid silent key conversion from int to string
+        return dict((int(key), value) for key, value in d.items())
 
     @property
     def name(self):
@@ -229,7 +236,7 @@ class WorkflowResponse(object):
     def _ActivityTaskScheduled(self, event):
         event_id = event['eventId']
         subdict = event['activityTaskScheduledEventAttributes']
-        call_id = subdict['activityId']
+        call_id = int(subdict['activityId'])
         self._event_to_call_id[event_id] = call_id
         self._scheduled.add(call_id)
 
