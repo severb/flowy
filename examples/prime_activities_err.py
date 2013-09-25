@@ -2,15 +2,19 @@ from pyswf.activity import Activity
 from pyswf.client import ActivityClient
 
 
+my_client = ActivityClient.for_domain('SeversTest', 'prime_task_list')
 
-class MyActivity(Activity):
 
+@my_client('NumberDivider', 2)
+class NumberDivider(Activity):
+    """
+    Divide numbers. Raises an exception.
+
+    """
     def run(self, n, x):
         if x == 4:
             raise RuntimeError('Hello')
         return n % x == 0
 
 
-c = ActivityClient('SeversTest', 'prime_task_list')
-c.register('Divider2', '1', MyActivity)
-c.run()
+my_client.start()
