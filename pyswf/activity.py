@@ -10,14 +10,6 @@ class ActivityTimedout(RuntimeError):
 
 
 class Activity(object):
-
-    schedule_to_close = 300
-    schedule_to_start = 60
-    heartbeat = 30
-    task_start_to_close = 120
-    name = None
-    version = None
-
     def run(self, *args, **kwargs):
         raise NotImplemented()
 

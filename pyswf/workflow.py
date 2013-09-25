@@ -36,11 +36,6 @@ class MaybeResult(object):
 
 
 class Workflow(object):
-
-    child_policy = 'TERMINATE'
-    execution_start_to_close = 3600
-    task_start_to_close = 60
-
     def __init__(self):
         self._current_call_id = 0
         self._proxy_cache = dict()
@@ -72,6 +67,7 @@ class Workflow(object):
             result = self.run(*args, **kwargs)
         except _SyncNeeded:
             pass
+        self._current_call_id = 0
         return self.serialize_workflow_result(result), self._scheduled
 
     def run(self, *args, **kwargs):
@@ -90,7 +86,7 @@ class Workflow(object):
 class ActivityProxy(object):
     def __init__(self, name, version):
         self.name = name
-        self.version = version
+        self.version = str(version)
 
     def __get__(self, obj, objtype=None):
         if obj is None:

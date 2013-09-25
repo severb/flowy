@@ -160,19 +160,19 @@ class WorkflowResponse(object):
         self.client.terminate_workflow(workflow_id ,reason)
 
     def any_activity_running(self):
-        return bool(self.scheduled)
+        return bool(self._scheduled)
 
     def is_activity_scheduled(self, call_id):
-        return call_id in self.scheduled
+        return call_id in self._scheduled
 
     def activity_result(self, call_id, default=None):
-        return self.results.get(call_id, default)
+        return self._results.get(call_id, default)
 
     def activity_error(self, call_id, default=None):
-        return self.with_errors.get(call_id, default)
+        return self._with_errors.get(call_id, default)
 
     def is_activity_timeout(self, call_id):
-        return call_id in self.timed_out
+        return call_id in self._timed_out
 
     @property
     def _token(self):
@@ -228,27 +228,27 @@ class WorkflowResponse(object):
 
     def _ActivityTaskScheduled(self, event):
         event_id = event['eventId']
-        subdict = self._api_response['activityTaskScheduledEventAttributes']
+        subdict = event['activityTaskScheduledEventAttributes']
         call_id = subdict['activityId']
-        self.event_to_call_id[event_id] = call_id
-        self.scheduled.add(call_id)
+        self._event_to_call_id[event_id] = call_id
+        self._scheduled.add(call_id)
 
     def _ActivityTaskCompleted(self, event):
         subdict = event['activityTaskCompletedEventAttributes']
         event_id, result = subdict['scheduledEventId'], subdict['result']
-        self.scheduled.remove(self.event_to_call_id[event_id])
-        self.results[self.event_to_call_id[event_id]] = result
+        self._scheduled.remove(self._event_to_call_id[event_id])
+        self._results[self._event_to_call_id[event_id]] = result
 
     def _ActivityTaskFailed(self, event):
         subdict = event['activityTaskFailedEventAttributes']
         event_id, reason = subdict['scheduledEventId'], subdict['reason']
-        self.with_errors[self.event_to_call_id[event_id]] = reason
+        self._with_errors[self._event_to_call_id[event_id]] = reason
 
     def _ActivityTaskTimedOut(self, event):
         subdict = event['activityTaskTimedOutEventAttributes']
         event_id = subdict['scheduledEventId']
-        self.scheduled.remove(self.event_to_call_id[event_id])
-        self.timed_out.add(self.event_to_call_id[event_id])
+        self._scheduled.remove(self._event_to_call_id[event_id])
+        self._timed_out.add(self._event_to_call_id[event_id])
 
     def _WorkflowExecutionStarted(self, event):
         subdict = event['workflowExecutionStartedEventAttributes']
@@ -256,8 +256,8 @@ class WorkflowResponse(object):
 
 
 class WorkflowLoop(object):
-    def __init__(self, client=None):
-        self.client = client if client is not None else WorkflowClient()
+    def __init__(self, client):
+        self.client = client
         self.workflows = {}
 
     def register(self, name, version, workflow_runner,
@@ -273,7 +273,7 @@ class WorkflowLoop(object):
 
     def start(self):
         while 1:
-            response = self.client.request()
+            response = self.client.request_workflow()
             workflow_runner = self._query(response.name, response.version)
             try:
                 result, activities = workflow_runner.resume(
@@ -299,12 +299,51 @@ class WorkflowLoop(object):
         return self.workflows[(name, version)]
 
 
+class WorkflowClient(object):
+    def __init__(self, loop):
+        self.loop = loop
+
+    @classmethod
+    def for_domain(cls, domain, task_list):
+        client = SWFClient(domain, task_list)
+        loop = WorkflowLoop(client)
+        return cls(loop)
+
+    @classmethod
+    def from_client(cls, client):
+        loop = WorkflowLoop(client)
+        return cls(loop)
+
+    def __call__(self, name, version, *args, **kwargs):
+        version = str(version)
+        optional_args = [
+            'execution_start_to_close',
+            'task_start_to_close',
+            'child_policy',
+        ]
+        r_kwargs = {}
+        for arg_name in optional_args:
+            arg_value = kwargs.pop(arg_name, None)
+            if arg_value is not None:
+                r_kwargs[arg_name] = str(arg_value)
+        def wrapper(workflow):
+            r_kwargs['doc'] = workflow.__doc__.strip()
+            self.loop.register(
+                name, version, workflow(*args, **kwargs), **r_kwargs
+            )
+            return workflow
+        return wrapper
+
+    def start(self):
+        self.loop.start()
+
+
 class ActivityResponse(object):
     def __init__(self, client):
         self.client = client
-        response = self.client.poll()
+        response = self.client.poll_activity()
         while 'taskToken' not in response or not response['taskToken']:
-            response = self.client.poll()
+            response = self.client.poll_activity()
         self._api_response = response
 
     def complete(self, result):
@@ -331,8 +370,8 @@ class ActivityResponse(object):
 
 
 class ActivityLoop(object):
-    def __init__(self, client=None):
-        self.client = client if client is not None else ActivityClient()
+    def __init__(self, client):
+        self.client = client
         self.activities = {}
 
     def register(self, name, version, activity_runner,
@@ -355,9 +394,51 @@ class ActivityLoop(object):
             try:
                 result = activity_runner.call(response.input)
             except Exception as e:
-                response.terminate_activity(e.message)
+                response.terminate(e.message)
             else:
-                response.complete_activity(result)
+                response.complete(result)
 
     def _query(self, name, version):
+        # XXX: if we can't resolve this activity log the error and continue
         return self.activities[(name, version)]
+
+
+
+class ActivityClient(object):
+    def __init__(self, loop):
+        self.loop = loop
+
+    @classmethod
+    def for_domain(cls, domain, task_list):
+        client = SWFClient(domain, task_list)
+        loop = ActivityLoop(client)
+        return cls(loop)
+
+    @classmethod
+    def from_client(cls, client):
+        loop = ActivityLoop(client)
+        return cls(loop)
+
+    def __call__(self, name, version, *args, **kwargs):
+        version = str(version)
+        optional_args = [
+            'heartbeat',
+            'schedule_to_close',
+            'schedule_to_start',
+            'task_start_to_close',
+        ]
+        r_kwargs = {}
+        for arg_name in optional_args:
+            arg_value = kwargs.pop(arg_name, None)
+            if arg_value is not None:
+                r_kwargs[arg_name] = str(arg_value)
+        def wrapper(activity):
+            r_kwargs['doc'] = activity.__doc__.strip()
+            self.loop.register(
+                name, version, activity(*args, **kwargs), **r_kwargs
+            )
+            return activity
+        return wrapper
+
+    def start(self):
+        self.loop.start()
