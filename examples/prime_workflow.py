@@ -13,8 +13,7 @@ class PrimeTest(Workflow):
     """
     div = ActivityProxy('NumberDivider', 2)
 
-    def run(self, n=None):
-        n = n if n is not None else 7 * 11
+    def run(self, n=77):
         for i in range(2, n/2 + 1):
             r = self.div(n, i)
             if r.result():
