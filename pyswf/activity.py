@@ -1,14 +1,6 @@
 import json
 
 
-class ActivityError(RuntimeError):
-    pass
-
-
-class ActivityTimedout(RuntimeError):
-    pass
-
-
 class Activity(object):
     def run(self, *args, **kwargs):
         raise NotImplemented()

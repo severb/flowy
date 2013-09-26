@@ -2,14 +2,20 @@ import json
 from collections import namedtuple
 from contextlib import contextmanager
 
-from pyswf.activity import ActivityError, ActivityTimedout
-
 
 class _SyncNeeded(Exception):
     pass
 
 
 class _UnhandledActivityError(Exception):
+    pass
+
+
+class ActivityError(RuntimeError):
+    pass
+
+
+class ActivityTimedout(ActivityError):
     pass
 
 

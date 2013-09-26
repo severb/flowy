@@ -44,10 +44,10 @@ class TestWorkflow(unittest.TestCase):
             '{"args": [], "kwargs": {}}', DummyContext()
         )
         self.assertEquals(set(s), set([
-            ('0', 'f1', 'v1', '{"args": [], "kwargs": {}}'),
-            ('1', 'f1', 'v1', '{"args": [], "kwargs": {}}'),
-            ('2', 'f2', 'v2', '{"args": [], "kwargs": {}}'),
-            ('3', 'f2', 'v2', '{"args": [], "kwargs": {}}'),
+            (0, 'f1', 'v1', '{"args": [], "kwargs": {}}'),
+            (1, 'f1', 'v1', '{"args": [], "kwargs": {}}'),
+            (2, 'f2', 'v2', '{"args": [], "kwargs": {}}'),
+            (3, 'f2', 'v2', '{"args": [], "kwargs": {}}'),
         ]))
 
     def test_no_reschedule(self):
@@ -62,11 +62,11 @@ class TestWorkflow(unittest.TestCase):
                 self.f2()
 
         r, s = MyWorkflow().resume(
-            '{"args": [], "kwargs": {}}', DummyContext(scheduled=['0', '1'])
+            '{"args": [], "kwargs": {}}', DummyContext(scheduled=[0, 1])
         )
         self.assertEquals(set(s), set([
-            ('2', 'f2', 'v2', '{"args": [], "kwargs": {}}'),
-            ('3', 'f2', 'v2', '{"args": [], "kwargs": {}}'),
+            (2, 'f2', 'v2', '{"args": [], "kwargs": {}}'),
+            (3, 'f2', 'v2', '{"args": [], "kwargs": {}}'),
         ]))
 
     def test_activity_dependencies(self):
@@ -82,7 +82,7 @@ class TestWorkflow(unittest.TestCase):
             '{"args": [], "kwargs": {}}', DummyContext()
         )
         self.assertEquals(set(s), set([
-            ('0', 'f1', 'v1', '{"args": [], "kwargs": {}}'),
+            (0, 'f1', 'v1', '{"args": [], "kwargs": {}}'),
         ]))
 
 
@@ -97,7 +97,7 @@ class TestWorkflow(unittest.TestCase):
             '{"args": [], "kwargs": {}}', DummyContext()
         )
         self.assertEquals(set(s), set([
-            ('0', 'f', 'v','{"args": [1, 2], "kwargs": {"a": "b", "c": "d"}}')
+            (0, 'f', 'v','{"args": [1, 2], "kwargs": {"a": "b", "c": "d"}}')
         ]))
 
     def test_workflow_input_deserialization(self):
@@ -111,7 +111,7 @@ class TestWorkflow(unittest.TestCase):
             '{"args": [1], "kwargs": {"b": 2}}', DummyContext()
         )
         self.assertEquals(set(s), set([
-            ('0', 'f1', 'v1','{"args": [1, 2], "kwargs": {}}')
+            (0, 'f1', 'v1','{"args": [1, 2], "kwargs": {}}')
         ]))
 
     def test_activity_result_deserialization(self):
@@ -124,10 +124,10 @@ class TestWorkflow(unittest.TestCase):
 
         r, s = MyWorkflow().resume(
             '{"args": [], "kwargs": {}}',
-            DummyContext(results={'0': '1', '1': '[1, 2]'})
+            DummyContext(results={0: '1', 1: '[1, 2]'})
         )
         self.assertEquals(set(s), set([
-            ('2', 'f1', 'v1','{"args": [4], "kwargs": {}}')
+            (2, 'f1', 'v1','{"args": [4], "kwargs": {}}')
         ]))
 
     def test_result_blocks_execution(self):
@@ -142,7 +142,7 @@ class TestWorkflow(unittest.TestCase):
             '{"args": [], "kwargs": {}}', DummyContext()
         )
         self.assertEquals(set(s), set([
-            ('0', 'f1', 'v1', '{"args": [], "kwargs": {}}'),
+            (0, 'f1', 'v1', '{"args": [], "kwargs": {}}'),
         ]))
 
     def test_activity_error(self):
@@ -158,11 +158,11 @@ class TestWorkflow(unittest.TestCase):
             _UnhandledActivityError,
             my_workflow.resume,
             '{"args": [], "kwargs": {}}',
-            DummyContext(errors={'0': 'error msg'})
+            DummyContext(errors={0: 'error msg'})
         )
 
     def test_manual_activity_error(self):
-        from pyswf.activity import ActivityError
+        from pyswf.workflow import ActivityError
 
         class MyWorkflow(Workflow):
             f1 = ActivityProxy('f1', 'v1')
@@ -177,14 +177,14 @@ class TestWorkflow(unittest.TestCase):
 
         r, s = MyWorkflow().resume(
             '{"args": [], "kwargs": {}}',
-            DummyContext(errors={'0': 'error msg'})
+            DummyContext(errors={0: 'error msg'})
         )
         self.assertEquals(set(s), set([
-            ('1', 'f2', 'v2', '{"args": [], "kwargs": {}}'),
+            (1, 'f2', 'v2', '{"args": [], "kwargs": {}}'),
         ]))
 
     def test_manual_activity_error_nesting(self):
-        from pyswf.activity import ActivityError
+        from pyswf.workflow import ActivityError
 
         class MyWorkflow(Workflow):
             f1 = ActivityProxy('f1', 'v1')
@@ -202,10 +202,10 @@ class TestWorkflow(unittest.TestCase):
 
         r, s = MyWorkflow().resume(
             '{"args": [], "kwargs": {}}',
-            DummyContext(errors={'0': 'error msg'})
+            DummyContext(errors={0: 'error msg'})
         )
         self.assertEquals(set(s), set([
-            ('1', 'f2', 'v2', '{"args": [], "kwargs": {}}'),
+            (1, 'f2', 'v2', '{"args": [], "kwargs": {}}'),
         ]))
 
     def test_manual_activity_error_args(self):
@@ -223,11 +223,11 @@ class TestWorkflow(unittest.TestCase):
             _UnhandledActivityError,
             my_workflow.resume,
             '{"args": [], "kwargs": {}}',
-            DummyContext(errors={'0': 'error msg'})
+            DummyContext(errors={0: 'error msg'})
         )
 
     def test_manual_activity_error_propagation(self):
-        from pyswf.activity import ActivityError
+        from pyswf.workflow import ActivityError
 
         class MyWorkflow(Workflow):
             f1 = ActivityProxy('f1', 'v1')
@@ -241,7 +241,7 @@ class TestWorkflow(unittest.TestCase):
             ActivityError,
             my_workflow.resume,
             '{"args": [], "kwargs": {}}',
-            DummyContext(errors={'0': 'error msg'})
+            DummyContext(errors={0: 'error msg'})
         )
 
 class DummyContext(object):

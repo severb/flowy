@@ -6,8 +6,7 @@ from boto.swf.exceptions import (
     SWFTypeAlreadyExistsError, SWFTypeAlreadyExistsError
 )
 
-from pyswf.activity import ActivityError
-from pyswf.workflow import _UnhandledActivityError
+from pyswf.workflow import _UnhandledActivityError, ActivityError
 
 
 class SWFClient(object):
