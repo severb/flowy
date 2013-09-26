@@ -1,4 +1,5 @@
 import json
+import uuid
 
 from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
@@ -103,6 +104,12 @@ class SWFClient(object):
 
     def request_activity(self):
         return ActivityResponse(self)
+
+    def start_workflow(self, name, version, input):
+        self.client.start_workflow_execution(
+            self.domain, str(uuid.uuid4()), name, version,
+            task_list=self.task_list, input=input
+        )
 
 
 class WorkflowResponse(object):
@@ -409,7 +416,6 @@ class ActivityLoop(object):
         return self.activities[(name, version)]
 
 
-
 class ActivityClient(object):
     def __init__(self, loop):
         self.loop = loop
@@ -448,3 +454,17 @@ class ActivityClient(object):
 
     def start(self):
         self.loop.start()
+
+
+class WorkflowStarter(object):
+    def __init__(self, client):
+        self.client = client
+
+    @classmethod
+    def for_domain(cls, domain, task_list):
+        client = SWFClient(domain, task_list)
+        return cls(client)
+
+    def start(self, name, version, *args, **kwargs):
+        input = json.dumps({"args": args, "kwargs": kwargs})
+        self.client.start_workflow(name, str(version), input)
