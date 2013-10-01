@@ -19,7 +19,26 @@ class ActivityTimedout(ActivityError):
     pass
 
 
-ActivityCall = namedtuple('ActivityCall', 'call_id name version input')
+ActivityCall = namedtuple('ActivityCall', 'call_id name version input options')
+
+
+class ActivityOptions(
+    namedtuple(
+        'ActivityOptionsBase',
+        'heartbeat schedule_to_close schedule_to_start task_start_to_close'
+    )
+):
+    def update_with(self, other):
+        return ActivityOptions(
+            other.heartbeat if other.heartbeat is not None
+                else self.heartbeat,
+            other.schedule_to_close if other.schedule_to_close is not None
+                else self.schedule_to_close,
+            other.schedule_to_start if other.schedule_to_start is not None
+                else self.schedule_to_start,
+            other.task_start_to_close if other.task_start_to_close is not None
+                else self.task_start_to_close,
+        )
 
 
 class MaybeResult(object):
@@ -45,25 +64,52 @@ class Workflow(object):
     def __init__(self):
         self._current_call_id = 0
         self._proxy_cache = dict()
-        self.error_handling_nesting_level = 0
+        self._options_stack = [ActivityOptions(None, None, None, None)]
+        self._error_handling_stack = [False]
 
     @contextmanager
-    def error_handling(self):
-        self.error_handling_nesting_level += 1
+    def options(self,
+        heartbeat=None, schedule_to_close=None,
+        schedule_to_start=None, task_start_to_close=None, error_handling=None
+    ):
+        if error_handling is not None:
+            self._error_handling_stack.append(error_handling)
+        options = ActivityOptions(
+            heartbeat, schedule_to_close,
+            schedule_to_start, task_start_to_close
+        )
+        new_options = self._current_options.update_with(options)
+        self._options_stack.append(new_options)
         yield
-        self.error_handling_nesting_level -= 1
+        self._options_stack.pop()
+        if error_handling is not None:
+            self._error_handling_stack.pop()
 
     @property
-    def manual_exception_handling(self):
-        return self.error_handling_nesting_level > 0
+    def _current_options(self):
+        return self._options_stack[-1]
+
+    @property
+    def _manual_exception_handling(self):
+        return self._error_handling_stack[-1]
 
     def _next_call_id(self):
         result = self._current_call_id
         self._current_call_id += 1
         return result
 
-    def _queue_activity(self, call_id, name, version, input):
-        self._scheduled.append(ActivityCall(call_id, name, version, input))
+    def _queue_activity(self, call_id, name, version, input,
+        heartbeat=None, schedule_to_close=None,
+        schedule_to_start=None, task_start_to_close=None
+    ):
+        activity_options = ActivityOptions(
+            heartbeat, schedule_to_close,
+            schedule_to_start, task_start_to_close
+        )
+        options = activity_options.update_with(self._current_options)
+        self._scheduled.append(
+            ActivityCall(call_id, name, version, input, options)
+        )
 
     def resume(self, input, context):
         self._context, result = context, None
@@ -90,9 +136,15 @@ class Workflow(object):
 
 
 class ActivityProxy(object):
-    def __init__(self, name, version):
+    def __init__(self, name, version, heartbeat=None, schedule_to_close=None,
+        schedule_to_start=None, task_start_to_close=None
+    ):
         self.name = name
-        self.version = str(version)
+        self.version = version
+        self.heartbeat = heartbeat
+        self.schedule_to_close = schedule_to_close
+        self.schedule_to_start = schedule_to_start
+        self.task_start_to_close = task_start_to_close
 
     def __get__(self, obj, objtype=None):
         if obj is None:
@@ -155,11 +207,15 @@ class ActivityProxy(object):
                 if not placeholders and not scheduled:
                     input = self.serialize_activity_input(*args, **kwargs)
                     workflow._queue_activity(
-                        call_id, self.name, self.version, input
+                        call_id, self.name, self.version, input,
+                        self.heartbeat,
+                        self.schedule_to_close,
+                        self.schedule_to_start,
+                        self.task_start_to_close
                     )
                 return MaybeResult()
             if error is not _sentinel:
-                if workflow.manual_exception_handling:
+                if workflow._manual_exception_handling:
                     return MaybeResult(error, is_error=True)
                 else:
                     raise _UnhandledActivityError(error)

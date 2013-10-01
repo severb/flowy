@@ -14,6 +14,7 @@ class PrimeTest(Workflow):
     div = ActivityProxy('NumberDivider', 1)
 
     def run(self, n=77):
+
         for i in range(2, n/2 + 1):
             r = self.div(n, i)
             if r.result():

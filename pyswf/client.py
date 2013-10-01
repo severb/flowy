@@ -27,7 +27,7 @@ class SWFClient(object):
             self.client.register_workflow_type(
                 self.domain,
                 name,
-                version,
+                str(version),
                 self.task_list,
                 child_policy,
                 execution_start_to_close,
@@ -38,14 +38,14 @@ class SWFClient(object):
             pass # Check if the registered workflow has the same properties.
 
     def queue_activity(self, call_id, name, version, input):
-        self.scheduled_activities.append((str(call_id), name, version, input))
+        self.scheduled_activities.append(call_id, name, version, input)
 
     def schedule_activities(self, token, context=None):
         d = Layer1Decisions()
         scheduled = self.scheduled_activities
         for call_id, activity_name, activity_version, input in scheduled:
             d.schedule_activity_task(
-                call_id, activity_name, activity_version, input=input
+                str(call_id), activity_name, str(activity_version), input=input
             )
         self.client.respond_decision_task_completed(
             token, decisions=d._data, execution_context=context
@@ -82,7 +82,7 @@ class SWFClient(object):
             self.client.register_activity_type(
                 self.domain,
                 name,
-                version,
+                str(version),
                 self.task_list,
                 heartbeat,
                 schedule_to_close,
@@ -107,7 +107,7 @@ class SWFClient(object):
 
     def start_workflow(self, name, version, input):
         self.client.start_workflow_execution(
-            self.domain, str(uuid.uuid4()), name, version,
+            self.domain, str(uuid.uuid4()), name, str(version),
             task_list=self.task_list, input=input
         )
 
@@ -279,7 +279,7 @@ class WorkflowLoop(object):
         child_policy='TERMINATE',
         doc=None
     ):
-        self.workflows[(name, version)] = workflow_runner
+        self.workflows[(name, str(version))] = workflow_runner
         self.client.register_workflow(name, version, workflow_runner,
             execution_start_to_close, task_start_to_close, child_policy, doc
         )
@@ -328,7 +328,6 @@ class WorkflowClient(object):
         return cls(loop)
 
     def __call__(self, name, version, *args, **kwargs):
-        version = str(version)
         optional_args = [
             'execution_start_to_close',
             'task_start_to_close',
@@ -338,7 +337,7 @@ class WorkflowClient(object):
         for arg_name in optional_args:
             arg_value = kwargs.pop(arg_name, None)
             if arg_value is not None:
-                r_kwargs[arg_name] = str(arg_value)
+                r_kwargs[arg_name] = arg_value
         def wrapper(workflow):
             r_kwargs['doc'] = workflow.__doc__.strip()
             self.loop.register(
@@ -394,7 +393,9 @@ class ActivityLoop(object):
         task_start_to_close='120',
         doc=None
     ):
-        self.activities[(name, version)] = activity_runner
+        # All versions are converted to string in SWF and that's how we should
+        # store them too in order to be able to query for them
+        self.activities[(name, str(version))] = activity_runner
         self.client.register_activity(
             name, version, activity_runner, heartbeat,
             schedule_to_close, schedule_to_start, task_start_to_close, doc
@@ -467,4 +468,4 @@ class WorkflowStarter(object):
 
     def start(self, name, version, *args, **kwargs):
         input = json.dumps({"args": args, "kwargs": kwargs})
-        self.client.start_workflow(name, str(version), input)
+        self.client.start_workflow(name, version, input)
