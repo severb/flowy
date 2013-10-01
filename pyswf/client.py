@@ -18,8 +18,8 @@ class SWFClient(object):
         self.scheduled_activities = []
 
     def register_workflow(self, name, version, workflow_runner,
-        execution_start_to_close='3600',
-        task_start_to_close='60',
+        execution_start_to_close=3600,
+        task_start_to_close=60,
         child_policy='TERMINATE',
         doc=None
     ):
@@ -30,23 +30,44 @@ class SWFClient(object):
                 str(version),
                 self.task_list,
                 child_policy,
-                execution_start_to_close,
-                task_start_to_close,
+                str(execution_start_to_close),
+                str(task_start_to_close),
                 doc
             )
         except SWFTypeAlreadyExistsError:
             pass # Check if the registered workflow has the same properties.
 
-    def queue_activity(self, call_id, name, version, input):
-        self.scheduled_activities.append(call_id, name, version, input)
+    def queue_activity(self, call_id, name, version, input,
+                       heartbeat=None,
+                       schedule_to_close=None,
+                       schedule_to_start=None,
+                       start_to_close=None
+    ):
+        if heartbeat is not None:
+            heartbeat = str(heartbeat)
+        if schedule_to_close is not None:
+            schedule_to_close = str(schedule_to_close)
+        if schedule_to_start is not None:
+            schedule_to_start = str(schedule_to_start)
+        if start_to_close is not None:
+            start_to_close = str(start_to_close)
+
+        self.scheduled_activities.append((
+            (str(call_id), name, str(version)),
+            {
+                'heartbeat_timeout': heartbeat,
+                'schedule_to_close_timeout': schedule_to_close,
+                'schedule_to_start_timeout': schedule_to_start,
+                'start_to_close_timeout': start_to_close,
+                'input': input
+            }
+        ))
 
     def schedule_activities(self, token, context=None):
         d = Layer1Decisions()
         scheduled = self.scheduled_activities
-        for call_id, activity_name, activity_version, input in scheduled:
-            d.schedule_activity_task(
-                str(call_id), activity_name, str(activity_version), input=input
-            )
+        for args, kwargs in scheduled:
+            d.schedule_activity_task(*args, **kwargs)
         self.client.respond_decision_task_completed(
             token, decisions=d._data, execution_context=context
         )
@@ -72,10 +93,10 @@ class SWFClient(object):
         return WorkflowResponse(self)
 
     def register_activity(self, name, version, activity_runner,
-        heartbeat='30',
-        schedule_to_close='300',
-        schedule_to_start='60',
-        task_start_to_close='120',
+        heartbeat=30,
+        schedule_to_close=300,
+        schedule_to_start=60,
+        start_to_close=120,
         doc=None
     ):
         try:
@@ -84,10 +105,10 @@ class SWFClient(object):
                 name,
                 str(version),
                 self.task_list,
-                heartbeat,
-                schedule_to_close,
-                schedule_to_start,
-                task_start_to_close,
+                str(heartbeat),
+                str(schedule_to_close),
+                str(schedule_to_start),
+                str(start_to_close),
                 doc
             )
         except SWFTypeAlreadyExistsError:
@@ -159,8 +180,18 @@ class WorkflowResponse(object):
     def version(self):
         return self._api_response['workflowType']['version']
 
-    def queue_activity(self, call_id, name, version, input):
-        self.client.queue_activity(call_id, name, version, input)
+    def queue_activity(self, call_id, name, version, input,
+                       heartbeat=None,
+                       schedule_to_close=None,
+                       schedule_to_start=None,
+                       start_to_close=None
+    ):
+        self.client.queue_activity(call_id, name, version, input,
+            heartbeat=heartbeat,
+            schedule_to_close=schedule_to_close,
+            schedule_to_start=schedule_to_start,
+            start_to_close=start_to_close
+        )
 
     def schedule_activities(self):
         self.client.schedule_activities(self._token, self._serialize_context())
@@ -274,8 +305,8 @@ class WorkflowLoop(object):
         self.workflows = {}
 
     def register(self, name, version, workflow_runner,
-        execution_start_to_close='3600',
-        task_start_to_close='60',
+        execution_start_to_close=3600,
+        task_start_to_close=60,
         child_policy='TERMINATE',
         doc=None
     ):
@@ -302,7 +333,11 @@ class WorkflowLoop(object):
                 if activities_running or activities_scheduled:
                     for a in activities:
                         response.queue_activity(
-                            a.call_id, a.name, a.version, a.input
+                            a.call_id, a.name, a.version, a.input,
+                            heartbeat=a.options.heartbeat,
+                            schedule_to_close=a.options.schedule_to_close,
+                            schedule_to_start=a.options.schedule_to_start,
+                            start_to_close=a.options.start_to_close
                         )
                     response.schedule_activities()
                 else:
@@ -387,10 +422,10 @@ class ActivityLoop(object):
         self.activities = {}
 
     def register(self, name, version, activity_runner,
-        heartbeat='30',
-        schedule_to_close='300',
-        schedule_to_start='60',
-        task_start_to_close='120',
+        heartbeat=30,
+        schedule_to_close=300,
+        schedule_to_start=60,
+        start_to_close=120,
         doc=None
     ):
         # All versions are converted to string in SWF and that's how we should
@@ -398,7 +433,7 @@ class ActivityLoop(object):
         self.activities[(name, str(version))] = activity_runner
         self.client.register_activity(
             name, version, activity_runner, heartbeat,
-            schedule_to_close, schedule_to_start, task_start_to_close, doc
+            schedule_to_close, schedule_to_start, start_to_close, doc
         )
 
     def start(self):
@@ -438,7 +473,7 @@ class ActivityClient(object):
             'heartbeat',
             'schedule_to_close',
             'schedule_to_start',
-            'task_start_to_close',
+            'start_to_close',
         ]
         r_kwargs = {}
         for arg_name in optional_args:

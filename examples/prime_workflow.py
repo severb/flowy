@@ -16,7 +16,8 @@ class PrimeTest(Workflow):
     def run(self, n=77):
 
         for i in range(2, n/2 + 1):
-            r = self.div(n, i)
+            with self.options(heartbeat=i * 10, schedule_to_close=i * 11, schedule_to_start=i * 12, start_to_close=i * 13):
+                r = self.div(n, i)
             if r.result():
                 return 'not prime'
         return 'prime'

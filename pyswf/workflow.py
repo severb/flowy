@@ -25,7 +25,7 @@ ActivityCall = namedtuple('ActivityCall', 'call_id name version input options')
 class ActivityOptions(
     namedtuple(
         'ActivityOptionsBase',
-        'heartbeat schedule_to_close schedule_to_start task_start_to_close'
+        'heartbeat schedule_to_close schedule_to_start start_to_close'
     )
 ):
     def update_with(self, other):
@@ -36,8 +36,8 @@ class ActivityOptions(
                 else self.schedule_to_close,
             other.schedule_to_start if other.schedule_to_start is not None
                 else self.schedule_to_start,
-            other.task_start_to_close if other.task_start_to_close is not None
-                else self.task_start_to_close,
+            other.start_to_close if other.start_to_close is not None
+                else self.start_to_close,
         )
 
 
@@ -70,14 +70,12 @@ class Workflow(object):
     @contextmanager
     def options(self,
         heartbeat=None, schedule_to_close=None,
-        schedule_to_start=None, task_start_to_close=None, error_handling=None
+        schedule_to_start=None, start_to_close=None, error_handling=None
     ):
         if error_handling is not None:
             self._error_handling_stack.append(error_handling)
         options = ActivityOptions(
-            heartbeat, schedule_to_close,
-            schedule_to_start, task_start_to_close
-        )
+            heartbeat, schedule_to_close, schedule_to_start, start_to_close)
         new_options = self._current_options.update_with(options)
         self._options_stack.append(new_options)
         yield
@@ -100,11 +98,11 @@ class Workflow(object):
 
     def _queue_activity(self, call_id, name, version, input,
         heartbeat=None, schedule_to_close=None,
-        schedule_to_start=None, task_start_to_close=None
+        schedule_to_start=None, start_to_close=None
     ):
         activity_options = ActivityOptions(
             heartbeat, schedule_to_close,
-            schedule_to_start, task_start_to_close
+            schedule_to_start, start_to_close
         )
         options = activity_options.update_with(self._current_options)
         self._scheduled.append(
@@ -137,14 +135,14 @@ class Workflow(object):
 
 class ActivityProxy(object):
     def __init__(self, name, version, heartbeat=None, schedule_to_close=None,
-        schedule_to_start=None, task_start_to_close=None
+        schedule_to_start=None, start_to_close=None
     ):
         self.name = name
         self.version = version
         self.heartbeat = heartbeat
         self.schedule_to_close = schedule_to_close
         self.schedule_to_start = schedule_to_start
-        self.task_start_to_close = task_start_to_close
+        self.start_to_close = start_to_close
 
     def __get__(self, obj, objtype=None):
         if obj is None:
@@ -211,7 +209,7 @@ class ActivityProxy(object):
                         self.heartbeat,
                         self.schedule_to_close,
                         self.schedule_to_start,
-                        self.task_start_to_close
+                        self.start_to_close
                     )
                 return MaybeResult()
             if error is not _sentinel:

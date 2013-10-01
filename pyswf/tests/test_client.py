@@ -183,7 +183,7 @@ class DummyClient(object):
         self.id += 1
         self.events.append(d)
 
-    def queue_activity(self, *args):
+    def queue_activity(self, *args, **kwargs):
         self.scheduled.add(args)
 
     def schedule_activities(self, token, context):

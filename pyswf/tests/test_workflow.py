@@ -251,7 +251,7 @@ class TestWorkflow(unittest.TestCase):
                 heartbeat=120,
                 schedule_to_close=200,
                 schedule_to_start=300,
-                task_start_to_close=400
+                start_to_close=400
             )
             def run(self):
                 a = self.f1()
@@ -269,7 +269,7 @@ class TestWorkflow(unittest.TestCase):
                 heartbeat=120,
                 schedule_to_close=200,
                 schedule_to_start=300,
-                task_start_to_close=400
+                start_to_close=400
             )
             def run(self):
                 with self.options(heartbeat=30):
