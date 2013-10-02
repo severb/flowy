@@ -3,9 +3,7 @@ import uuid
 
 from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
-from boto.swf.exceptions import (
-    SWFTypeAlreadyExistsError, SWFTypeAlreadyExistsError
-)
+from boto.swf.exceptions import SWFTypeAlreadyExistsError
 
 from pyswf.workflow import _UnhandledActivityError, ActivityError
 
@@ -20,7 +18,8 @@ class SWFClient(object):
         self.task_list = task_list
         self.scheduled_activities = []
 
-    def register_workflow(self, name, version, workflow_runner,
+    def register_workflow(
+        self, name, version, workflow_runner,
         execution_start_to_close=3600,
         task_start_to_close=60,
         child_policy='TERMINATE',
@@ -38,7 +37,7 @@ class SWFClient(object):
                 doc
             )
         except SWFTypeAlreadyExistsError:
-            pass # Check if the registered workflow has the same properties.
+            pass  # Check if the registered workflow has the same properties.
 
     def queue_activity(
         self, call_id, name, version, input,
@@ -88,7 +87,8 @@ class SWFClient(object):
     def request_workflow(self):
         return WorkflowResponse(self)
 
-    def register_activity(self, name, version, activity_runner,
+    def register_activity(
+        self, name, version, activity_runner,
         heartbeat=30,
         schedule_to_close=300,
         schedule_to_start=60,
@@ -108,7 +108,7 @@ class SWFClient(object):
                 doc
             )
         except SWFTypeAlreadyExistsError:
-            pass # Check if the registered activity has the same properties.
+            pass  # Check if the registered activity has the same properties.
 
     def poll_activity(self):
         return self.client.poll_for_activity_task(self.domain, self.task_list)
@@ -201,7 +201,7 @@ class WorkflowResponse(object):
 
     def terminate_workflow(self, reason):
         workflow_id = self._api_response['workflowExecution']['workflowId']
-        self.client.terminate_workflow(workflow_id ,reason)
+        self.client.terminate_workflow(workflow_id, reason)
 
     def any_activity_running(self):
         return bool(self._scheduled)
@@ -304,15 +304,22 @@ class WorkflowLoop(object):
         self.client = client
         self.workflows = {}
 
-    def register(self, name, version, workflow_runner,
+    def register(
+        self, name, version, workflow_runner,
         execution_start_to_close=3600,
         task_start_to_close=60,
         child_policy='TERMINATE',
         doc=None
     ):
         self.workflows[(name, str(version))] = workflow_runner
-        self.client.register_workflow(name, version, workflow_runner,
-            execution_start_to_close, task_start_to_close, child_policy, doc
+        self.client.register_workflow(
+            name,
+            version,
+            workflow_runner,
+            execution_start_to_close,
+            task_start_to_close,
+            child_policy,
+            doc
         )
 
     def start(self):
@@ -374,12 +381,14 @@ class WorkflowClient(object):
             arg_value = kwargs.pop(arg_name, None)
             if arg_value is not None:
                 r_kwargs[arg_name] = arg_value
+
         def wrapper(workflow):
             r_kwargs['doc'] = workflow.__doc__.strip()
             self.loop.register(
                 name, version, workflow(*args, **kwargs), **r_kwargs
             )
             return workflow
+
         return wrapper
 
     def start(self):
@@ -422,7 +431,8 @@ class ActivityLoop(object):
         self.client = client
         self.activities = {}
 
-    def register(self, name, version, activity_runner,
+    def register(
+        self, name, version, activity_runner,
         heartbeat=30,
         schedule_to_close=300,
         schedule_to_start=60,
@@ -481,12 +491,14 @@ class ActivityClient(object):
             arg_value = kwargs.pop(arg_name, None)
             if arg_value is not None:
                 r_kwargs[arg_name] = str(arg_value)
+
         def wrapper(activity):
             r_kwargs['doc'] = activity.__doc__.strip()
             self.loop.register(
                 name, version, activity(*args, **kwargs), **r_kwargs
             )
             return activity
+
         return wrapper
 
     def start(self):
