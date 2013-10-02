@@ -10,6 +10,9 @@ from boto.swf.exceptions import (
 from pyswf.workflow import _UnhandledActivityError, ActivityError
 
 
+__all__ = ['ActivityClient', 'WorkflowClient']
+
+
 class SWFClient(object):
     def __init__(self, domain, task_list, client=None):
         self.client = client if client is not None else Layer1()
@@ -37,36 +40,29 @@ class SWFClient(object):
         except SWFTypeAlreadyExistsError:
             pass # Check if the registered workflow has the same properties.
 
-    def queue_activity(self, call_id, name, version, input,
-                       heartbeat=None,
-                       schedule_to_close=None,
-                       schedule_to_start=None,
-                       start_to_close=None
+    def queue_activity(
+        self, call_id, name, version, input,
+        heartbeat=None,
+        schedule_to_close=None,
+        schedule_to_start=None,
+        start_to_close=None,
+        task_list=None,
     ):
-        if heartbeat is not None:
-            heartbeat = str(heartbeat)
-        if schedule_to_close is not None:
-            schedule_to_close = str(schedule_to_close)
-        if schedule_to_start is not None:
-            schedule_to_start = str(schedule_to_start)
-        if start_to_close is not None:
-            start_to_close = str(start_to_close)
-
         self.scheduled_activities.append((
             (str(call_id), name, str(version)),
             {
-                'heartbeat_timeout': heartbeat,
-                'schedule_to_close_timeout': schedule_to_close,
-                'schedule_to_start_timeout': schedule_to_start,
-                'start_to_close_timeout': start_to_close,
+                'heartbeat_timeout': _str_or_none(heartbeat),
+                'schedule_to_close_timeout': _str_or_none(schedule_to_close),
+                'schedule_to_start_timeout': _str_or_none(schedule_to_start),
+                'start_to_close_timeout': _str_or_none(start_to_close),
+                'task_list': task_list,
                 'input': input
             }
         ))
 
     def schedule_activities(self, token, context=None):
         d = Layer1Decisions()
-        scheduled = self.scheduled_activities
-        for args, kwargs in scheduled:
+        for args, kwargs in self.scheduled_activities:
             d.schedule_activity_task(*args, **kwargs)
         self.client.respond_decision_task_completed(
             token, decisions=d._data, execution_context=context
@@ -504,3 +500,7 @@ class WorkflowStarter(object):
     def start(self, name, version, *args, **kwargs):
         input = json.dumps({"args": args, "kwargs": kwargs})
         self.client.start_workflow(name, version, input)
+
+
+def _str_or_none(maybe_none):
+    return maybe_none is not None and str(maybe_none)
