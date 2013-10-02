@@ -11,7 +11,7 @@ class PrimeTest(Workflow):
     Checks if a number is prime.
 
     """
-    div = ActivityProxy('NumberDivider', 1)
+    div = ActivityProxy('NumberDivider', 1, task_list='div_list')
 
     def run(self, n=77):
 

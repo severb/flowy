@@ -2,7 +2,7 @@ from pyswf.activity import Activity
 from pyswf.client import ActivityClient
 
 
-my_client = ActivityClient.for_domain('SeversTest', 'prime_task_list')
+my_client = ActivityClient.for_domain('SeversTest', 'div_list')
 
 
 @my_client('NumberDivider', 1)

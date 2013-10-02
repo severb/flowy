@@ -176,17 +176,21 @@ class WorkflowResponse(object):
     def version(self):
         return self._api_response['workflowType']['version']
 
-    def queue_activity(self, call_id, name, version, input,
-                       heartbeat=None,
-                       schedule_to_close=None,
-                       schedule_to_start=None,
-                       start_to_close=None
+    def queue_activity(
+        self, call_id, name, version, input,
+        heartbeat=None,
+        schedule_to_close=None,
+        schedule_to_start=None,
+        start_to_close=None,
+        task_list=None
     ):
-        self.client.queue_activity(call_id, name, version, input,
+        self.client.queue_activity(
+            call_id, name, version, input,
             heartbeat=heartbeat,
             schedule_to_close=schedule_to_close,
             schedule_to_start=schedule_to_start,
-            start_to_close=start_to_close
+            start_to_close=start_to_close,
+            task_list=task_list
         )
 
     def schedule_activities(self):
@@ -333,7 +337,8 @@ class WorkflowLoop(object):
                             heartbeat=a.options.heartbeat,
                             schedule_to_close=a.options.schedule_to_close,
                             schedule_to_start=a.options.schedule_to_start,
-                            start_to_close=a.options.start_to_close
+                            start_to_close=a.options.start_to_close,
+                            task_list=a.options.task_list
                         )
                     response.schedule_activities()
                 else:
