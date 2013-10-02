@@ -46,7 +46,7 @@ class SWFClient(object):
         schedule_to_close=None,
         schedule_to_start=None,
         start_to_close=None,
-        task_list=None,
+        task_list=None
     ):
         self.scheduled_activities.append((
             (str(call_id), name, str(version)),
