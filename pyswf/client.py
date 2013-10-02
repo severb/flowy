@@ -133,6 +133,7 @@ class WorkflowResponse(object):
     def __init__(self, client):
         self.client = client
         self._event_to_call_id = {}
+        self._retries = {}
         self._scheduled = set()
         self._results = {}
         self._timed_out = set()
@@ -149,6 +150,7 @@ class WorkflowResponse(object):
             self._event_to_call_id = self.fix_keys(
                 initial_state['event_to_call_id']
             )
+            self._retries = self.fix_keys(initial_state['retries'])
             self._scheduled = set(initial_state['scheduled'])
             self._results = self.fix_keys(initial_state['results'])
             self._timed_out = set(initial_state['timed_out'])
@@ -182,7 +184,8 @@ class WorkflowResponse(object):
         schedule_to_close=None,
         schedule_to_start=None,
         start_to_close=None,
-        task_list=None
+        task_list=None,
+        retries=3
     ):
         self.client.queue_activity(
             call_id, name, version, input,
@@ -192,6 +195,7 @@ class WorkflowResponse(object):
             start_to_close=start_to_close,
             task_list=task_list
         )
+        self._retries.setdefault(call_id, retries + 1)
 
     def schedule_activities(self):
         self.client.schedule_activities(self._token, self._serialize_context())
@@ -215,8 +219,11 @@ class WorkflowResponse(object):
     def activity_error(self, call_id, default=None):
         return self._with_errors.get(call_id, default)
 
-    def is_activity_timeout(self, call_id):
+    def is_activity_timedout(self, call_id):
         return call_id in self._timed_out
+
+    def should_retry(self, call_id):
+        return self._retries[call_id] > 0
 
     @property
     def _token(self):
@@ -233,6 +240,7 @@ class WorkflowResponse(object):
     def _serialize_context(self):
         return json.dumps({
             'event_to_call_id': self._event_to_call_id,
+            'retries': self._retries,
             'scheduled': list(self._scheduled),
             'results': self._results,
             'timed_out': list(self._timed_out),
@@ -276,6 +284,8 @@ class WorkflowResponse(object):
         call_id = int(subdict['activityId'])
         self._event_to_call_id[event_id] = call_id
         self._scheduled.add(call_id)
+        if call_id in self._timed_out:
+            self._timed_out.remove(call_id)
 
     def _ActivityTaskCompleted(self, event):
         subdict = event['activityTaskCompletedEventAttributes']
@@ -293,6 +303,7 @@ class WorkflowResponse(object):
         event_id = subdict['scheduledEventId']
         self._scheduled.remove(self._event_to_call_id[event_id])
         self._timed_out.add(self._event_to_call_id[event_id])
+        self._retries[self._event_to_call_id[event_id]] -= 1
 
     def _WorkflowExecutionStarted(self, event):
         subdict = event['workflowExecutionStartedEventAttributes']
@@ -345,7 +356,8 @@ class WorkflowLoop(object):
                             schedule_to_close=a.options.schedule_to_close,
                             schedule_to_start=a.options.schedule_to_start,
                             start_to_close=a.options.start_to_close,
-                            task_list=a.options.task_list
+                            task_list=a.options.task_list,
+                            retries=a.options.retry
                         )
                     response.schedule_activities()
                 else:

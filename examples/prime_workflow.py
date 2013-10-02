@@ -1,4 +1,4 @@
-from pyswf.workflow import Workflow, ActivityProxy
+from pyswf.workflow import Workflow, ActivityProxy, ActivityTimedout
 from pyswf.client import WorkflowClient
 
 
@@ -16,10 +16,13 @@ class PrimeTest(Workflow):
     def run(self, n=77):
 
         for i in range(2, n/2 + 1):
-            with self.options(heartbeat=i * 10, schedule_to_close=i * 11, schedule_to_start=i * 12, start_to_close=i * 13):
+            with self.options(error_handling=True, retry=1, heartbeat=i * 10, schedule_to_close=5, schedule_to_start=5, start_to_close=5):
                 r = self.div(n, i)
-            if r.result():
-                return 'not prime'
+            try:
+                if r.result():
+                    return 'not prime'
+            except ActivityTimedout:
+                return 'timed out!'
         return 'prime'
 
 

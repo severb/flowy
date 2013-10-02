@@ -18,7 +18,7 @@ class MaybeResult(object):
         if self.is_placeholder():
             raise _SyncNeeded()
         if self._is_error:
-            raise ActivityError(self.r)
+            raise self.r
         return self.r
 
     def is_placeholder(self):
@@ -177,17 +177,33 @@ class ActivityProxy(object):
             call_id = workflow._next_call_id()
             context = workflow._context
 
-#             if context.is_activity_timedout(call_id):
-                # Reschedule if needed
-                # return MaybeResult
-                # raise ActivityTimedout
-#                 pass
+            if context.is_activity_timedout(call_id):
+                if context.should_retry(call_id):
+                    input = self.serialize_activity_input(*args, **kwargs)
+                    workflow._queue_activity(
+                        call_id,
+                        self.name,
+                        self.version,
+                        input,
+                        self.heartbeat,
+                        self.schedule_to_close,
+                        self.schedule_to_start,
+                        self.start_to_close,
+                        self.task_list,
+                        self.retry
+                    )
+                    return MaybeResult()
+                else:
+                    if workflow._manual_exception_handling:
+                        return MaybeResult(ActivityTimedout(), is_error=True)
+                    else:
+                        raise _UnhandledActivityError("Activity timed out.")
 
             sentinel = object()
             result = context.activity_result(call_id, sentinel)
-            error = context.activity_error(call_id, sentinel)
+            error_msg = context.activity_error(call_id, sentinel)
 
-            if result is sentinel and error is sentinel:
+            if result is sentinel and error_msg is sentinel:
                 args_error = self.get_args_error(args, kwargs)
                 if args_error:
                     raise _UnhandledActivityError(
@@ -210,11 +226,11 @@ class ActivityProxy(object):
                         self.retry
                     )
                 return MaybeResult()
-            if error is not sentinel:
+            if error_msg is not sentinel:
                 if workflow._manual_exception_handling:
-                    return MaybeResult(error, is_error=True)
+                    return MaybeResult(ActivityError(error_msg), is_error=True)
                 else:
-                    raise _UnhandledActivityError(error)
+                    raise _UnhandledActivityError(error_msg)
             return MaybeResult(self.deserialize_activity_result(result))
 
         return proxy
