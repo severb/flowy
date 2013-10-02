@@ -190,11 +190,11 @@ class ActivityProxy(object):
                 # raise ActivityTimedout
 #                 pass
 
-            _sentinel = object()
-            result = context.activity_result(call_id, _sentinel)
-            error = context.activity_error(call_id, _sentinel)
+            sentinel = object()
+            result = context.activity_result(call_id, sentinel)
+            error = context.activity_error(call_id, sentinel)
 
-            if result is _sentinel and error is _sentinel:
+            if result is sentinel and error is sentinel:
                 args_error = self.get_args_error(args, kwargs)
                 if args_error:
                     raise _UnhandledActivityError(
@@ -212,7 +212,7 @@ class ActivityProxy(object):
                         self.start_to_close
                     )
                 return MaybeResult()
-            if error is not _sentinel:
+            if error is not sentinel:
                 if workflow._manual_exception_handling:
                     return MaybeResult(error, is_error=True)
                 else:
