@@ -29,7 +29,7 @@ class Workflow(object):
     def __init__(self):
         self._current_call_id = 0
         self._proxy_cache = dict()
-        self._options_stack = [ActivityOptions(None, None, None, None, None)]
+        self._options_stack = [ActivityOptions(*(None,) * 6)]
         self._error_handling_stack = [False]
 
     def resume(self, input, context):
@@ -63,7 +63,8 @@ class Workflow(object):
         schedule_to_start=None,
         start_to_close=None,
         error_handling=None,
-        task_list=None
+        task_list=None,
+        retry=None,
     ):
         if error_handling is not None:
             self._error_handling_stack.append(error_handling)
@@ -72,7 +73,8 @@ class Workflow(object):
             schedule_to_close,
             schedule_to_start,
             start_to_close,
-            task_list
+            task_list,
+            retry
         )
         new_options = self._current_options.update_with(options)
         self._options_stack.append(new_options)
@@ -100,14 +102,16 @@ class Workflow(object):
         schedule_to_close=None,
         schedule_to_start=None,
         start_to_close=None,
-        task_list=None
+        task_list=None,
+        retry=3
     ):
         activity_options = ActivityOptions(
             heartbeat,
             schedule_to_close,
             schedule_to_start,
             start_to_close,
-            task_list
+            task_list,
+            retry
         )
         options = activity_options.update_with(self._current_options)
         activity_call = ActivityCall(call_id, name, version, input, options)
@@ -121,7 +125,8 @@ class ActivityProxy(object):
         schedule_to_close=None,
         schedule_to_start=None,
         start_to_close=None,
-        task_list=None
+        task_list=None,
+        retry=3
     ):
         self.name = name
         self.version = version
@@ -130,6 +135,7 @@ class ActivityProxy(object):
         self.schedule_to_start = schedule_to_start
         self.start_to_close = start_to_close
         self.task_list = task_list
+        self.retry = retry
 
     def __get__(self, obj, objtype=None):
         if obj is None:
@@ -200,7 +206,8 @@ class ActivityProxy(object):
                         self.schedule_to_close,
                         self.schedule_to_start,
                         self.start_to_close,
-                        self.task_list
+                        self.task_list,
+                        self.retry
                     )
                 return MaybeResult()
             if error is not sentinel:
@@ -232,7 +239,8 @@ _AOBase = namedtuple(
         'schedule_to_close',
         'schedule_to_start',
         'start_to_close',
-        'task_list'
+        'task_list',
+        'retry'
     ]
 )
 
