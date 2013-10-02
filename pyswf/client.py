@@ -508,4 +508,5 @@ class WorkflowStarter(object):
 
 
 def _str_or_none(maybe_none):
-    return maybe_none is not None and str(maybe_none)
+    if maybe_none is not None:
+        return str(maybe_none)
