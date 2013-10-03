@@ -8,28 +8,28 @@ __all__ = ['Workflow', 'ActivityProxy', 'ActivityError', 'ActivityTimedout']
 
 class MaybeResult(object):
 
-    sentinel = object()
+    _sentinel = object()
 
-    def __init__(self, result=sentinel, is_error=False):
-        self.r = result
+    def __init__(self, result=_sentinel, is_error=False):
+        self._r = result
         self._is_error = is_error
 
     def result(self):
         if self.is_placeholder():
             raise _SyncNeeded()
         if self._is_error:
-            raise self.r
-        return self.r
+            raise self._r
+        return self._r
 
     def is_placeholder(self):
-        return self.r is self.sentinel
+        return self._r is self._sentinel
 
 
 class Workflow(object):
     def __init__(self):
         self._current_call_id = 0
         self._proxy_cache = dict()
-        self._options_stack = [ActivityOptions(*(None,) * 6)]
+        self._options_stack = [_ActivityOptions(*(None,) * 6)]
         self._error_handling_stack = [False]
 
     def resume(self, input, context):
@@ -68,7 +68,7 @@ class Workflow(object):
     ):
         if error_handling is not None:
             self._error_handling_stack.append(error_handling)
-        options = ActivityOptions(
+        options = _ActivityOptions(
             heartbeat,
             schedule_to_close,
             schedule_to_start,
@@ -105,7 +105,7 @@ class Workflow(object):
         task_list=None,
         retry=3
     ):
-        activity_options = ActivityOptions(
+        activity_options = _ActivityOptions(
             heartbeat,
             schedule_to_close,
             schedule_to_start,
@@ -114,7 +114,7 @@ class Workflow(object):
             retry
         )
         options = activity_options.update_with(self._current_options)
-        activity_call = ActivityCall(call_id, name, version, input, options)
+        activity_call = _ActivityCall(call_id, name, version, input, options)
         self._scheduled.append(activity_call)
 
 
@@ -143,7 +143,7 @@ class ActivityProxy(object):
         # Cache the returned proxy for this.f1 is this.f1 to hold.
         proxy_key = (self.name, self.version)
         if proxy_key not in obj._proxy_cache:
-            proxy = self.make_proxy(obj)
+            proxy = self._make_proxy(obj)
             obj._proxy_cache[proxy_key] = proxy
         return obj._proxy_cache[proxy_key]
 
@@ -156,14 +156,14 @@ class ActivityProxy(object):
         return json.loads(result)
 
     @staticmethod
-    def has_placeholders(args, kwargs):
+    def _has_placeholders(args, kwargs):
         a = list(args) + list(kwargs.items())
         return any(
             r.is_placeholder() for r in a if isinstance(r, MaybeResult)
         )
 
     @staticmethod
-    def get_args_error(args, kwargs):
+    def _get_args_error(args, kwargs):
         a = list(args) + list(kwargs.items())
         for r in filter(lambda x: isinstance(x, MaybeResult), a):
             try:
@@ -171,7 +171,7 @@ class ActivityProxy(object):
             except ActivityError as e:
                 return e.message
 
-    def make_proxy(self, workflow):
+    def _make_proxy(self, workflow):
 
         def proxy(*args, **kwargs):
             call_id = workflow._next_call_id()
@@ -204,12 +204,12 @@ class ActivityProxy(object):
             error_msg = context.activity_error(call_id, sentinel)
 
             if result is sentinel and error_msg is sentinel:
-                args_error = self.get_args_error(args, kwargs)
+                args_error = self._get_args_error(args, kwargs)
                 if args_error:
                     raise _UnhandledActivityError(
                         'Error when calling activity: %s' % args_error
                     )
-                placeholders = self.has_placeholders(args, kwargs)
+                placeholders = self._has_placeholders(args, kwargs)
                 scheduled = context.is_activity_scheduled(call_id)
                 if not placeholders and not scheduled:
                     input = self.serialize_activity_input(*args, **kwargs)
@@ -236,8 +236,8 @@ class ActivityProxy(object):
         return proxy
 
 
-ActivityCall = namedtuple(
-    typename='ActivityCall',
+_ActivityCall = namedtuple(
+    typename='_ActivityCall',
     field_names=[
         'call_id',
         'name',
@@ -249,7 +249,7 @@ ActivityCall = namedtuple(
 
 
 _AOBase = namedtuple(
-    typename='_AOBase',
+    typename='_ActivityOptions',
     field_names=[
         'heartbeat',
         'schedule_to_close',
@@ -261,11 +261,11 @@ _AOBase = namedtuple(
 )
 
 
-class ActivityOptions(_AOBase):
+class _ActivityOptions(_AOBase):
     def update_with(self, other):
         t_pairs = zip(other, self)
         updated_fields = [x if x is not None else y for x, y in t_pairs]
-        return ActivityOptions(*updated_fields)
+        return _ActivityOptions(*updated_fields)
 
 
 class _SyncNeeded(Exception):
