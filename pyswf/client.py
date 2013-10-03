@@ -119,6 +119,9 @@ class SWFClient(object):
     def terminate_activity(self, token, reason):
         self.client.respond_activity_task_failed(token, reason=reason)
 
+    def heartbeat(self, token):
+        self.client.record_activity_task_heartbeat(token)
+
     def request_activity(self):
         return ActivityResponse(self)
 
@@ -421,6 +424,9 @@ class ActivityResponse(object):
     def terminate(self, reason):
         self.client.terminate_activity(self._token, reason)
 
+    def heartbeat(self):
+        self.client.heartbeat(self._token)
+
     @property
     def name(self):
         return self._api_response['activityType']['name']
@@ -464,7 +470,7 @@ class ActivityLoop(object):
             response = self.client.request_activity()
             activity_runner = self._query(response.name, response.version)
             try:
-                result = activity_runner.call(response.input)
+                result = activity_runner.call(response.input, response)
             except Exception as e:
                 response.terminate(e.message)
             else:
@@ -502,7 +508,7 @@ class ActivityClient(object):
         for arg_name in optional_args:
             arg_value = kwargs.pop(arg_name, None)
             if arg_value is not None:
-                r_kwargs[arg_name] = str(arg_value)
+                r_kwargs[arg_name] = arg_value
 
         def wrapper(activity):
             r_kwargs['doc'] = activity.__doc__.strip()

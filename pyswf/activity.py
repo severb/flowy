@@ -5,9 +5,12 @@ class Activity(object):
     def run(self, *args, **kwargs):
         raise NotImplemented()
 
-    def call(self, input):
+    def call(self, input, client):
+        self._client = client
         args, kwargs = self.deserialize_activity_input(input)
-        return self.serialize_activity_result(self.run(*args, **kwargs))
+        result = self.serialize_activity_result(self.run(*args, **kwargs))
+        self._client = None
+        return result
 
     @staticmethod
     def deserialize_activity_input(input):
@@ -17,3 +20,6 @@ class Activity(object):
     @staticmethod
     def serialize_activity_result(result):
         return json.dumps(result)
+
+    def heartbeat(self):
+        self._client.heartbeat()
