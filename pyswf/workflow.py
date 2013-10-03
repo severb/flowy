@@ -15,13 +15,15 @@ class MaybeResult(object):
         self._is_error = is_error
 
     def result(self):
-        if self.is_placeholder():
+        if self._is_placeholder():
             raise _SyncNeeded()
         if self._is_error:
             raise self._r
         return self._r
 
-    def is_placeholder(self):
+    def _is_placeholder(self):
+        # Never use this method in your workflow as it will make the execution
+        # of your code nondeterministic
         return self._r is self._sentinel
 
 
@@ -159,7 +161,7 @@ class ActivityProxy(object):
     def _has_placeholders(args, kwargs):
         a = list(args) + list(kwargs.items())
         return any(
-            r.is_placeholder() for r in a if isinstance(r, MaybeResult)
+            r._is_placeholder() for r in a if isinstance(r, MaybeResult)
         )
 
     @staticmethod
