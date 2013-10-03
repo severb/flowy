@@ -3,17 +3,17 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='pyswf',
+    name='flowy',
     version='0.1',
     description="Python library for Amazon Simple Workflow Service",
     long_description=open('README.rst').read(),
     keywords='amazon swf simple workflow',
     author='Sever Banesiu',
     author_email='banesiu.sever@gmail.com',
-    url='https://github.com/pbs/pyswf',
+    url='https://github.com/pbs/flowy',
     license='MIT License',
     packages=find_packages(),
     include_package_data=True,
     zip_safe=False,
-    setup_requires=['boto'] ### Fix version number
+    setup_requires=['boto']  # Fix version number
 )

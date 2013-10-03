@@ -1,3 +1,3 @@
-from pyswf.tests.test_client import *
-from pyswf.tests.test_workflow import *
-from pyswf.tests.test_activity import *
+from flowy.tests.test_client import *
+from flowy.tests.test_workflow import *
+from flowy.tests.test_activity import *

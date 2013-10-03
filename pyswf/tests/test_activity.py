@@ -4,7 +4,7 @@ import unittest
 class TestActivity(unittest.TestCase):
 
     def _get_uut(self):
-        from pyswf.activity import Activity
+        from flowy.activity import Activity
         return Activity
 
     def test_activity_input_deserialization(self):

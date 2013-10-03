@@ -1,4 +1,4 @@
-from pyswf.client import WorkflowStarter
+from flowy.client import WorkflowStarter
 
 
 workflow_starter = WorkflowStarter.for_domain('SeversTest', 'prime_task_list')

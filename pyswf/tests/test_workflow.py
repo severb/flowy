@@ -1,6 +1,6 @@
 import unittest
 
-from pyswf.workflow import Workflow, ActivityProxy
+from flowy.workflow import Workflow, ActivityProxy
 
 
 _DEF_OPTIONS = (None,) * 5 + (3,)
@@ -32,7 +32,7 @@ class TestWorkflow(unittest.TestCase):
 
     def test_first_run(self):
 
-        from pyswf.workflow import ActivityCall
+        from flowy.workflow import ActivityCall
 
         class MyWorkflow(Workflow):
             f1 = ActivityProxy('f1', 'v1')
@@ -150,7 +150,7 @@ class TestWorkflow(unittest.TestCase):
         ]))
 
     def test_activity_error(self):
-        from pyswf.workflow import _UnhandledActivityError
+        from flowy.workflow import _UnhandledActivityError
 
         class MyWorkflow(Workflow):
             f1 = ActivityProxy('f1', 'v1')
@@ -166,7 +166,7 @@ class TestWorkflow(unittest.TestCase):
         )
 
     def test_manual_activity_error(self):
-        from pyswf.workflow import ActivityError
+        from flowy.workflow import ActivityError
 
         class MyWorkflow(Workflow):
             f1 = ActivityProxy('f1', 'v1')
@@ -188,7 +188,7 @@ class TestWorkflow(unittest.TestCase):
         ]))
 
     def test_manual_activity_error_nesting(self):
-        from pyswf.workflow import ActivityError
+        from flowy.workflow import ActivityError
 
         class MyWorkflow(Workflow):
             f1 = ActivityProxy('f1', 'v1')
@@ -213,7 +213,7 @@ class TestWorkflow(unittest.TestCase):
         ]))
 
     def test_manual_activity_error_args(self):
-        from pyswf.workflow import _UnhandledActivityError
+        from flowy.workflow import _UnhandledActivityError
 
         class MyWorkflow(Workflow):
             f1 = ActivityProxy('f1', 'v1')
@@ -231,7 +231,7 @@ class TestWorkflow(unittest.TestCase):
         )
 
     def test_manual_activity_error_propagation(self):
-        from pyswf.workflow import ActivityError
+        from flowy.workflow import ActivityError
 
         class MyWorkflow(Workflow):
             f1 = ActivityProxy('f1', 'v1')

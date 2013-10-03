@@ -1,5 +1,5 @@
-from pyswf.workflow import Workflow, ActivityProxy
-from pyswf.client import WorkflowClient
+from flowy.workflow import Workflow, ActivityProxy
+from flowy.client import WorkflowClient
 
 
 my_client = WorkflowClient.for_domain('SeversTest', 'prime_task_list')

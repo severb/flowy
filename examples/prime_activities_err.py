@@ -1,5 +1,5 @@
-from pyswf.activity import Activity
-from pyswf.client import ActivityClient
+from flowy.activity import Activity
+from flowy.client import ActivityClient
 
 
 my_client = ActivityClient.for_domain('SeversTest', 'prime_task_list')

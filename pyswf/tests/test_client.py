@@ -4,7 +4,7 @@ import unittest
 class WorkflowResponseTest(unittest.TestCase):
 
     def _get_uut(self, client):
-        from pyswf.client import WorkflowResponse
+        from flowy.client import WorkflowResponse
         return WorkflowResponse(client)
 
     def test_name_version(self):
@@ -50,7 +50,7 @@ class WorkflowResponseTest(unittest.TestCase):
 class WorkflowNewEventsTest(unittest.TestCase):
 
     def _get_uut(self, client):
-        from pyswf.client import WorkflowResponse
+        from flowy.client import WorkflowResponse
         return WorkflowResponse(client)
 
     def test_first_few_events(self):
@@ -90,7 +90,7 @@ class WorkflowNewEventsTest(unittest.TestCase):
 class WorkflowContextTest(unittest.TestCase):
 
     def _get_uut(self, client):
-        from pyswf.client import WorkflowResponse
+        from flowy.client import WorkflowResponse
         return WorkflowResponse(client)
 
     def test_no_context(self):

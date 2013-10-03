@@ -5,7 +5,7 @@ from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
 from boto.swf.exceptions import SWFTypeAlreadyExistsError
 
-from pyswf.workflow import _UnhandledActivityError, ActivityError
+from flowy.workflow import _UnhandledActivityError, ActivityError
 
 
 __all__ = ['ActivityClient', 'WorkflowClient']
