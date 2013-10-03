@@ -89,10 +89,10 @@ class SWFClient(object):
 
     def register_activity(
         self, name, version, activity_runner,
-        heartbeat=30,
-        schedule_to_close=300,
-        schedule_to_start=60,
-        start_to_close=120,
+        heartbeat=60,
+        schedule_to_close=420,
+        schedule_to_start=120,
+        start_to_close=300,
         doc=None
     ):
         try:
@@ -445,10 +445,10 @@ class ActivityLoop(object):
 
     def register(
         self, name, version, activity_runner,
-        heartbeat=30,
-        schedule_to_close=300,
-        schedule_to_start=60,
-        start_to_close=120,
+        heartbeat=60,
+        schedule_to_close=420,
+        schedule_to_start=120,
+        start_to_close=300,
         doc=None
     ):
         # All versions are converted to string in SWF and that's how we should
