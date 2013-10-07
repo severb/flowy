@@ -18,7 +18,7 @@ class SWFClient(object):
         self.client = client if client is not None else Layer1()
         self.domain = domain
         self.task_list = task_list
-        self.scheduled_activities = []
+        self._scheduled_activities = []
 
     def register_workflow(self, name, version, workflow_runner,
                           execution_start_to_close=3600,
@@ -59,7 +59,7 @@ class SWFClient(object):
                        schedule_to_start=None,
                        start_to_close=None,
                        task_list=None):
-        self.scheduled_activities.append((
+        self._scheduled_activities.append((
             (str(call_id), name, str(version)),
             {
                 'heartbeat_timeout': _str_or_none(heartbeat),
@@ -73,11 +73,11 @@ class SWFClient(object):
 
     def schedule_activities(self, token, context=None):
         d = Layer1Decisions()
-        for args, kwargs in self.scheduled_activities:
+        for args, kwargs in self._scheduled_activities:
             d.schedule_activity_task(*args, **kwargs)
         self.client.respond_decision_task_completed(token, decisions=d._data,
                                                     execution_context=context)
-        self.scheduled_activities = []
+        self._scheduled_activities = []
 
     def complete_workflow(self, token, result):
         d = Layer1Decisions()
