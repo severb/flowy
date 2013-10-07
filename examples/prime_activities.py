@@ -5,7 +5,7 @@ from flowy.client import ActivityClient
 my_client = ActivityClient.for_domain('SeversTest', 'div_list')
 
 
-@my_client('NumberDivider', 1, heartbeat=5, start_to_close=60)
+@my_client('NumberDivider', 3, heartbeat=5, start_to_close=60)
 class NumberDivider(Activity):
     """
     Divide numbers.

@@ -1,5 +1,7 @@
+import sys
 import json
 import uuid
+import logging
 
 from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
@@ -23,13 +25,33 @@ class SWFClient(object):
                           task_start_to_close=60,
                           child_policy='TERMINATE',
                           doc=None):
+        version = str(version)
+        execution_start_to_close = str(execution_start_to_close)
+        task_start_to_close = str(task_start_to_close)
         try:
-            self.client.register_workflow_type(self.domain, name, str(version),
+            self.client.register_workflow_type(self.domain, name, version,
                                                self.task_list, child_policy,
-                                               str(execution_start_to_close),
-                                               str(task_start_to_close), doc)
+                                               execution_start_to_close,
+                                               task_start_to_close, doc)
         except SWFTypeAlreadyExistsError:
-            pass  # Check if the registered workflow has the same properties.
+            logging.warning("Workflow already registered: %s %s",
+                            name, version)
+            reg_w = self.client.describe_workflow_type(self.domain, name,
+                                                       version)
+            conf = reg_w['configuration']
+            reg_estc = conf['defaultExecutionStartToCloseTimeout']
+            reg_tstc = conf['defaultTaskStartToCloseTimeout']
+            reg_tl = conf['defaultTaskList']['name']
+            reg_cp = conf['defaultChildPolicy']
+
+            if (reg_estc != execution_start_to_close
+                    or reg_tstc != task_start_to_close
+                    or reg_tl != self.task_list
+                    or reg_cp != child_policy):
+                logging.critical("Registered workflow "
+                                 "has different defaults: %s %s",
+                                 name, version)
+                sys.exit(1)
 
     def queue_activity(self, call_id, name, version, input,
                        heartbeat=None,
@@ -81,14 +103,37 @@ class SWFClient(object):
                           schedule_to_start=120,
                           start_to_close=300,
                           doc=None):
+        schedule_to_close = str(schedule_to_close)
+        schedule_to_start = str(schedule_to_start)
+        start_to_close = str(start_to_close)
+        heartbeat = str(heartbeat)
         try:
-            self.client.register_activity_type(self.domain, name, str(version),
-                                               self.task_list, str(heartbeat),
-                                               str(schedule_to_close),
-                                               str(schedule_to_start),
-                                               str(start_to_close), doc)
+            self.client.register_activity_type(self.domain, name, version,
+                                               self.task_list, heartbeat,
+                                               schedule_to_close,
+                                               schedule_to_start,
+                                               start_to_close, doc)
         except SWFTypeAlreadyExistsError:
-            pass  # Check if the registered activity has the same properties.
+            logging.warning("Activity already registered: %s %s",
+                            name, version)
+            reg_a = self.client.describe_activity_type(self.domain, name,
+                                                       version)
+            conf = reg_a['configuration']
+            reg_tstc = conf['defaultTaskStartToCloseTimeout']
+            reg_tsts = conf['defaultTaskScheduleToStartTimeout']
+            reg_tschtc = conf['defaultTaskScheduleToCloseTimeout']
+            reg_hb = conf['defaultTaskHeartbeatTimeout']
+            reg_tl = conf['defaultTaskList']['name']
+
+            if (reg_tstc != start_to_close
+                    or reg_tsts != schedule_to_start
+                    or reg_tschtc != schedule_to_close
+                    or reg_hb != heartbeat
+                    or reg_tl != self.task_list):
+                logging.critical("Registered activity "
+                                 "has different defaults: %s %s",
+                                 name, version)
+                sys.exit(1)
 
     def poll_activity(self):
         return self.client.poll_for_activity_task(self.domain, self.task_list)
