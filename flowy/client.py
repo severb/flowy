@@ -18,35 +18,25 @@ class SWFClient(object):
         self.task_list = task_list
         self.scheduled_activities = []
 
-    def register_workflow(
-        self, name, version, workflow_runner,
-        execution_start_to_close=3600,
-        task_start_to_close=60,
-        child_policy='TERMINATE',
-        doc=None
-    ):
+    def register_workflow(self, name, version, workflow_runner,
+                          execution_start_to_close=3600,
+                          task_start_to_close=60,
+                          child_policy='TERMINATE',
+                          doc=None):
         try:
-            self.client.register_workflow_type(
-                self.domain,
-                name,
-                str(version),
-                self.task_list,
-                child_policy,
-                str(execution_start_to_close),
-                str(task_start_to_close),
-                doc
-            )
+            self.client.register_workflow_type(self.domain, name, str(version),
+                                               self.task_list, child_policy,
+                                               str(execution_start_to_close),
+                                               str(task_start_to_close), doc)
         except SWFTypeAlreadyExistsError:
             pass  # Check if the registered workflow has the same properties.
 
-    def queue_activity(
-        self, call_id, name, version, input,
-        heartbeat=None,
-        schedule_to_close=None,
-        schedule_to_start=None,
-        start_to_close=None,
-        task_list=None
-    ):
+    def queue_activity(self, call_id, name, version, input,
+                       heartbeat=None,
+                       schedule_to_close=None,
+                       schedule_to_start=None,
+                       start_to_close=None,
+                       task_list=None):
         self.scheduled_activities.append((
             (str(call_id), name, str(version)),
             {
@@ -63,9 +53,8 @@ class SWFClient(object):
         d = Layer1Decisions()
         for args, kwargs in self.scheduled_activities:
             d.schedule_activity_task(*args, **kwargs)
-        self.client.respond_decision_task_completed(
-            token, decisions=d._data, execution_context=context
-        )
+        self.client.respond_decision_task_completed(token, decisions=d._data,
+                                                    execution_context=context)
         self.scheduled_activities = []
 
     def complete_workflow(self, token, result):
@@ -74,39 +63,30 @@ class SWFClient(object):
         self.client.respond_decision_task_completed(token, decisions=d._data)
 
     def terminate_workflow(self, workflow_id, reason):
-        self.client.terminate_workflow_execution(
-            self.domain, workflow_id, reason=reason
-        )
+        self.client.terminate_workflow_execution(self.domain, workflow_id,
+                                                 reason=reason)
 
     def poll_workflow(self, next_page_token=None):
-        return self.client.poll_for_decision_task(
-            self.domain, self.task_list,
-            reverse_order=True, next_page_token=next_page_token
-        )
+        c = self.client
+        return c.poll_for_decision_task(self.domain, self.task_list,
+                                        reverse_order=True,
+                                        next_page_token=next_page_token)
 
     def request_workflow(self):
         return WorkflowResponse(self)
 
-    def register_activity(
-        self, name, version, activity_runner,
-        heartbeat=60,
-        schedule_to_close=420,
-        schedule_to_start=120,
-        start_to_close=300,
-        doc=None
-    ):
+    def register_activity(self, name, version, activity_runner,
+                          heartbeat=60,
+                          schedule_to_close=420,
+                          schedule_to_start=120,
+                          start_to_close=300,
+                          doc=None):
         try:
-            self.client.register_activity_type(
-                self.domain,
-                name,
-                str(version),
-                self.task_list,
-                str(heartbeat),
-                str(schedule_to_close),
-                str(schedule_to_start),
-                str(start_to_close),
-                doc
-            )
+            self.client.register_activity_type(self.domain, name, str(version),
+                                               self.task_list, str(heartbeat),
+                                               str(schedule_to_close),
+                                               str(schedule_to_start),
+                                               str(start_to_close), doc)
         except SWFTypeAlreadyExistsError:
             pass  # Check if the registered activity has the same properties.
 
@@ -126,10 +106,10 @@ class SWFClient(object):
         return ActivityResponse(self)
 
     def start_workflow(self, name, version, input):
-        self.client.start_workflow_execution(
-            self.domain, str(uuid.uuid4()), name, str(version),
-            task_list=self.task_list, input=input
-        )
+        self.client.start_workflow_execution(self.domain, str(uuid.uuid4()),
+                                             name, str(version),
+                                             task_list=self.task_list,
+                                             input=input)
 
 
 class WorkflowResponse(object):
