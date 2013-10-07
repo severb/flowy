@@ -5,7 +5,7 @@ import logging
 
 from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
-from boto.swf.exceptions import SWFTypeAlreadyExistsError
+from boto.swf.exceptions import SWFTypeAlreadyExistsError, SWFResponseError
 
 from flowy.workflow import _UnhandledActivityError, ActivityError
 
@@ -75,24 +75,38 @@ class SWFClient(object):
         d = Layer1Decisions()
         for args, kwargs in self._scheduled_activities:
             d.schedule_activity_task(*args, **kwargs)
-        self.client.respond_decision_task_completed(token, decisions=d._data,
-                                                    execution_context=context)
+        data = d._data
+        try:
+            self.client.respond_decision_task_completed(token, data, context)
+        except SWFResponseError:
+            logging.warning("Cannot send decisions: %s", token)
         self._scheduled_activities = []
 
     def complete_workflow(self, token, result):
         d = Layer1Decisions()
         d.complete_workflow_execution(result=result)
-        self.client.respond_decision_task_completed(token, decisions=d._data)
+        data = d._data
+        try:
+            self.client.respond_decision_task_completed(token, decisions=data)
+        except SWFResponseError:
+            logging.warning("Connot complete workflow: %s", token)
 
     def terminate_workflow(self, workflow_id, reason):
-        self.client.terminate_workflow_execution(self.domain, workflow_id,
-                                                 reason=reason)
+        try:
+            self.client.terminate_workflow_execution(self.domain, workflow_id,
+                                                     reason=reason)
+        except SWFResponseError:
+            logging.warning("Cannot terminate workflow: %s", workflow_id)
 
     def poll_workflow(self, next_page_token=None):
-        c = self.client
-        return c.poll_for_decision_task(self.domain, self.task_list,
-                                        reverse_order=True,
-                                        next_page_token=next_page_token)
+        poll = self.client.poll_for_decision_task
+        while 1:
+            try:
+                return poll(self.domain, self.task_list, reverse_order=True,
+                            next_page_token=next_page_token)
+            except (IOError, SWFResponseError):
+                logging.warning("Unknown error when pulling decisions: %s %s",
+                                self.domain, self.task_list)
 
     def request_workflow(self):
         return WorkflowResponse(self)
@@ -136,22 +150,41 @@ class SWFClient(object):
                 sys.exit(1)
 
     def poll_activity(self):
-        return self.client.poll_for_activity_task(self.domain, self.task_list)
+        poll = self.client.poll_for_activity_task
+        while 1:
+            try:
+                return poll(self.domain, self.task_list)
+            except (IOError, SWFResponseError):
+                logging.warning("Unknown error when pulling activities: %s %s",
+                                self.domain, self.task_list)
 
     def complete_activity(self, token, result):
-        self.client.respond_activity_task_completed(token, result)
+        try:
+            self.client.respond_activity_task_completed(token, result)
+        except SWFResponseError:
+            logging.warning("Cannot complete activity: %s", token)
 
     def terminate_activity(self, token, reason):
-        self.client.respond_activity_task_failed(token, reason=reason)
+        try:
+            self.client.respond_activity_task_failed(token, reason=reason)
+        except SWFResponseError:
+            logging.warning("Cannot terminate activity: %s", token)
 
     def heartbeat(self, token):
-        self.client.record_activity_task_heartbeat(token)
+        # A heartbeat is not successful if the activity has run past its
+        # allocated time. Raising an exception here will interrupt the activity
+        # from running any longer.
+        try:
+            self.client.record_activity_task_heartbeat(token)
+        except SWFResponseError:
+            raise _ActivityTimedout()
 
     def request_activity(self):
         return ActivityResponse(self)
 
     def start_workflow(self, name, version, input):
-        self.client.start_workflow_execution(self.domain, str(uuid.uuid4()),
+        self.client.start_workflow_execution(self.domain,
+                                             str(uuid.uuid4()),
                                              name, str(version),
                                              task_list=self.task_list,
                                              input=input)
@@ -560,6 +593,10 @@ class WorkflowStarter(object):
     def start(self, name, version, *args, **kwargs):
         input = json.dumps({"args": args, "kwargs": kwargs})
         self.client.start_workflow(name, version, input)
+
+
+class _ActivityTimedout(Exception):
+    """Raised when a heartbeat is sent from an activity that has timedout."""
 
 
 def _str_or_none(maybe_none):
