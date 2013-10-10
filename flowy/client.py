@@ -33,6 +33,7 @@ class SWFClient(object):
                                                self.task_list, child_policy,
                                                execution_start_to_close,
                                                task_start_to_close, doc)
+            logging.info("Registered workflow: %s %s", name, version)
         except SWFTypeAlreadyExistsError:
             logging.warning("Workflow already registered: %s %s",
                             name, version)
@@ -75,6 +76,9 @@ class SWFClient(object):
         d = Layer1Decisions()
         for args, kwargs in self._scheduled_activities:
             d.schedule_activity_task(*args, **kwargs)
+            input = kwargs['input']
+            name, version = args[1:]
+            logging.info("Scheduled activity: %s %s %s", name, version, input)
         data = d._data
         try:
             self.client.respond_decision_task_completed(token, data, context)
@@ -88,13 +92,15 @@ class SWFClient(object):
         data = d._data
         try:
             self.client.respond_decision_task_completed(token, decisions=data)
+            logging.info("Completed workflow: %s %s", token, result)
         except SWFResponseError:
-            logging.warning("Connot complete workflow: %s", token)
+            logging.warning("Cannot complete workflow: %s", token)
 
     def terminate_workflow(self, workflow_id, reason):
         try:
             self.client.terminate_workflow_execution(self.domain, workflow_id,
                                                      reason=reason)
+            logging.info("Terminated workflow: %s %s", workflow_id, reason)
         except SWFResponseError:
             logging.warning("Cannot terminate workflow: %s", workflow_id)
 
@@ -127,6 +133,7 @@ class SWFClient(object):
                                                schedule_to_close,
                                                schedule_to_start,
                                                start_to_close, doc)
+            logging.info("Registered activity: %s %s", name, version)
         except SWFTypeAlreadyExistsError:
             logging.warning("Activity already registered: %s %s",
                             name, version)
@@ -161,12 +168,14 @@ class SWFClient(object):
     def complete_activity(self, token, result):
         try:
             self.client.respond_activity_task_completed(token, result)
+            logging.info("Completed activity: %s %s", token, result)
         except SWFResponseError:
             logging.warning("Cannot complete activity: %s", token)
 
     def terminate_activity(self, token, reason):
         try:
             self.client.respond_activity_task_failed(token, reason=reason)
+            logging.info("Terminated activity: %s %s", token, reason)
         except SWFResponseError:
             logging.warning("Cannot terminate activity: %s", token)
 
@@ -208,17 +217,7 @@ class WorkflowResponse(object):
             response = self.client.poll_workflow()
         self._api_response = response
 
-        if self._context is not None:
-            initial_state = json.loads(self._context)
-            self._event_to_call_id = self.fix_keys(
-                initial_state['event_to_call_id']
-            )
-            self._retries = self.fix_keys(initial_state['retries'])
-            self._scheduled = set(initial_state['scheduled'])
-            self._results = self.fix_keys(initial_state['results'])
-            self._timed_out = set(initial_state['timed_out'])
-            self._with_errors = self.fix_keys(initial_state['with_errors'])
-            self.input = initial_state['input']
+        self._restore_context(self._context)
 
         # Update the context with all new events
         for new_event in self._new_events:
@@ -227,11 +226,6 @@ class WorkflowResponse(object):
 
         # Assuming workflow started is always the first event
         assert self.input is not None
-
-    @staticmethod
-    def fix_keys(d):
-        # Fix json's stupid silent key conversion from int to string
-        return dict((int(key), value) for key, value in d.items())
 
     @property
     def name(self):
@@ -288,59 +282,6 @@ class WorkflowResponse(object):
     def should_retry(self, call_id):
         return self._retries[call_id] > 0
 
-    @property
-    def _token(self):
-        return self._api_response['taskToken']
-
-    @property
-    def _context(self):
-        for event in self._new_events:
-            if event['eventType'] == 'DecisionTaskCompleted':
-                DTCEA = 'decisionTaskCompletedEventAttributes'
-                return event[DTCEA]['executionContext']
-        return None
-
-    def _serialize_context(self):
-        return json.dumps({
-            'event_to_call_id': self._event_to_call_id,
-            'retries': self._retries,
-            'scheduled': list(self._scheduled),
-            'results': self._results,
-            'timed_out': list(self._timed_out),
-            'with_errors': self._with_errors,
-            'input': self.input,
-        })
-
-    @property
-    def _events(self):
-        if not hasattr(self, '_cached_events'):
-            events = []
-            api_response = self._api_response
-            while api_response.get('nextPageToken'):
-                for event in api_response['events']:
-                    events.append(event)
-                api_response = self.client.poll_workflow(
-                    next_page_token=api_response['nextPageToken']
-                )
-            for event in api_response['events']:
-                events.append(event)
-            self._cached_events = events
-        return self._cached_events
-
-    @property
-    def _new_events(self):
-        decisions_completed = 0
-        events = []
-        prev_id = self._api_response.get('previousStartedEventId')
-        for event in self._events:
-            if event['eventType'] == 'DecisionTaskCompleted':
-                decisions_completed += 1
-            if prev_id and event['eventId'] == prev_id:
-                break
-            events.append(event)
-        assert decisions_completed <= 1
-        return reversed(events)
-
     def _ActivityTaskScheduled(self, event):
         event_id = event['eventId']
         subdict = event['activityTaskScheduledEventAttributes']
@@ -372,6 +313,83 @@ class WorkflowResponse(object):
         subdict = event['workflowExecutionStartedEventAttributes']
         self.input = subdict['input']
 
+    def _restore_context(self):
+        if self._context is not None:
+            try:
+                initial_state = json.loads(self._context)
+                self._event_to_call_id = self._fix_keys(
+                    initial_state['event_to_call_id']
+                )
+                self._retries = self._fix_keys(initial_state['retries'])
+                self._scheduled = set(initial_state['scheduled'])
+                self._results = self._fix_keys(initial_state['results'])
+                self._timed_out = set(initial_state['timed_out'])
+                self._with_errors = self._fix_keys(
+                    initial_state['with_errors']
+                )
+                self.input = initial_state['input']
+            except (ValueError, KeyError):
+                logging.critical("Cannot load context: %s" % self._context)
+                exit(1)
+
+    def _serialize_context(self):
+        return json.dumps({
+            'event_to_call_id': self._event_to_call_id,
+            'retries': self._retries,
+            'scheduled': list(self._scheduled),
+            'results': self._results,
+            'timed_out': list(self._timed_out),
+            'with_errors': self._with_errors,
+            'input': self.input,
+        })
+
+    @property
+    def _token(self):
+        return self._api_response['taskToken']
+
+    @property
+    def _context(self):
+        for event in self._new_events:
+            if event['eventType'] == 'DecisionTaskCompleted':
+                DTCEA = 'decisionTaskCompletedEventAttributes'
+                return event[DTCEA]['executionContext']
+        return None
+
+    @property
+    def _events(self):
+        if not hasattr(self, '_cached_events'):
+            events = []
+            api_response = self._api_response
+            while api_response.get('nextPageToken'):
+                for event in api_response['events']:
+                    events.append(event)
+                api_response = self.client.poll_workflow(
+                    next_page_token=api_response['nextPageToken']
+                )
+            for event in api_response['events']:
+                events.append(event)
+            self._cached_events = events
+        return self._cached_events
+
+    @property
+    def _new_events(self):
+        decisions_completed = 0
+        events = []
+        prev_id = self._api_response.get('previousStartedEventId')
+        for event in self._events:
+            if event['eventType'] == 'DecisionTaskCompleted':
+                decisions_completed += 1
+            if prev_id and event['eventId'] == prev_id:
+                break
+            events.append(event)
+        assert decisions_completed <= 1
+        return reversed(events)
+
+    @staticmethod
+    def _fix_keys(d):
+        # Fix json's stupid silent key conversion from int to string
+        return dict((int(key), value) for key, value in d.items())
+
 
 class WorkflowLoop(object):
     def __init__(self, client):
@@ -399,14 +417,24 @@ class WorkflowLoop(object):
     def start(self):
         while 1:
             response = self.client.request_workflow()
+            logging.info("Processing workflow: %s %s",
+                         response.name, response.version)
             workflow_runner = self._query(response.name, response.version)
+            if workflow_runner is None:
+                logging.warning("No workflow registered for: %s %s",
+                                response.name, response.version)
+                continue
             try:
                 result, activities = workflow_runner.resume(
                     response.input, response
                 )
             except ActivityError as e:
+                logging.warning("result() raised an unhandled exception: %s",
+                                e.message)
                 response.terminate_workflow(e.message)
             except _UnhandledActivityError as e:
+                logging.warning("An activity result containing an error was "
+                                "passed as argument: %s", e.message)
                 response.terminate_workflow(e.message)
             else:
                 activities_running = response.any_activity_running()
@@ -427,7 +455,7 @@ class WorkflowLoop(object):
                     response.complete_workflow(result)
 
     def _query(self, name, version):
-        return self.workflows[(name, version)]
+        return self.workflows.get((name, version))
 
 
 class WorkflowClient(object):
@@ -467,8 +495,12 @@ class WorkflowClient(object):
         return wrapper
 
     def start(self, name, version, *args, **kwargs):
-        input = json.dumps({"args": args, "kwargs": kwargs})
-        self.client.start_workflow(name, version, input)
+        input = self.serialize_workflow_arguments(*args, **kwargs)
+        return self.client.start_workflow(name, version, input)
+
+    @staticmethod
+    def serialize_workflow_arguments(*args, **kwargs):
+        return json.dumps({"args": args, "kwargs": kwargs})
 
     def loop(self):
         self.loop.start()
