@@ -22,4 +22,4 @@ class Activity(object):
         return json.dumps(result)
 
     def heartbeat(self):
-        self._client.heartbeat()
+        return self._client.heartbeat()
