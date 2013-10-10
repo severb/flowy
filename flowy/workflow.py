@@ -35,14 +35,15 @@ class Workflow(object):
         self._error_handling_stack = [False]
 
     def resume(self, input, context):
-        self._context, result = context, None
+        result = None
+        self._context = context
+        self._current_call_id = 0
         self._scheduled = []
         args, kwargs = self.deserialize_workflow_input(input)
         try:
             result = self.run(*args, **kwargs)
         except _SyncNeeded:
             pass
-        self._current_call_id = 0
         return self.serialize_workflow_result(result), self._scheduled
 
     def run(self, *args, **kwargs):

@@ -436,6 +436,8 @@ class WorkflowLoop(object):
                 logging.warning("An activity result containing an error was "
                                 "passed as argument: %s", e.message)
                 response.terminate_workflow(e.message)
+            except Exception as e:
+                response.terminate_workflow(e.message)
             else:
                 activities_running = response.any_activity_running()
                 activities_scheduled = bool(activities)
