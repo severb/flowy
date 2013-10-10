@@ -181,11 +181,15 @@ class SWFClient(object):
         return ActivityResponse(self)
 
     def start_workflow(self, name, version, input):
-        self.client.start_workflow_execution(self.domain,
-                                             str(uuid.uuid4()),
-                                             name, str(version),
-                                             task_list=self.task_list,
-                                             input=input)
+        try:
+            self.client.start_workflow_execution(self.domain,
+                                                 str(uuid.uuid4()),
+                                                 name, str(version),
+                                                 task_list=self.task_list,
+                                                 input=input)
+        except SWFResponseError:
+            return False
+        return True
 
 
 class WorkflowResponse(object):
@@ -462,7 +466,11 @@ class WorkflowClient(object):
 
         return wrapper
 
-    def start(self):
+    def start(self, name, version, *args, **kwargs):
+        input = json.dumps({"args": args, "kwargs": kwargs})
+        self.client.start_workflow(name, version, input)
+
+    def loop(self):
         self.loop.start()
 
 
@@ -575,22 +583,8 @@ class ActivityClient(object):
 
         return wrapper
 
-    def start(self):
+    def loop(self):
         self.loop.start()
-
-
-class WorkflowStarter(object):
-    def __init__(self, client):
-        self.client = client
-
-    @classmethod
-    def for_domain(cls, domain, task_list):
-        client = SWFClient(domain, task_list)
-        return cls(client)
-
-    def start(self, name, version, *args, **kwargs):
-        input = json.dumps({"args": args, "kwargs": kwargs})
-        self.client.start_workflow(name, version, input)
 
 
 def _str_or_none(maybe_none):
