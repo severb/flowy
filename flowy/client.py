@@ -503,6 +503,7 @@ class WorkflowClient(object):
         return json.dumps({"args": args, "kwargs": kwargs})
 
     def loop(self):
+        logging.info("Starting workflow client loop...")
         self.loop.start()
 
 
@@ -521,7 +522,7 @@ class ActivityResponse(object):
         self.client.terminate_activity(self._token, reason)
 
     def heartbeat(self):
-        self.client.heartbeat(self._token)
+        return self.client.heartbeat(self._token)
 
     @property
     def name(self):
@@ -564,7 +565,13 @@ class ActivityLoop(object):
     def start(self):
         while 1:
             response = self.client.request_activity()
+            logging.info("Processing activity: %s %s",
+                         response.name, response.version)
             activity_runner = self._query(response.name, response.version)
+            if activity_runner is None:
+                logging.warning("No activity registered for: %s %s",
+                                response.name, response.version)
+                continue
             try:
                 result = activity_runner.call(response.input, response)
             except Exception as e:
@@ -574,7 +581,7 @@ class ActivityLoop(object):
 
     def _query(self, name, version):
         # XXX: if we can't resolve this activity log the error and continue
-        return self.activities[(name, version)]
+        return self.activities.get((name, version))
 
 
 class ActivityClient(object):
@@ -616,6 +623,7 @@ class ActivityClient(object):
         return wrapper
 
     def loop(self):
+        logging.info("Starting activity client loop...")
         self.loop.start()
 
 
