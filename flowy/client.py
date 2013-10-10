@@ -171,13 +171,11 @@ class SWFClient(object):
             logging.warning("Cannot terminate activity: %s", token)
 
     def heartbeat(self, token):
-        # A heartbeat is not successful if the activity has run past its
-        # allocated time. Raising an exception here will interrupt the activity
-        # from running any longer.
         try:
             self.client.record_activity_task_heartbeat(token)
         except SWFResponseError:
-            raise _ActivityTimedout()
+            return False
+        return True
 
     def request_activity(self):
         return ActivityResponse(self)
@@ -593,10 +591,6 @@ class WorkflowStarter(object):
     def start(self, name, version, *args, **kwargs):
         input = json.dumps({"args": args, "kwargs": kwargs})
         self.client.start_workflow(name, version, input)
-
-
-class _ActivityTimedout(Exception):
-    """Raised when a heartbeat is sent from an activity that has timedout."""
 
 
 def _str_or_none(maybe_none):
