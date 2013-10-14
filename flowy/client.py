@@ -33,13 +33,15 @@ class SWFClient(object):
                           task_start_to_close=60,
                           child_policy='TERMINATE',
                           doc=None):
-        """ Register a :term:`workflow` with the given configuration options.
+        """ Register a workflow with the given configuration options.
 
-        If a :term:`workflow` with the same *name* and *version* already
-        exists, it returns a boolean indicating whether the matching workflow
-        has the same defaults. The total workflow running time can be specified
-        in seconds using *execution_start_to_close*. A specific decision
-        runtime can be limited by setting *task_start_to_close*.
+        If a workflow with the same *name* and *version* is already registered,
+        this method returns a boolean indicating whether the registered
+        workflow is compatible. A compatible workflow is a workflow that was
+        registered using the same default values. The total workflow running
+        time can be specified in seconds using *execution_start_to_close* and a
+        specific decision task runtime can be limited by setting
+        *task_start_to_close*.
 
         """
         version = str(version)
@@ -78,19 +80,18 @@ class SWFClient(object):
                        schedule_to_start=None,
                        start_to_close=None,
                        task_list=None):
-        """ Queue an :term:`activity`.
+        """ Queue an activity.
 
-        This will schedule a run of the activity registered with the specified
-        *name* and *version*. The *call_id* is used to assign a custom identity
-        to this particular queued activity run inside its own workflow history.
-
+        This will schedule a run of a previously registered activity with the
+        specified *name* and *version*. The *call_id* is used to assign a
+        custom identity to this particular queued activity run inside its own
+        workflow history.
         The queueing is done internally, without having the client make any
         requests yet. The actual scheduling is done by calling
         :meth:`SWFClient.schedule_activities`.
 
         The activity options specified here, if any, have a higher priority
         than the ones used when the activity was registered.
-
         For more information about the various arguments see
         :meth:`SWFClient.register_activity'.
 
@@ -112,8 +113,9 @@ class SWFClient(object):
 
         All activities previously queued by :meth:`SWFClient.queue_activity`
         will be scheduled in the context of the workflow identified by *token*.
-        An optional textual *context* can be sent to be available in the
-        workflow history.
+        An optional textual *context* can be set and will be available in the
+        workflow history. Calling this method will also empty out the internal
+        collection of scheduled activities.
 
         """
         d = Layer1Decisions()
@@ -149,9 +151,8 @@ class SWFClient(object):
         Terminate the workflow identified by *workflow_id* for the specified
         *reason*. All the workflow activities will be abandoned and the final
         result won't be available.
-
-        The *workflow_id* can be obtained by calling
-        :meth:`SWFClient.start_workflow`.
+        The *workflow_id* required here is the one obtained when
+        :meth:`SWFClient.start_workflow` was called.
 
         """
         try:
@@ -191,7 +192,7 @@ class SWFClient(object):
                           schedule_to_start=120,
                           start_to_close=300,
                           doc=None):
-        """ Register an :term:`activity with the given configuration options in
+        """ Register an activity with the given configuration options in
         the current domain.
 
         If an :term:`activity` with the same name and version already exists,
