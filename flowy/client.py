@@ -116,6 +116,7 @@ class SWFClient(object):
         An optional textual *context* can be set and will be available in the
         workflow history. Calling this method will also empty out the internal
         collection of scheduled activities.
+        Returns a boolean indicating the success of the operation.
 
         """
         d = Layer1Decisions()
@@ -128,12 +129,15 @@ class SWFClient(object):
             self.client.respond_decision_task_completed(token, data, context)
         except SWFResponseError:
             logging.warning("Cannot send decisions: %s", token)
+            return False
         self._scheduled_activities = []
+        return True
 
     def complete_workflow(self, token, result):
         """ Signals the completion of the workflow.
 
         Completes the workflow identified by *token* with the *result* value.
+        Returns a boolean indicating the success of the operation.
 
         """
         d = Layer1Decisions()
@@ -144,6 +148,8 @@ class SWFClient(object):
             logging.info("Completed workflow: %s %s", token, result)
         except SWFResponseError:
             logging.warning("Cannot complete workflow: %s", token)
+            return False
+        return True
 
     def terminate_workflow(self, workflow_id, reason):
         """ Signals the termination of the workflow.
@@ -153,6 +159,7 @@ class SWFClient(object):
         result won't be available.
         The *workflow_id* required here is the one obtained when
         :meth:`SWFClient.start_workflow` was called.
+        Returns a boolean indicating the success of the operation.
 
         """
         try:
@@ -161,13 +168,15 @@ class SWFClient(object):
             logging.info("Terminated workflow: %s %s", workflow_id, reason)
         except SWFResponseError:
             logging.warning("Cannot terminate workflow: %s", workflow_id)
+            return False
+        return True
 
     def poll_workflow(self, next_page_token=None):
         """ Poll for a new decision task.
 
-        Poll for a decision in the task list bounded to this client. In case of
-        larger responses *next_page_token* can be used to retrieve paginated
-        decisions.
+        Blocks until a decision is available in the task list bounded to this
+        client. In case of larger responses *next_page_token* can be used to
+        retrieve paginated decisions.
 
         """
         poll = self.client.poll_for_decision_task
