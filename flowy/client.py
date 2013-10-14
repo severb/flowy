@@ -7,7 +7,7 @@ from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
 from boto.swf.exceptions import SWFTypeAlreadyExistsError, SWFResponseError
 
-from flowy.workflow import _UnhandledActivityError, ActivityError
+from flowy.workflow import _UnhandledActivityError
 
 
 __all__ = ['ActivityClient', 'WorkflowClient']
@@ -116,9 +116,8 @@ class SWFClient(object):
         d = Layer1Decisions()
         for args, kwargs in self._scheduled_activities:
             d.schedule_activity_task(*args, **kwargs)
-            input = kwargs['input']
             name, version = args[1:]
-            logging.info("Scheduled activity: %s %s %s", name, version, input)
+            logging.info("Scheduled activity: %s %s", name, version)
         data = d._data
         try:
             self.client.respond_decision_task_completed(token, data, context)
@@ -259,7 +258,9 @@ class SWFClient(object):
         """
         try:
             self.client.record_activity_task_heartbeat(token)
+            logging.info("Sent activity heartbeat: %s", token)
         except SWFResponseError:
+            logging.warning("Error when sending activity heartbeat: %s", token)
             return False
         return True
 
@@ -303,7 +304,7 @@ class WorkflowResponse(object):
             response = self.client.poll_workflow()
         self._api_response = response
 
-        self._restore_context(self._context)
+        self._restore_context()
 
         # Update the context with all new events
         for new_event in self._new_events:
@@ -514,15 +515,13 @@ class WorkflowLoop(object):
                 result, activities = workflow_runner.resume(
                     response.input, response
                 )
-            except ActivityError as e:
-                logging.warning("result() raised an unhandled exception: %s",
-                                e.message)
-                response.terminate_workflow(e.message)
             except _UnhandledActivityError as e:
-                logging.warning("An activity result containing an error was "
-                                "passed as argument: %s", e.message)
+                logging.warning("Stopped workflow because of an exception"
+                                " inside an activity: %s", e.message)
                 response.terminate_workflow(e.message)
             except Exception as e:
+                logging.warning("Stopped workflow because of an unhandled"
+                                " exception: %s", e.message)
                 response.terminate_workflow(e.message)
             else:
                 activities_running = response.any_activity_running()
@@ -547,19 +546,20 @@ class WorkflowLoop(object):
 
 
 class WorkflowClient(object):
-    def __init__(self, loop):
+    def __init__(self, loop, client):
         self.loop = loop
+        self.client = client
 
     @classmethod
     def for_domain(cls, domain, task_list):
         client = SWFClient(domain, task_list)
         loop = WorkflowLoop(client)
-        return cls(loop)
+        return cls(loop, client)
 
     @classmethod
     def from_client(cls, client):
         loop = WorkflowLoop(client)
-        return cls(loop)
+        return cls(loop, client)
 
     def __call__(self, name, version, *args, **kwargs):
         optional_args = [
@@ -582,7 +582,7 @@ class WorkflowClient(object):
 
         return wrapper
 
-    def start(self, name, version, *args, **kwargs):
+    def schedule(self, name, version, *args, **kwargs):
         input = self.serialize_workflow_arguments(*args, **kwargs)
         return self.client.start_workflow(name, version, input)
 
@@ -590,7 +590,7 @@ class WorkflowClient(object):
     def serialize_workflow_arguments(*args, **kwargs):
         return json.dumps({"args": args, "kwargs": kwargs})
 
-    def loop(self):
+    def start(self):
         logging.info("Starting workflow client loop...")
         self.loop.start()
 
@@ -710,7 +710,7 @@ class ActivityClient(object):
 
         return wrapper
 
-    def loop(self):
+    def start(self):
         logging.info("Starting activity client loop...")
         self.loop.start()
 
