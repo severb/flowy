@@ -14,7 +14,19 @@ __all__ = ['ActivityClient', 'WorkflowClient']
 
 
 class SWFClient(object):
+    """
+    A wrapper around Boto's SWF Layer1.
+
+    """
     def __init__(self, domain, task_list, client=None):
+        """ Initialize the client.
+
+        :param domain: http://docs.aws.amazon.com/amazonswf/latest/\
+        developerguide/swf-dev-domain.html
+        :param task_list: http://docs.aws.amazon.com/amazonswf/latest/\
+        developerguide/swf-dev-task-lists.html
+
+        """
         self.client = client if client is not None else Layer1()
         self.domain = domain
         self.task_list = task_list
@@ -25,6 +37,14 @@ class SWFClient(object):
                           task_start_to_close=60,
                           child_policy='TERMINATE',
                           doc=None):
+        """ Register a :term:`workflow` with the given configuration options.
+
+        If a :term:`workflow` with the same name and version already exists,
+        it checks whether the matching workflow has the same defaults.
+
+        If any of them differ, the application execution immediately stops.
+
+        """
         version = str(version)
         execution_start_to_close = str(execution_start_to_close)
         task_start_to_close = str(task_start_to_close)
@@ -60,6 +80,22 @@ class SWFClient(object):
                        schedule_to_start=None,
                        start_to_close=None,
                        task_list=None):
+        """ Queue an :term:`activity`.
+
+        The queueing is done internally, without having the client make the
+        apropiate client requests yet. The actual scheduling is done by
+        :meth:`SWFClient.schedule_activities`
+
+        :param: heartbeat: http://docs.aws.amazon.com/amazonswf/latest/\
+        developerguide/swf-dg-develop-activity.html
+        :param: schedule_to_close: http://docs.aws.amazon.com/amazonswf/\
+        latest/developerguide/swf-timeout-types.html
+        :param: schedule_to_start: http://docs.aws.amazon.com/amazonswf/\
+        latest/developerguide/swf-timeout-types.html
+        :param: start to close: http://docs.aws.amazon.com/amazonswf/\
+        latest/developerguide/swf-timeout-types.html
+
+        """
         self._scheduled_activities.append((
             (str(call_id), name, str(version)),
             {
@@ -73,6 +109,10 @@ class SWFClient(object):
         ))
 
     def schedule_activities(self, token, context=None):
+        """ Schedules all queued activities and initiates a
+        ``decision`` task completed response.
+
+        """
         d = Layer1Decisions()
         for args, kwargs in self._scheduled_activities:
             d.schedule_activity_task(*args, **kwargs)
@@ -87,6 +127,10 @@ class SWFClient(object):
         self._scheduled_activities = []
 
     def complete_workflow(self, token, result):
+        """ Signals the completion of the current workflow and initiates a
+        ``decision`` task completed response.
+
+        """
         d = Layer1Decisions()
         d.complete_workflow_execution(result=result)
         data = d._data
@@ -97,6 +141,10 @@ class SWFClient(object):
             logging.warning("Cannot complete workflow: %s", token)
 
     def terminate_workflow(self, workflow_id, reason):
+        """ Signals the termination of the workflow identified by
+        ``workflow_id`` in the current domain.
+
+        """
         try:
             self.client.terminate_workflow_execution(self.domain, workflow_id,
                                                      reason=reason)
@@ -105,6 +153,7 @@ class SWFClient(object):
             logging.warning("Cannot terminate workflow: %s", workflow_id)
 
     def poll_workflow(self, next_page_token=None):
+        """ Poll for a ``decision`` task from the current ``domain``. """
         poll = self.client.poll_for_decision_task
         while 1:
             try:
@@ -115,6 +164,10 @@ class SWFClient(object):
                                 self.domain, self.task_list)
 
     def request_workflow(self):
+        """ Returns a :class:`flowy.client.WorkflowResponse initialized with
+        the current :class:`flowy.client.SWFClient` instance.
+
+        """
         return WorkflowResponse(self)
 
     def register_activity(self, name, version, activity_runner,
@@ -123,6 +176,15 @@ class SWFClient(object):
                           schedule_to_start=120,
                           start_to_close=300,
                           doc=None):
+        """ Register an :term:`activity with the given configuration options in
+        the current domain.
+
+        If an :term:`activity` with the same name and version already exists,
+        it checks whether the matching activity has the same defaults.
+
+        If any of them differ, the application execution immediately stops.
+
+        """
         schedule_to_close = str(schedule_to_close)
         schedule_to_start = str(schedule_to_start)
         start_to_close = str(start_to_close)
@@ -157,6 +219,7 @@ class SWFClient(object):
                 sys.exit(1)
 
     def poll_activity(self):
+        """ Poll for an ``activity`` task in the current ``domain``. """
         poll = self.client.poll_for_activity_task
         while 1:
             try:
@@ -166,6 +229,10 @@ class SWFClient(object):
                                 self.domain, self.task_list)
 
     def complete_activity(self, token, result):
+        """ Signals the successful completion of the activity identified by
+        :term:`token` with a ``result``.
+
+        """
         try:
             self.client.respond_activity_task_completed(token, result)
             logging.info("Completed activity: %s %s", token, result)
@@ -173,6 +240,10 @@ class SWFClient(object):
             logging.warning("Cannot complete activity: %s", token)
 
     def terminate_activity(self, token, reason):
+        """ Signals that the activity identified by :term:`token` has failed
+        and specifies a ``reason``.
+
+        """
         try:
             self.client.respond_activity_task_failed(token, reason=reason)
             logging.info("Terminated activity: %s %s", token, reason)
@@ -180,6 +251,12 @@ class SWFClient(object):
             logging.warning("Cannot terminate activity: %s", token)
 
     def heartbeat(self, token):
+        """ Report that the ``activity`` identified by ``token`` is still
+        making progress.
+
+        Returns `True` or `False` to allow for gracefull handling.
+
+        """
         try:
             self.client.record_activity_task_heartbeat(token)
         except SWFResponseError:
@@ -187,9 +264,18 @@ class SWFClient(object):
         return True
 
     def request_activity(self):
+        """ Returns a :class:`flowy.client.ActivityResponse initialized with
+        the current :class:`flowy.client.SWFClient` instance.
+
+        """
+
         return ActivityResponse(self)
 
     def start_workflow(self, name, version, input):
+        """ Starts the workflow identified by ``name`` and ``version``.
+
+        Returns True or False for gracefull handling
+        """
         try:
             self.client.start_workflow_execution(self.domain,
                                                  str(uuid.uuid4()),
