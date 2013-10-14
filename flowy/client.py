@@ -14,17 +14,13 @@ __all__ = ['ActivityClient', 'WorkflowClient']
 
 
 class SWFClient(object):
-    """
-    A wrapper around Boto's SWF Layer1.
+    """ A simple wrapper around Boto's SWF Layer1. """
 
-    """
     def __init__(self, domain, task_list, client=None):
-        """ Initialize the client.
+        """ Initialize and bind the client to a *domain* and a *task_list*.
 
-        :param domain: http://docs.aws.amazon.com/amazonswf/latest/\
-        developerguide/swf-dev-domain.html
-        :param task_list: http://docs.aws.amazon.com/amazonswf/latest/\
-        developerguide/swf-dev-task-lists.html
+        A custom :py:class:`boto.swf.Layer1` instance can be sent as the
+        *client* argument and it will be used instead of the default one.
 
         """
         self.client = client if client is not None else Layer1()
@@ -39,10 +35,11 @@ class SWFClient(object):
                           doc=None):
         """ Register a :term:`workflow` with the given configuration options.
 
-        If a :term:`workflow` with the same name and version already exists,
-        it checks whether the matching workflow has the same defaults.
-
-        If any of them differ, the application execution immediately stops.
+        If a :term:`workflow` with the same *name* and *version* already
+        exists, it returns a boolean indicating whether the matching workflow
+        has the same defaults. The total workflow running time can be specified
+        in seconds using *execution_start_to_close*. A specific decision
+        runtime can be limited by setting *task_start_to_close*.
 
         """
         version = str(version)
@@ -72,7 +69,8 @@ class SWFClient(object):
                 logging.critical("Registered workflow "
                                  "has different defaults: %s %s",
                                  name, version)
-                sys.exit(1)
+                return False
+            return True
 
     def queue_activity(self, call_id, name, version, input,
                        heartbeat=None,
@@ -82,18 +80,19 @@ class SWFClient(object):
                        task_list=None):
         """ Queue an :term:`activity`.
 
-        The queueing is done internally, without having the client make the
-        apropiate client requests yet. The actual scheduling is done by
-        :meth:`SWFClient.schedule_activities`
+        This will schedule a run of the activity registered with the specified
+        *name* and *version*. The *call_id* is used to assign a custom identity
+        to this particular queued activity run inside its own workflow history.
 
-        :param: heartbeat: http://docs.aws.amazon.com/amazonswf/latest/\
-        developerguide/swf-dg-develop-activity.html
-        :param: schedule_to_close: http://docs.aws.amazon.com/amazonswf/\
-        latest/developerguide/swf-timeout-types.html
-        :param: schedule_to_start: http://docs.aws.amazon.com/amazonswf/\
-        latest/developerguide/swf-timeout-types.html
-        :param: start to close: http://docs.aws.amazon.com/amazonswf/\
-        latest/developerguide/swf-timeout-types.html
+        The queueing is done internally, without having the client make any
+        requests yet. The actual scheduling is done by calling
+        :meth:`SWFClient.schedule_activities`.
+
+        The activity options specified here, if any, have a higher priority
+        than the ones used when the activity was registered.
+
+        For more information about the various arguments see
+        :meth:`SWFClient.register_activity'.
 
         """
         self._scheduled_activities.append((
@@ -109,8 +108,12 @@ class SWFClient(object):
         ))
 
     def schedule_activities(self, token, context=None):
-        """ Schedules all queued activities and initiates a
-        ``decision`` task completed response.
+        """ Schedules all queued activities.
+
+        All activities previously queued by :meth:`SWFClient.queue_activity`
+        will be scheduled in the context of the workflow identified by *token*.
+        An optional textual *context* can be sent to be available in the
+        workflow history.
 
         """
         d = Layer1Decisions()
@@ -126,8 +129,9 @@ class SWFClient(object):
         self._scheduled_activities = []
 
     def complete_workflow(self, token, result):
-        """ Signals the completion of the current workflow and initiates a
-        ``decision`` task completed response.
+        """ Signals the completion of the workflow.
+
+        Completes the workflow identified by *token* with the *result* value.
 
         """
         d = Layer1Decisions()
@@ -140,8 +144,14 @@ class SWFClient(object):
             logging.warning("Cannot complete workflow: %s", token)
 
     def terminate_workflow(self, workflow_id, reason):
-        """ Signals the termination of the workflow identified by
-        ``workflow_id`` in the current domain.
+        """ Signals the termination of the workflow.
+
+        Terminate the workflow identified by *workflow_id* for the specified
+        *reason*. All the workflow activities will be abandoned and the final
+        result won't be available.
+
+        The *workflow_id* can be obtained by calling
+        :meth:`SWFClient.start_workflow`.
 
         """
         try:
@@ -152,7 +162,13 @@ class SWFClient(object):
             logging.warning("Cannot terminate workflow: %s", workflow_id)
 
     def poll_workflow(self, next_page_token=None):
-        """ Poll for a ``decision`` task from the current ``domain``. """
+        """ Poll for a new decision task.
+
+        Poll for a decision in the task list bounded to this client. In case of
+        larger responses *next_page_token* can be used to retrieve paginated
+        decisions.
+
+        """
         poll = self.client.poll_for_decision_task
         while 1:
             try:
@@ -491,7 +507,7 @@ class WorkflowLoop(object):
         doc=None
     ):
         self.workflows[(name, str(version))] = workflow_runner
-        self.client.register_workflow(
+        return self.client.register_workflow(
             name,
             version,
             workflow_runner,
@@ -575,9 +591,9 @@ class WorkflowClient(object):
 
         def wrapper(workflow):
             r_kwargs['doc'] = workflow.__doc__.strip()
-            self.loop.register(
-                name, version, workflow(*args, **kwargs), **r_kwargs
-            )
+            if not self.loop.register(name, version, workflow(*args, **kwargs),
+                                      **r_kwargs):
+                sys.exit(1)
             return workflow
 
         return wrapper
