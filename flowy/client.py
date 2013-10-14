@@ -14,7 +14,10 @@ __all__ = ['ActivityClient', 'WorkflowClient']
 
 
 class SWFClient(object):
-    """ A simple wrapper around Boto's SWF Layer1. """
+    """ A simple wrapper around Boto's SWF Layer1 that provides a cleaner
+    interface and some convenience.
+
+    """
 
     def __init__(self, domain, task_list, client=None):
         """ Initialize and bind the client to a *domain* and a *task_list*.
