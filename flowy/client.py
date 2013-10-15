@@ -133,7 +133,7 @@ class SWFClient(object):
         return True
 
     def complete_workflow(self, token, result):
-        """ Signals the completion of the workflow.
+        """ Signals the successful completion of the workflow.
 
         Completes the workflow identified by *token* with the *result* value.
         Returns a boolean indicating the success of the operation.
@@ -192,7 +192,7 @@ class SWFClient(object):
 
         Returns the next :class:`flowy.client.Decision` instance available in
         the task list bounded to this client. Because instantiating a
-        *Decision* blocks until a decision is available the same is true for
+        *Decision* blocks until a decision is available, the same is true for
         this method.
 
         """
@@ -204,13 +204,17 @@ class SWFClient(object):
                           schedule_to_start=120,
                           start_to_close=300,
                           doc=None):
-        """ Register an activity with the given configuration options in
-        the current domain.
+        """ Register an activity with the given configuration options.
 
-        If an :term:`activity` with the same name and version already exists,
-        it checks whether the matching activity has the same defaults.
-
-        If any of them differ, the application execution immediately stops.
+        If an activity with the same *name* and *version* is already
+        registered, this method returns a boolean indicating whether the
+        registered activity is compatible. A compatible activity is an
+        activity that was registered using the same default values.
+        The allowed running time can be specified in seconds using
+        *start_to_close*, the allowed time from the moment it was scheduled,
+        to the moment it finished can be specified using *schedule_to_close*
+        and the time it can spend in the queue before the processing itself
+        starts can be specified using *schedule_to_start*.
 
         """
         schedule_to_close = str(schedule_to_close)
@@ -244,10 +248,16 @@ class SWFClient(object):
                 logging.critical("Registered activity "
                                  "has different defaults: %s %s",
                                  name, version)
-                sys.exit(1)
+                return False
+            return True
 
     def poll_activity(self):
-        """ Poll for an ``activity`` task in the current ``domain``. """
+        """ Poll for a new activity task.
+
+        Blocks until an activity is available in the task list bounded to this
+        client.
+
+        """
         poll = self.client.poll_for_activity_task
         while 1:
             try:
@@ -257,8 +267,10 @@ class SWFClient(object):
                                 self.domain, self.task_list)
 
     def complete_activity(self, token, result):
-        """ Signals the successful completion of the activity identified by
-        :term:`token` with a ``result``.
+        """ Signals the successful completion of an activity.
+
+        Completes the activity identified by *token* with the *result* value.
+        Returns a boolean indicating the success of the operation.
 
         """
         try:
@@ -266,23 +278,28 @@ class SWFClient(object):
             logging.info("Completed activity: %s %s", token, result)
         except SWFResponseError:
             logging.warning("Cannot complete activity: %s", token)
+            return False
+        return True
 
     def terminate_activity(self, token, reason):
-        """ Signals that the activity identified by :term:`token` has failed
-        and specifies a ``reason``.
+        """ Signals the termination of the activity.
 
+        Terminate the activity identified by *token* for the specified
+        *reason*. Returns a boolean indicating the success of the operation.
         """
         try:
             self.client.respond_activity_task_failed(token, reason=reason)
             logging.info("Terminated activity: %s %s", token, reason)
         except SWFResponseError:
             logging.warning("Cannot terminate activity: %s", token)
+            return False
+        return True
 
     def heartbeat(self, token):
-        """ Report that the ``activity`` identified by ``token`` is still
-        making progress.
+        """ Report that the activity identified by *token* is still making
+        progress.
 
-        Returns `True` or `False` to allow for gracefull handling.
+        Returns a boolean indicating the success of the operation.
 
         """
         try:
@@ -293,18 +310,24 @@ class SWFClient(object):
             return False
         return True
 
-    def request_activity(self):
-        """ Returns a :class:`flowy.client.ActivityResponse initialized with
-        the current :class:`flowy.client.SWFClient` instance.
+    def next_activity(self):
+        """
+        Get the next available activity.
+
+        Returns the next :class:`flowy.client.ActivityResponse` instance
+        available in the task list bounded to this client. Because
+        instantiating an *ActivityResponse* blocks until an activity is
+        available, the same is true for this method.
 
         """
 
         return ActivityResponse(self)
 
     def start_workflow(self, name, version, input):
-        """ Starts the workflow identified by ``name`` and ``version``.
+        """ Starts the workflow identified by *name* and *version* with the
+        given *input*.
 
-        Returns True or False for gracefull handling
+        Returns a boolean indicating the success of the operation.
         """
         try:
             self.client.start_workflow_execution(self.domain,
@@ -374,11 +397,11 @@ class Decision(object):
         self.client.schedule_activities(self._token, self._serialize_context())
 
     def complete_workflow(self, result):
-        self.client.complete_workflow(self._token, result)
+        return self.client.complete_workflow(self._token, result)
 
     def terminate_workflow(self, reason):
         workflow_id = self._api_response['workflowExecution']['workflowId']
-        self.client.terminate_workflow(workflow_id, reason)
+        return self.client.terminate_workflow(workflow_id, reason)
 
     def any_activity_running(self):
         return bool(self._scheduled)
@@ -633,10 +656,10 @@ class ActivityResponse(object):
         self._api_response = response
 
     def complete(self, result):
-        self.client.complete_activity(self._token, result)
+        return self.client.complete_activity(self._token, result)
 
     def terminate(self, reason):
-        self.client.terminate_activity(self._token, reason)
+        return self.client.terminate_activity(self._token, reason)
 
     def heartbeat(self):
         return self.client.heartbeat(self._token)
@@ -674,7 +697,7 @@ class ActivityLoop(object):
         # All versions are converted to string in SWF and that's how we should
         # store them too in order to be able to query for them
         self.activities[(name, str(version))] = activity_runner
-        self.client.register_activity(
+        return self.client.register_activity(
             name, version, activity_runner, heartbeat,
             schedule_to_close, schedule_to_start, start_to_close, doc
         )
@@ -732,9 +755,8 @@ class ActivityClient(object):
 
         def wrapper(activity):
             r_kwargs['doc'] = activity.__doc__.strip()
-            self.loop.register(
-                name, version, activity(*args, **kwargs), **r_kwargs
-            )
+            if not self.loop.register(name, version, activity(*args, **kwargs),
+                                      **r_kwargs)
             return activity
 
         return wrapper
