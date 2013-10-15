@@ -17,15 +17,12 @@ class SWFClient(object):
     """ A simple wrapper around Boto's SWF Layer1 that provides a cleaner
     interface and some convenience.
 
+    Initialize and bind the client to a *domain* and a *task_list*.  A custom
+    :py:class:`boto.swf.layer1.Layer1` instance can be sent as the *client*
+    argument and it will be used instead of the default one.
+
     """
-
     def __init__(self, domain, task_list, client=None):
-        """ Initialize and bind the client to a *domain* and a *task_list*.
-
-        A custom :py:class:`boto.swf.Layer1` instance can be sent as the
-        *client* argument and it will be used instead of the default one.
-
-        """
         self.client = client if client is not None else Layer1()
         self.domain = domain
         self.task_list = task_list
