@@ -330,14 +330,14 @@ class SWFClient(object):
         Returns a boolean indicating the success of the operation.
         """
         try:
-            self.client.start_workflow_execution(self.domain,
-                                                 str(uuid.uuid4()),
-                                                 name, str(version),
-                                                 task_list=self.task_list,
-                                                 input=input)
+            r = self.client.start_workflow_execution(self.domain,
+                                                     str(uuid.uuid4()),
+                                                     name, str(version),
+                                                     task_list=self.task_list,
+                                                     input=input)
         except SWFResponseError:
-            return False
-        return True
+            return None
+        return r['runId']
 
 
 class Decision(object):
