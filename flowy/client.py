@@ -188,12 +188,16 @@ class SWFClient(object):
                 logging.warning("Unknown error when pulling decisions: %s %s",
                                 self.domain, self.task_list)
 
-    def request_workflow(self):
-        """ Returns a :class:`flowy.client.WorkflowResponse initialized with
-        the current :class:`flowy.client.SWFClient` instance.
+    def next_decision(self):
+        """ Get the next available decision.
+
+        Returns the next :class:`flowy.client.Decision` instance available in
+        the task list bounded to this client. Because instantiating a
+        *Decision* blocks until a decision is available the same is true for
+        this method.
 
         """
-        return WorkflowResponse(self)
+        return Decision(self)
 
     def register_activity(self, name, version, activity_runner,
                           heartbeat=60,
@@ -314,7 +318,7 @@ class SWFClient(object):
         return True
 
 
-class WorkflowResponse(object):
+class Decision(object):
     def __init__(self, client):
         self.client = client
         self._event_to_call_id = {}
@@ -529,32 +533,32 @@ class WorkflowLoop(object):
 
     def start(self):
         while 1:
-            response = self.client.request_workflow()
+            decision = self.client.next_decision()
             logging.info("Processing workflow: %s %s",
-                         response.name, response.version)
-            workflow_runner = self._query(response.name, response.version)
+                         decision.name, decision.version)
+            workflow_runner = self._query(decision.name, decision.version)
             if workflow_runner is None:
                 logging.warning("No workflow registered for: %s %s",
-                                response.name, response.version)
+                                decision.name, decision.version)
                 continue
             try:
                 result, activities = workflow_runner.resume(
-                    response.input, response
+                    decision.input, decision
                 )
             except _UnhandledActivityError as e:
                 logging.warning("Stopped workflow because of an exception"
                                 " inside an activity: %s", e.message)
-                response.terminate_workflow(e.message)
+                decision.terminate_workflow(e.message)
             except Exception as e:
                 logging.warning("Stopped workflow because of an unhandled"
                                 " exception: %s", e.message)
-                response.terminate_workflow(e.message)
+                decision.terminate_workflow(e.message)
             else:
-                activities_running = response.any_activity_running()
+                activities_running = decision.any_activity_running()
                 activities_scheduled = bool(activities)
                 if activities_running or activities_scheduled:
                     for a in activities:
-                        response.queue_activity(
+                        decision.queue_activity(
                             a.call_id, a.name, a.version, a.input,
                             heartbeat=a.options.heartbeat,
                             schedule_to_close=a.options.schedule_to_close,
@@ -563,9 +567,9 @@ class WorkflowLoop(object):
                             task_list=a.options.task_list,
                             retries=a.options.retry
                         )
-                    response.schedule_activities()
+                    decision.schedule_activities()
                 else:
-                    response.complete_workflow(result)
+                    decision.complete_workflow(result)
 
     def _query(self, name, version):
         return self.workflows.get((name, version))
