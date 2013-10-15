@@ -134,7 +134,7 @@ class SWFClient(object):
         return True
 
     def complete_workflow(self, token, result):
-        """ Signals the completion of the workflow.
+        """ Signals the successful completion of the workflow.
 
         Completes the workflow identified by *token* with the *result* value.
         Returns a boolean indicating the success of the operation.
@@ -205,13 +205,15 @@ class SWFClient(object):
                           schedule_to_start=120,
                           start_to_close=300,
                           doc=None):
-        """ Register an activity with the given configuration options in
-        the current domain.
+        """ Register an activity with the given configuration options.
 
-        If an :term:`activity` with the same name and version already exists,
-        it checks whether the matching activity has the same defaults.
-
-        If any of them differ, the application execution immediately stops.
+        If an activity with the same *name* and *version* is already
+        registered, this method returns a boolean indicating whether the
+        registered activity is compatible. A compatible activity is an
+        activity that was registered using the same default values.
+        The allowed running time can be specified in seconds using
+        *start_to_close* and the allowed time from the moment it was scheduled,
+        to the moment it finished can be specified using *schedule_to_close*.
 
         """
         schedule_to_close = str(schedule_to_close)
@@ -248,7 +250,12 @@ class SWFClient(object):
                 sys.exit(1)
 
     def poll_activity(self):
-        """ Poll for an ``activity`` task in the current ``domain``. """
+        """ Poll for a new activity task.
+
+        Blocks until an activity is available in the task list bounded to this
+        client.
+
+        """
         poll = self.client.poll_for_activity_task
         while 1:
             try:
@@ -258,8 +265,10 @@ class SWFClient(object):
                                 self.domain, self.task_list)
 
     def complete_activity(self, token, result):
-        """ Signals the successful completion of the activity identified by
-        :term:`token` with a ``result``.
+        """ Signals the successful completion of an activity.
+
+        Completes the activity identified by *token* with the *result* value.
+        Returns a boolean indicating the success of the operation.
 
         """
         try:
@@ -269,9 +278,14 @@ class SWFClient(object):
             logging.warning("Cannot complete activity: %s", token)
 
     def terminate_activity(self, token, reason):
-        """ Signals that the activity identified by :term:`token` has failed
-        and specifies a ``reason``.
+        """
+        Signals the termination of the activity.
 
+        Terminate the activity identified by *workflow_id* for the specified
+        *reason*. All the workflow activities will be abandoned and the final
+        result won't be available.  The *workflow_id* required here is the one
+        obtained when :meth:`SWFClient.start_workflow` was called.  Returns a
+        boolean indicating the success of the operation.
         """
         try:
             self.client.respond_activity_task_failed(token, reason=reason)
