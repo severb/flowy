@@ -277,6 +277,8 @@ class SWFClient(object):
             logging.info("Completed activity: %s %s", token, result)
         except SWFResponseError:
             logging.warning("Cannot complete activity: %s", token)
+            return False
+        return True
 
     def terminate_activity(self, token, reason):
         """
