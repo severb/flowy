@@ -247,7 +247,8 @@ class SWFClient(object):
                 logging.critical("Registered activity "
                                  "has different defaults: %s %s",
                                  name, version)
-                sys.exit(1)
+                return False
+            return True
 
     def poll_activity(self):
         """ Poll for a new activity task.
@@ -689,7 +690,7 @@ class ActivityLoop(object):
         # All versions are converted to string in SWF and that's how we should
         # store them too in order to be able to query for them
         self.activities[(name, str(version))] = activity_runner
-        self.client.register_activity(
+        return self.client.register_activity(
             name, version, activity_runner, heartbeat,
             schedule_to_close, schedule_to_start, start_to_close, doc
         )
@@ -747,9 +748,8 @@ class ActivityClient(object):
 
         def wrapper(activity):
             r_kwargs['doc'] = activity.__doc__.strip()
-            self.loop.register(
-                name, version, activity(*args, **kwargs), **r_kwargs
-            )
+            if not self.loop.register(name, version, activity(*args, **kwargs),
+                                      **r_kwargs)
             return activity
 
         return wrapper
