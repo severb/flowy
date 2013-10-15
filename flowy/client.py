@@ -284,17 +284,16 @@ class SWFClient(object):
         """
         Signals the termination of the activity.
 
-        Terminate the activity identified by *workflow_id* for the specified
-        *reason*. All the workflow activities will be abandoned and the final
-        result won't be available.  The *workflow_id* required here is the one
-        obtained when :meth:`SWFClient.start_workflow` was called.  Returns a
-        boolean indicating the success of the operation.
+        Terminate the activity identified by *token* for the specified
+        *reason*. Returns a boolean indicating the success of the operation.
         """
         try:
             self.client.respond_activity_task_failed(token, reason=reason)
             logging.info("Terminated activity: %s %s", token, reason)
         except SWFResponseError:
             logging.warning("Cannot terminate activity: %s", token)
+            return False
+        return True
 
     def heartbeat(self, token):
         """ Report that the ``activity`` identified by ``token`` is still
@@ -392,11 +391,11 @@ class Decision(object):
         self.client.schedule_activities(self._token, self._serialize_context())
 
     def complete_workflow(self, result):
-        self.client.complete_workflow(self._token, result)
+        return self.client.complete_workflow(self._token, result)
 
     def terminate_workflow(self, reason):
         workflow_id = self._api_response['workflowExecution']['workflowId']
-        self.client.terminate_workflow(workflow_id, reason)
+        return self.client.terminate_workflow(workflow_id, reason)
 
     def any_activity_running(self):
         return bool(self._scheduled)
@@ -651,10 +650,10 @@ class ActivityResponse(object):
         self._api_response = response
 
     def complete(self, result):
-        self.client.complete_activity(self._token, result)
+        return self.client.complete_activity(self._token, result)
 
     def terminate(self, reason):
-        self.client.terminate_activity(self._token, reason)
+        return self.client.terminate_activity(self._token, reason)
 
     def heartbeat(self):
         return self.client.heartbeat(self._token)
