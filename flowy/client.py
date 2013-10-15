@@ -114,10 +114,9 @@ class SWFClient(object):
         All activities previously queued by :meth:`SWFClient.queue_activity`
         will be scheduled in the context of the workflow identified by *token*.
         An optional textual *context* can be set and will be available in the
-        workflow history. Calling this method will also empty out the internal
-        collection of scheduled activities.
-        Returns a boolean indicating the success of the operation.
-
+        workflow history.
+        Returns a boolean indicating the success of the operation. On success
+        the internal collection of scheduled activities will be cleared.
         """
         d = Layer1Decisions()
         for args, kwargs in self._scheduled_activities:
@@ -127,10 +126,10 @@ class SWFClient(object):
         data = d._data
         try:
             self.client.respond_decision_task_completed(token, data, context)
+            self._scheduled_activities = []
         except SWFResponseError:
             logging.warning("Cannot send decisions: %s", token)
             return False
-        self._scheduled_activities = []
         return True
 
     def complete_workflow(self, token, result):
