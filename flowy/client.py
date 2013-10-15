@@ -171,7 +171,7 @@ class SWFClient(object):
             return False
         return True
 
-    def poll_workflow(self, next_page_token=None):
+    def poll_decision(self, next_page_token=None):
         """ Poll for a new decision task.
 
         Blocks until a decision is available in the task list bounded to this
@@ -331,7 +331,7 @@ class Decision(object):
 
         response = {}
         while 'taskToken' not in response or not response['taskToken']:
-            response = self.client.poll_workflow()
+            response = self.client.poll_decision()
         self._api_response = response
 
         self._restore_context()
@@ -480,7 +480,7 @@ class Decision(object):
             while api_response.get('nextPageToken'):
                 for event in api_response['events']:
                     events.append(event)
-                api_response = self.client.poll_workflow(
+                api_response = self.client.poll_decision(
                     next_page_token=api_response['nextPageToken']
                 )
             for event in api_response['events']:
