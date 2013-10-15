@@ -193,7 +193,7 @@ class SWFClient(object):
 
         Returns the next :class:`flowy.client.Decision` instance available in
         the task list bounded to this client. Because instantiating a
-        *Decision* blocks until a decision is available the same is true for
+        *Decision* blocks until a decision is available, the same is true for
         this method.
 
         """
@@ -212,8 +212,10 @@ class SWFClient(object):
         registered activity is compatible. A compatible activity is an
         activity that was registered using the same default values.
         The allowed running time can be specified in seconds using
-        *start_to_close* and the allowed time from the moment it was scheduled,
-        to the moment it finished can be specified using *schedule_to_close*.
+        *start_to_close*, the allowed time from the moment it was scheduled,
+        to the moment it finished can be specified using *schedule_to_close*
+        and the time it can spend in the queue before the processing itself
+        starts can be specified using *schedule_to_start*.
 
         """
         schedule_to_close = str(schedule_to_close)
@@ -281,8 +283,7 @@ class SWFClient(object):
         return True
 
     def terminate_activity(self, token, reason):
-        """
-        Signals the termination of the activity.
+        """ Signals the termination of the activity.
 
         Terminate the activity identified by *token* for the specified
         *reason*. Returns a boolean indicating the success of the operation.
@@ -296,10 +297,10 @@ class SWFClient(object):
         return True
 
     def heartbeat(self, token):
-        """ Report that the ``activity`` identified by ``token`` is still
-        making progress.
+        """ Report that the activity identified by *token* is still making
+        progress.
 
-        Returns `True` or `False` to allow for gracefull handling.
+        Returns a boolean indicating the success of the operation.
 
         """
         try:
@@ -310,18 +311,24 @@ class SWFClient(object):
             return False
         return True
 
-    def request_activity(self):
-        """ Returns a :class:`flowy.client.ActivityResponse initialized with
-        the current :class:`flowy.client.SWFClient` instance.
+    def next_activity(self):
+        """
+        Get the next available activity.
+
+        Returns the next :class:`flowy.client.ActivityResponse` instance
+        available in the task list bounded to this client. Because
+        instantiating an *ActivityResponse* blocks until an activity is
+        available, the same is true for this method.
 
         """
 
         return ActivityResponse(self)
 
     def start_workflow(self, name, version, input):
-        """ Starts the workflow identified by ``name`` and ``version``.
+        """ Starts the workflow identified by *name* and *version* with the
+        given *input*.
 
-        Returns True or False for gracefull handling
+        Returns a boolean indicating the success of the operation.
         """
         try:
             self.client.start_workflow_execution(self.domain,
