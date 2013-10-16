@@ -399,11 +399,12 @@ class Decision(object):
 
         This method also initializes the internal retry counter with a default
         value or the one specified with *retries*. The aforementioned attribute
-        should be used in conjunction with
-        :meth:`flowy.client.Decision.should_retry` in order to determine
-        whether an ``activity`` should be rescheduled. The total number of runs
-        an ``activity`` will perform is the initial run plus the number of
-        retries.
+        is used in conjunction with :meth:`flowy.client.Decision.should_retry`
+        in order to determine whether an ``activity`` should be rescheduled.
+        The total number of runs an ``activity`` will perform is the initial
+        run plus the number of retries. Whenever an activity times out, the
+        number of retries associated with that ``activity`` is decremented by
+        1, until it reaches 0.
 
         """
         self.client.queue_activity(
