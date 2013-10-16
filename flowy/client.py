@@ -387,15 +387,13 @@ class Decision(object):
     def version(self):
         return self._api_response['workflowType']['version']
 
-    def queue_activity(
-        self, call_id, name, version, input,
-        heartbeat=None,
-        schedule_to_close=None,
-        schedule_to_start=None,
-        start_to_close=None,
-        task_list=None,
-        retries=3
-    ):
+    def queue_activity(self, call_id, name, version, input,
+                       heartbeat=None,
+                       schedule_to_close=None,
+                       schedule_to_start=None,
+                       start_to_close=None,
+                       task_list=None,
+                       retries=3):
         """ Queue an activity using the bound client's
         :meth:`flowy.client.SWFClient.queue_activity` method.
 
@@ -563,13 +561,11 @@ class WorkflowLoop(object):
         self.client = client
         self.workflows = {}
 
-    def register(
-        self, name, version, workflow_runner,
-        execution_start_to_close=3600,
-        task_start_to_close=60,
-        child_policy='TERMINATE',
-        doc=None
-    ):
+    def register(self, name, version, workflow_runner,
+                 execution_start_to_close=3600,
+                 task_start_to_close=60,
+                 child_policy='TERMINATE',
+                 doc=None):
         self.workflows[(name, str(version))] = workflow_runner
         return self.client.register_workflow(
             name,
@@ -714,14 +710,12 @@ class ActivityLoop(object):
         self.client = client
         self.activities = {}
 
-    def register(
-        self, name, version, activity_runner,
-        heartbeat=60,
-        schedule_to_close=420,
-        schedule_to_start=120,
-        start_to_close=300,
-        doc=None
-    ):
+    def register(self, name, version, activity_runner,
+                 heartbeat=60,
+                 schedule_to_close=420,
+                 schedule_to_start=120,
+                 start_to_close=300,
+                 doc=None):
         # All versions are converted to string in SWF and that's how we should
         # store them too in order to be able to query for them
         self.activities[(name, str(version))] = activity_runner
