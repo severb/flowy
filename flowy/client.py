@@ -452,7 +452,7 @@ class Decision(object):
         method.
 
         This method is also responsable for passing the ``workflow_id`` that
-        identifies the workflow that terminated completed.
+        identifies the workflow that terminated.
 
         """
         workflow_id = self._api_response['workflowExecution']['workflowId']
