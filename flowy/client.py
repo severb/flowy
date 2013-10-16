@@ -112,7 +112,7 @@ class SWFClient(object):
         """ Schedules all queued activities.
 
         All activities previously queued by :meth:`SWFClient.queue_activity`
-        will be scheduled in the context of the workflow identified by *token*.
+        will be scheduled within the workflow identified by *token*.
         An optional textual *context* can be set and will be available in the
         workflow history.
         Returns a boolean indicating the success of the operation. On success
@@ -398,7 +398,12 @@ class Decision(object):
         :meth:`flowy.client.SWFClient.queue_activity` method.
 
         This method also initializes the internal retry counter with a default
-        value or the one specified with *retries*.
+        value or the one specified with *retries*. The aforementioned attribute
+        should be used in conjunction with
+        :meth:`flowy.client.Decision.should_retry` in order to determine
+        whether an ``activity`` should be rescheduled. The total number of runs
+        an ``activity`` will perform is the initial run plus the number of
+        retries.
 
         """
         self.client.queue_activity(
@@ -416,8 +421,7 @@ class Decision(object):
         :meth:`flowy.client.SWFClient.schedule_activities` method.
 
         This method is also responsable for passing the ``token`` that
-        identifies the workflow whose context the activities will be scheduled
-        in.
+        identifies the workflow the activities will be scheduled within.
 
         """
         self.client.schedule_activities(self._token, self._serialize_context())
