@@ -473,6 +473,10 @@ class Decision(object):
         return call_id in self._scheduled
 
     def activity_result(self, call_id, default=None):
+        """ Return the result for the ``activity`` identified by *call_id*
+        with an optional *default* value.
+
+        """
         return self._results.get(call_id, default)
 
     def activity_error(self, call_id, default=None):
