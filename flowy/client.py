@@ -459,9 +459,17 @@ class Decision(object):
         return self.client.terminate_workflow(workflow_id, reason)
 
     def any_activity_running(self):
+        """ Checks whether there are any ``activities`` running.
+
+        Any ``activities`` that have been scheduled but not yet completed are
+        considered to be running.  Returns a boolean indicating if there are
+        any ``activities`` with the aforementioned property.
+
+        """
         return bool(self._scheduled)
 
     def is_activity_scheduled(self, call_id):
+        """ Checks whether the activity with *call_id* is scheduled. """
         return call_id in self._scheduled
 
     def activity_result(self, call_id, default=None):
