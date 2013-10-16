@@ -299,7 +299,9 @@ class SWFClient(object):
         """ Report that the activity identified by *token* is still making
         progress.
 
-        Returns a boolean indicating the success of the operation.
+        Returns a boolean indicating the success of the operation or whether
+        the heartbeat exceeded the time it should have taken to report activity
+        progress.
 
         """
         try:
