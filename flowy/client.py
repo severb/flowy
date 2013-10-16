@@ -436,9 +436,25 @@ class Decision(object):
         self.client.schedule_activities(self._token, self._serialize_context())
 
     def complete_workflow(self, result):
+        """ Signal the successful completion of the workflow with a given
+        *result* using the bound client's
+        :meth:`flowy.client.SWFClient.complete_workflow` method.
+
+        This method is also responsable for passing the ``token`` that
+        identifies the workflow that successfully completed.
+
+        """
         return self.client.complete_workflow(self._token, result)
 
     def terminate_workflow(self, reason):
+        """ Signal the termination of the workflow with a given *reason* using
+        the bound client's :meth:`flowy.client.SWFClient.terminate_workflow`
+        method.
+
+        This method is also responsable for passing the ``workflow_id`` that
+        identifies the workflow that terminated completed.
+
+        """
         workflow_id = self._api_response['workflowExecution']['workflowId']
         return self.client.terminate_workflow(workflow_id, reason)
 
