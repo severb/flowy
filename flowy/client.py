@@ -394,6 +394,13 @@ class Decision(object):
         task_list=None,
         retries=3
     ):
+        """ Queue an activity using the bound client's
+        :meth:`flowy.client.SWFClient.queue_activity` method.
+
+        This method also initializes the internal retry counter with a default
+        value or the one specified with *retries*.
+
+        """
         self.client.queue_activity(
             call_id, name, version, input,
             heartbeat=heartbeat,
@@ -405,6 +412,14 @@ class Decision(object):
         self._retries.setdefault(call_id, retries + 1)
 
     def schedule_activities(self):
+        """ Schedule all queued activities using the bound client's
+        :meth:`flowy.client.SWFClient.schedule_activities` method.
+
+        This method is also responsable for passing the ``token`` that
+        identifies the workflow whose context the activities will be scheduled
+        in.
+
+        """
         self.client.schedule_activities(self._token, self._serialize_context())
 
     def complete_workflow(self, result):
