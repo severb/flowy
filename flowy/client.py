@@ -381,10 +381,18 @@ class Decision(object):
 
     @property
     def name(self):
+        """ The name of the ``workflow type`` defined together with
+        :meth:`flowy.client.Decision.version`.
+
+        """
         return self._api_response['workflowType']['name']
 
     @property
     def version(self):
+        """ The version of the ``workflow type`` defined together with
+        :meth:`flowy.client.Decision.name`.
+
+        """
         return self._api_response['workflowType']['version']
 
     def queue_activity(self, call_id, name, version, input,
