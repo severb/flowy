@@ -558,6 +558,10 @@ class ActivityClient(object):
                                      schedule_to_close, schedule_to_start,
                                      start_to_close, doc))
 
+    def start_on(self, domain, task_list, client=None):
+        client = SWFClient(domain, task_list, client)
+        return self.start(client)
+
     def start(self, client):
         for args in self._register_queue:
             client.register_activity(*args)
