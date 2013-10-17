@@ -73,6 +73,8 @@ class SWFClient(object):
                                  name, version)
                 return False
         except SWFResponseError:
+            logging.warning("Could not register workflow: %s %s",
+                            name, version, exc_info=1)
             return False
         return True
 
@@ -130,7 +132,7 @@ class SWFClient(object):
             self.client.respond_decision_task_completed(token, data, context)
             self._scheduled_activities = []
         except SWFResponseError:
-            logging.warning("Cannot send decisions: %s", token)
+            logging.warning("Could not send decisions: %s", token, exc_info=1)
             return False
         return True
 
@@ -148,27 +150,29 @@ class SWFClient(object):
             self.client.respond_decision_task_completed(token, decisions=data)
             logging.info("Completed workflow: %s %s", token, result)
         except SWFResponseError:
-            logging.warning("Cannot complete workflow: %s", token)
+            logging.warning("Could not complete workflow: %s",
+                            token, exc_info=1)
             return False
         return True
 
-    def terminate_workflow(self, workflow_id, reason):
+    def terminate_workflow(self, run_id, reason):
         """ Signals the termination of the workflow.
 
-        Terminate the workflow identified by *workflow_id* for the specified
+        Terminate the workflow identified by *run_id* for the specified
         *reason*. All the workflow activities will be abandoned and the final
         result won't be available.
-        The *workflow_id* required here is the one obtained when
-        :meth:`SWFClient.start_workflow` was called.
-        Returns a boolean indicating the success of the operation.
+        The *run_id* required here is the one obtained when
+        :meth:`SWFClient.start_workflow` was called.  Returns a boolean
+        indicating the success of the operation.
 
         """
         try:
-            self.client.terminate_workflow_execution(self.domain, workflow_id,
+            self.client.terminate_workflow_execution(self.domain, run_id,
                                                      reason=reason)
-            logging.info("Terminated workflow: %s %s", workflow_id, reason)
+            logging.info("Terminated workflow: %s %s", run_id, reason)
         except SWFResponseError:
-            logging.warning("Cannot terminate workflow: %s", workflow_id)
+            logging.warning("Could not terminate workflow: %s",
+                            run_id, exc_info=1)
             return False
         return True
 
@@ -187,7 +191,7 @@ class SWFClient(object):
                             next_page_token=next_page_token)
             except (IOError, SWFResponseError):
                 logging.warning("Unknown error when pulling decisions: %s %s",
-                                self.domain, self.task_list)
+                                self.domain, self.task_list, exc_info=1)
 
     def next_decision(self):
         """ Get the next available decision.
@@ -251,7 +255,11 @@ class SWFClient(object):
                                  "has different defaults: %s %s",
                                  name, version)
                 return False
-            return True
+        except SWFResponseError:
+            logging.warning("Could not register activity: %s %s",
+                            name, version, exc_info=1)
+            return False
+        return True
 
     def poll_activity(self):
         """ Poll for a new activity task.
@@ -266,7 +274,7 @@ class SWFClient(object):
                 return poll(self.domain, self.task_list)
             except (IOError, SWFResponseError):
                 logging.warning("Unknown error when pulling activities: %s %s",
-                                self.domain, self.task_list)
+                                self.domain, self.task_list, exc_info=1)
 
     def complete_activity(self, token, result):
         """ Signals the successful completion of an activity.
@@ -279,7 +287,8 @@ class SWFClient(object):
             self.client.respond_activity_task_completed(token, result)
             logging.info("Completed activity: %s %s", token, result)
         except SWFResponseError:
-            logging.warning("Cannot complete activity: %s", token)
+            logging.warning("Could not complete activity: %s",
+                            token, exc_info=1)
             return False
         return True
 
@@ -293,7 +302,8 @@ class SWFClient(object):
             self.client.respond_activity_task_failed(token, reason=reason)
             logging.info("Terminated activity: %s %s", token, reason)
         except SWFResponseError:
-            logging.warning("Cannot terminate activity: %s", token)
+            logging.warning("Could not terminate activity: %s",
+                            token, exc_info=1)
             return False
         return True
 
@@ -303,14 +313,15 @@ class SWFClient(object):
 
         Returns a boolean indicating the success of the operation or whether
         the heartbeat exceeded the time it should have taken to report activity
-        progress.
+        progress. In the latter case the activity execution should be stopped.
 
         """
         try:
             self.client.record_activity_task_heartbeat(token)
             logging.info("Sent activity heartbeat: %s", token)
         except SWFResponseError:
-            logging.warning("Error when sending activity heartbeat: %s", token)
+            logging.warning("Error when sending activity heartbeat: %s",
+                            token, exc_info=1)
             return False
         return True
 
@@ -329,11 +340,10 @@ class SWFClient(object):
         """ Starts the workflow identified by *name* and *version* with the
         given *input*.
 
-        Returns the ``workflow_id`` that can be used to uniquely
-        identify the workflow execution within a domain. If starting the
-        execution encounters an error, ``None`` is returned.
-        The returned ``workflow_id`` is used to specify the workflow execution
-        when calling :meth:`flowy.client.SWFClient.terminate_workflow`.
+        Returns the ``run_id`` that can be used to uniquely identify the
+        workflow execution within a domain. If starting the execution
+        encounters an error, ``None`` is returned.  The returned ``run_id`` can
+        be used when calling :meth:`flowy.client.SWFClient.terminate_workflow`.
 
         """
         try:
@@ -343,6 +353,8 @@ class SWFClient(object):
                                                      task_list=self.task_list,
                                                      input=input)
         except SWFResponseError:
+            logging.warning("Could not start workflow: %s %s",
+                            name, version, exc_info=1)
             return None
         return r['runId']
 
@@ -453,12 +465,12 @@ class Decision(object):
         the bound client's :meth:`flowy.client.SWFClient.terminate_workflow`
         method.
 
-        This method is also responsable for passing the ``workflow_id`` that
+        This method is also responsable for passing the ``run_id`` that
         identifies the workflow that terminated.
 
         """
-        workflow_id = self._api_response['workflowExecution']['workflowId']
-        return self.client.terminate_workflow(workflow_id, reason)
+        run_id = self._api_response['workflowExecution']['workflowId']
+        return self.client.terminate_workflow(run_id, reason)
 
     def any_activity_running(self):
         """ Checks whether there are any ``activities`` running.
@@ -537,7 +549,7 @@ class Decision(object):
                 )
                 self.input = initial_state['input']
             except (ValueError, KeyError):
-                logging.critical("Cannot load context: %s" % self._context)
+                logging.critical("Could not load context: %s" % self._context)
                 exit(1)
 
     def _serialize_context(self):
