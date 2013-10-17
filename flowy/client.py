@@ -364,8 +364,8 @@ class Decision(object):
     bound *client*.
 
     Initializing this class will block the current execution thread until
-    a ``decision`` will be polled. It is also responsable for managing the
-    ``execution context``.
+    a decision will be polled. It is also responsible for managing the
+    execution context.
 
     """
     def __init__(self, client):
@@ -395,7 +395,7 @@ class Decision(object):
 
     @property
     def name(self):
-        """ The name of the ``workflow type`` defined together with
+        """ The name of the workflow type defined together with
         :meth:`flowy.client.Decision.version`.
 
         """
@@ -403,7 +403,7 @@ class Decision(object):
 
     @property
     def version(self):
-        """ The version of the ``workflow type`` defined together with
+        """ The version of the workflow type defined together with
         :meth:`flowy.client.Decision.name`.
 
         """
@@ -443,7 +443,7 @@ class Decision(object):
         """ Schedule all queued activities using the bound client's
         :meth:`flowy.client.SWFClient.schedule_activities` method.
 
-        This method is also responsable for passing the ``token`` that
+        This method is also responsible for passing the ``token`` that
         identifies the workflow the activities will be scheduled within.
 
         """
