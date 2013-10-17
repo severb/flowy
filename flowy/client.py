@@ -543,30 +543,26 @@ class ActivityResponse(object):
         return self._api_response['taskToken']
 
 
-class ActivityLoop(object):
-    def __init__(self, client):
-        self.client = client
-        self.activities = {}
+class ActivityClient(object):
+    def __init__(self):
+        self._activities = {}
+        self._register_queue = []
 
-    def register(
-        self, name, version, activity_runner,
-        heartbeat=60,
-        schedule_to_close=420,
-        schedule_to_start=120,
-        start_to_close=300,
-        doc=None
-    ):
+    def register(self, name, version, activity_runner,
+                 heartbeat=60, schedule_to_close=420, schedule_to_start=120,
+                 start_to_close=300, doc=None):
         # All versions are converted to string in SWF and that's how we should
         # store them too in order to be able to query for them
-        self.activities[(name, str(version))] = activity_runner
-        self.client.register_activity(
-            name, version, activity_runner, heartbeat,
-            schedule_to_close, schedule_to_start, start_to_close, doc
-        )
+        self._activities[(name, str(version))] = activity_runner
+        self._register_queue.append((name, version, activity_runner, heartbeat,
+                                     schedule_to_close, schedule_to_start,
+                                     start_to_close, doc))
 
-    def start(self):
+    def start(self, client):
+        for args in self._register_queue:
+            client.register_activity(*args)
         while 1:
-            response = self.client.request_activity()
+            response = client.request_activity()
             logging.info("Processing activity: %s %s",
                          response.name, response.version)
             activity_runner = self._query(response.name, response.version)
@@ -580,26 +576,6 @@ class ActivityLoop(object):
                 response.terminate(e.message)
             else:
                 response.complete(result)
-
-    def _query(self, name, version):
-        # XXX: if we can't resolve this activity log the error and continue
-        return self.activities.get((name, version))
-
-
-class ActivityClient(object):
-    def __init__(self, loop):
-        self.loop = loop
-
-    @classmethod
-    def for_domain(cls, domain, task_list):
-        client = SWFClient(domain, task_list)
-        loop = ActivityLoop(client)
-        return cls(loop)
-
-    @classmethod
-    def from_client(cls, client):
-        loop = ActivityLoop(client)
-        return cls(loop)
 
     def __call__(self, name, version, *args, **kwargs):
         version = str(version)
@@ -617,16 +593,16 @@ class ActivityClient(object):
 
         def wrapper(activity):
             r_kwargs['doc'] = activity.__doc__.strip()
-            self.loop.register(
+            self.register(
                 name, version, activity(*args, **kwargs), **r_kwargs
             )
             return activity
 
         return wrapper
 
-    def start(self):
-        logging.info("Starting activity client loop...")
-        self.loop.start()
+    def _query(self, name, version):
+        # XXX: if we can't resolve this activity log the error and continue
+        return self._activities.get((name, version))
 
 
 def _str_or_none(maybe_none):
