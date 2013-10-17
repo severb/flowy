@@ -605,6 +605,9 @@ class ActivityClient(object):
         return self._activities.get((name, version))
 
 
+activity_client = ActivityClient()
+
+
 def _str_or_none(maybe_none):
     if maybe_none is not None:
         return str(maybe_none)
