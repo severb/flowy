@@ -179,7 +179,7 @@ class SWFClient(object):
     def poll_decision(self, next_page_token=None):
         """ Poll for a new decision task.
 
-        Blocks until a decision is available in the task list bounded to this
+        Blocks until a decision is available in the task list bound to this
         client. In case of larger responses *next_page_token* can be used to
         retrieve paginated decisions.
 
@@ -197,7 +197,7 @@ class SWFClient(object):
         """ Get the next available decision.
 
         Returns the next :class:`flowy.client.Decision` instance available in
-        the task list bounded to this client. Because instantiating a
+        the task list bound to this client. Because instantiating a
         ``Decision`` blocks until a decision is available, the same is true for
         this method.
 
@@ -264,7 +264,7 @@ class SWFClient(object):
     def poll_activity(self):
         """ Poll for a new activity task.
 
-        Blocks until an activity is available in the task list bounded to this
+        Blocks until an activity is available in the task list bound to this
         client.
 
         """
@@ -329,7 +329,7 @@ class SWFClient(object):
         """ Get the next available activity.
 
         Returns the next :class:`flowy.client.ActivityResponse` instance
-        available in the task list bounded to this client. Because
+        available in the task list bound to this client. Because
         instantiating an ``ActivityResponse`` blocks until an activity is
         available, the same is true for this method.
 
@@ -422,10 +422,10 @@ class Decision(object):
         This method also initializes the internal retry counter with a default
         value or the one specified with *retries*. The aforementioned attribute
         is used in conjunction with :meth:`flowy.client.Decision.should_retry`
-        in order to determine whether an ``activity`` should be rescheduled.
-        The total number of runs an ``activity`` will perform is the initial
+        in order to determine whether an activity should be rescheduled.
+        The total number of runs an activity will perform is the initial
         run plus the number of retries. Whenever an activity times out, the
-        number of retries associated with that ``activity`` is decremented by
+        number of retries associated with that activity is decremented by
         1, until it reaches 0.
 
         """
@@ -473,11 +473,11 @@ class Decision(object):
         return self.client.terminate_workflow(run_id, reason)
 
     def any_activity_running(self):
-        """ Checks whether there are any ``activities`` running.
+        """ Checks whether there are any activities running.
 
-        Any ``activities`` that have been scheduled but not yet completed are
+        Any activities that have been scheduled but not yet completed are
         considered to be running.  Returns a boolean indicating if there are
-        any ``activities`` with the aforementioned property.
+        any activities with the aforementioned property.
 
         """
         return bool(self._scheduled)
@@ -487,19 +487,30 @@ class Decision(object):
         return call_id in self._scheduled
 
     def activity_result(self, call_id, default=None):
-        """ Return the result for the ``activity`` identified by *call_id*
+        """ Return the result for the activity identified by *call_id*
         with an optional *default* value.
 
         """
         return self._results.get(call_id, default)
 
     def activity_error(self, call_id, default=None):
+        """ Return the reason why the activity identified by *call_id* failed
+        or a *default* one if no such reason is found.
+
+        """
         return self._with_errors.get(call_id, default)
 
     def is_activity_timedout(self, call_id):
+        """ Check whether the activity identified by *call_id* timed out. """
         return call_id in self._timed_out
 
     def should_retry(self, call_id):
+        """ Check whether the activity identified by *call_id* should be
+        retried.
+
+        When the retry counter of an activity reaches 0, is no longer eligible
+        for any retries.
+        """
         return self._retries[call_id] > 0
 
     def _ActivityTaskScheduled(self, event):
