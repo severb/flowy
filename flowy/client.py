@@ -114,7 +114,7 @@ class SWFClient(object):
         """ Schedules all queued activities.
 
         All activities previously queued by :meth:`SWFClient.queue_activity`
-        will be scheduled in the context of the workflow identified by *token*.
+        will be scheduled within the workflow identified by *token*.
         An optional textual *context* can be set and will be available in the
         workflow history.
         Returns a boolean indicating the success of the operation. On success
@@ -194,7 +194,7 @@ class SWFClient(object):
 
         Returns the next :class:`flowy.client.Decision` instance available in
         the task list bounded to this client. Because instantiating a
-        *Decision* blocks until a decision is available, the same is true for
+        ``Decision`` blocks until a decision is available, the same is true for
         this method.
 
         """
@@ -301,7 +301,9 @@ class SWFClient(object):
         """ Report that the activity identified by *token* is still making
         progress.
 
-        Returns a boolean indicating the success of the operation.
+        Returns a boolean indicating the success of the operation or whether
+        the heartbeat exceeded the time it should have taken to report activity
+        progress.
 
         """
         try:
@@ -313,36 +315,47 @@ class SWFClient(object):
         return True
 
     def next_activity(self):
-        """
-        Get the next available activity.
+        """ Get the next available activity.
 
         Returns the next :class:`flowy.client.ActivityResponse` instance
         available in the task list bounded to this client. Because
-        instantiating an *ActivityResponse* blocks until an activity is
+        instantiating an ``ActivityResponse`` blocks until an activity is
         available, the same is true for this method.
 
         """
-
         return ActivityResponse(self)
 
     def start_workflow(self, name, version, input):
         """ Starts the workflow identified by *name* and *version* with the
         given *input*.
 
-        Returns a boolean indicating the success of the operation.
+        Returns the ``workflow_id`` that can be used to uniquely
+        identify the workflow execution within a domain. If starting the
+        execution encounters an error, ``None`` is returned.
+        The returned ``workflow_id`` is used to specify the workflow execution
+        when calling :meth:`flowy.client.SWFClient.terminate_workflow`.
+
         """
         try:
-            self.client.start_workflow_execution(self.domain,
-                                                 str(uuid.uuid4()),
-                                                 name, str(version),
-                                                 task_list=self.task_list,
-                                                 input=input)
+            r = self.client.start_workflow_execution(self.domain,
+                                                     str(uuid.uuid4()),
+                                                     name, str(version),
+                                                     task_list=self.task_list,
+                                                     input=input)
         except SWFResponseError:
-            return False
-        return True
+            return None
+        return r['runId']
 
 
 class Decision(object):
+    """ An object that works with the workflow execution history through the
+    bound *client*.
+
+    Initializing this class will block the current execution thread until
+    a ``decision`` will be polled. It is also responsable for managing the
+    ``execution context``.
+
+    """
     def __init__(self, client):
         self.client = client
         self._event_to_call_id = {}
@@ -370,21 +383,40 @@ class Decision(object):
 
     @property
     def name(self):
+        """ The name of the ``workflow type`` defined together with
+        :meth:`flowy.client.Decision.version`.
+
+        """
         return self._api_response['workflowType']['name']
 
     @property
     def version(self):
+        """ The version of the ``workflow type`` defined together with
+        :meth:`flowy.client.Decision.name`.
+
+        """
         return self._api_response['workflowType']['version']
 
-    def queue_activity(
-        self, call_id, name, version, input,
-        heartbeat=None,
-        schedule_to_close=None,
-        schedule_to_start=None,
-        start_to_close=None,
-        task_list=None,
-        retries=3
-    ):
+    def queue_activity(self, call_id, name, version, input,
+                       heartbeat=None,
+                       schedule_to_close=None,
+                       schedule_to_start=None,
+                       start_to_close=None,
+                       task_list=None,
+                       retries=3):
+        """ Queue an activity using the bound client's
+        :meth:`flowy.client.SWFClient.queue_activity` method.
+
+        This method also initializes the internal retry counter with a default
+        value or the one specified with *retries*. The aforementioned attribute
+        is used in conjunction with :meth:`flowy.client.Decision.should_retry`
+        in order to determine whether an ``activity`` should be rescheduled.
+        The total number of runs an ``activity`` will perform is the initial
+        run plus the number of retries. Whenever an activity times out, the
+        number of retries associated with that ``activity`` is decremented by
+        1, until it reaches 0.
+
+        """
         self.client.queue_activity(
             call_id, name, version, input,
             heartbeat=heartbeat,
@@ -396,22 +428,57 @@ class Decision(object):
         self._retries.setdefault(call_id, retries + 1)
 
     def schedule_activities(self):
+        """ Schedule all queued activities using the bound client's
+        :meth:`flowy.client.SWFClient.schedule_activities` method.
+
+        This method is also responsable for passing the ``token`` that
+        identifies the workflow the activities will be scheduled within.
+
+        """
         self.client.schedule_activities(self._token, self._serialize_context())
 
     def complete_workflow(self, result):
+        """ Signal the successful completion of the workflow with a given
+        *result* using the bound client's
+        :meth:`flowy.client.SWFClient.complete_workflow` method.
+
+        This method is also responsable for passing the ``token`` that
+        identifies the workflow that successfully completed.
+
+        """
         return self.client.complete_workflow(self._token, result)
 
     def terminate_workflow(self, reason):
+        """ Signal the termination of the workflow with a given *reason* using
+        the bound client's :meth:`flowy.client.SWFClient.terminate_workflow`
+        method.
+
+        This method is also responsable for passing the ``workflow_id`` that
+        identifies the workflow that terminated.
+
+        """
         workflow_id = self._api_response['workflowExecution']['workflowId']
         return self.client.terminate_workflow(workflow_id, reason)
 
     def any_activity_running(self):
+        """ Checks whether there are any ``activities`` running.
+
+        Any ``activities`` that have been scheduled but not yet completed are
+        considered to be running.  Returns a boolean indicating if there are
+        any ``activities`` with the aforementioned property.
+
+        """
         return bool(self._scheduled)
 
     def is_activity_scheduled(self, call_id):
+        """ Checks whether the activity with *call_id* is scheduled. """
         return call_id in self._scheduled
 
     def activity_result(self, call_id, default=None):
+        """ Return the result for the ``activity`` identified by *call_id*
+        with an optional *default* value.
+
+        """
         return self._results.get(call_id, default)
 
     def activity_error(self, call_id, default=None):
@@ -537,13 +604,11 @@ class WorkflowLoop(object):
         self.client = client
         self.workflows = {}
 
-    def register(
-        self, name, version, workflow_runner,
-        execution_start_to_close=3600,
-        task_start_to_close=60,
-        child_policy='TERMINATE',
-        doc=None
-    ):
+    def register(self, name, version, workflow_runner,
+                 execution_start_to_close=3600,
+                 task_start_to_close=60,
+                 child_policy='TERMINATE',
+                 doc=None):
         self.workflows[(name, str(version))] = workflow_runner
         return self.client.register_workflow(
             name,
@@ -688,14 +753,12 @@ class ActivityLoop(object):
         self.client = client
         self.activities = {}
 
-    def register(
-        self, name, version, activity_runner,
-        heartbeat=60,
-        schedule_to_close=420,
-        schedule_to_start=120,
-        start_to_close=300,
-        doc=None
-    ):
+    def register(self, name, version, activity_runner,
+                 heartbeat=60,
+                 schedule_to_close=420,
+                 schedule_to_start=120,
+                 start_to_close=300,
+                 doc=None):
         # All versions are converted to string in SWF and that's how we should
         # store them too in order to be able to query for them
         self.activities[(name, str(version))] = activity_runner
@@ -759,7 +822,7 @@ class ActivityClient(object):
             r_kwargs['doc'] = activity.__doc__.strip()
             if not self.loop.register(name, version, activity(*args, **kwargs),
                                       **r_kwargs):
-                exit(1)
+                sys.exit(1)
             return activity
 
         return wrapper
