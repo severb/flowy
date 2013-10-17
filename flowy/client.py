@@ -38,10 +38,10 @@ class SWFClient(object):
         If a workflow with the same *name* and *version* is already registered,
         this method returns a boolean indicating whether the registered
         workflow is compatible. A compatible workflow is a workflow that was
-        registered using the same default values. The total workflow running
-        time can be specified in seconds using *execution_start_to_close* and a
-        specific decision task runtime can be limited by setting
-        *task_start_to_close*.
+        registered using the same default values. The default total workflow
+        running time can be specified in seconds using
+        *execution_start_to_close* and a specific decision task runtime can be
+        limited by setting *task_start_to_close*.
 
         """
         version = str(version)
@@ -72,7 +72,9 @@ class SWFClient(object):
                                  "has different defaults: %s %s",
                                  name, version)
                 return False
-            return True
+        except SWFResponseError:
+            return False
+        return True
 
     def queue_activity(self, call_id, name, version, input,
                        heartbeat=None,
@@ -756,7 +758,8 @@ class ActivityClient(object):
         def wrapper(activity):
             r_kwargs['doc'] = activity.__doc__.strip()
             if not self.loop.register(name, version, activity(*args, **kwargs),
-                                      **r_kwargs)
+                                      **r_kwargs):
+                exit(1)
             return activity
 
         return wrapper
