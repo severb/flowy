@@ -97,7 +97,7 @@ class SWFClient(object):
         The activity options specified here, if any, have a higher priority
         than the ones used when the activity was registered.
         For more information about the various arguments see
-        :meth:`SWFClient.register_activity'.
+        :meth:`SWFClient.register_activity`.
 
         """
         self._scheduled_activities.append((
