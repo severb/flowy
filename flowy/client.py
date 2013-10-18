@@ -331,7 +331,7 @@ class WorkflowResponse(object):
                 self.input = initial_state['input']
             except (ValueError, KeyError):
                 logging.critical("Cannot load context: %s" % self._context)
-                exit(1)
+                sys.exit(1)
 
     def _serialize_context(self):
         return json.dumps({
@@ -393,31 +393,25 @@ class WorkflowResponse(object):
 
 
 class WorkflowLoop(object):
-    def __init__(self, client):
-        self.client = client
-        self.workflows = {}
+    def __init__(self):
+        self._workflows = {}
+        self._register_queue = []
 
-    def register(
-        self, name, version, workflow_runner,
-        execution_start_to_close=3600,
-        task_start_to_close=60,
-        child_policy='TERMINATE',
-        doc=None
-    ):
-        self.workflows[(name, str(version))] = workflow_runner
-        self.client.register_workflow(
-            name,
-            version,
-            workflow_runner,
-            execution_start_to_close,
-            task_start_to_close,
-            child_policy,
-            doc
-        )
+    def register(self, name, version, workflow_runner,
+                 execution_start_to_close=3600, task_start_to_close=60,
+                 child_policy='TERMINATE', doc=None):
+        self._workflows[(name, str(version))] = workflow_runner
+        self._register_queue.append((name, version, workflow_runner,
+                                     execution_start_to_close,
+                                     task_start_to_close,
+                                     child_policy, doc))
 
-    def start(self):
+    def start(self, client):
+        for args in self._register_queue:
+            if not client.register_workflow(*args):
+                sys.exit(1)
         while 1:
-            response = self.client.request_workflow()
+            response = client.request_workflow()
             logging.info("Processing workflow: %s %s",
                          response.name, response.version)
             workflow_runner = self._query(response.name, response.version)
@@ -455,26 +449,6 @@ class WorkflowLoop(object):
                 else:
                     response.complete_workflow(result)
 
-    def _query(self, name, version):
-        return self.workflows.get((name, version))
-
-
-class WorkflowClient(object):
-    def __init__(self, loop, client):
-        self.loop = loop
-        self.client = client
-
-    @classmethod
-    def for_domain(cls, domain, task_list):
-        client = SWFClient(domain, task_list)
-        loop = WorkflowLoop(client)
-        return cls(loop, client)
-
-    @classmethod
-    def from_client(cls, client):
-        loop = WorkflowLoop(client)
-        return cls(loop, client)
-
     def __call__(self, name, version, *args, **kwargs):
         optional_args = [
             'execution_start_to_close',
@@ -489,9 +463,7 @@ class WorkflowClient(object):
 
         def wrapper(workflow):
             r_kwargs['doc'] = workflow.__doc__.strip()
-            self.loop.register(
-                name, version, workflow(*args, **kwargs), **r_kwargs
-            )
+            self.register(name, version, workflow(*args, **kwargs), **r_kwargs)
             return workflow
 
         return wrapper
@@ -504,9 +476,8 @@ class WorkflowClient(object):
     def serialize_workflow_arguments(*args, **kwargs):
         return json.dumps({"args": args, "kwargs": kwargs})
 
-    def start(self):
-        logging.info("Starting workflow client loop...")
-        self.loop.start()
+    def _query(self, name, version):
+        return self._workflows.get((name, version))
 
 
 class ActivityResponse(object):
@@ -564,7 +535,8 @@ class ActivityClient(object):
 
     def start(self, client):
         for args in self._register_queue:
-            client.register_activity(*args)
+            if not client.register_activity(*args):
+                sys.exit(1)
         while 1:
             response = client.request_activity()
             logging.info("Processing activity: %s %s",
