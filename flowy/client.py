@@ -130,10 +130,10 @@ class SWFClient(object):
         data = d._data
         try:
             self.client.respond_decision_task_completed(token, data, context)
-            self._scheduled_activities = []
         except SWFResponseError:
             logging.warning("Could not send decisions: %s", token, exc_info=1)
             return False
+        self._scheduled_activities = []
         return True
 
     def complete_workflow(self, token, result):
@@ -217,7 +217,7 @@ class SWFClient(object):
         registered activity is compatible. A compatible activity is an
         activity that was registered using the same default values.
         The allowed running time can be specified in seconds using
-        *start_to_close*, the allowed time from the moment it was scheduled,
+        *start_to_close*, the allowed time from the moment it was scheduled
         to the moment it finished can be specified using *schedule_to_close*
         and the time it can spend in the queue before the processing itself
         starts can be specified using *schedule_to_start*.
@@ -644,7 +644,7 @@ class WorkflowClient(object):
             if not client.register_workflow(*args):
                 sys.exit(1)
         while 1:
-            response = client.request_workflow()
+            decision = client.next_decision()
             logging.info("Processing workflow: %s %s",
                          decision.name, decision.version)
             workflow_runner = self._query(decision.name, decision.version)
