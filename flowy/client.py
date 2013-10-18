@@ -775,6 +775,18 @@ class ActivityResponse(object):
 
 
 class ActivityClient(object):
+    """ The object responsable for managing the activity runs.
+
+    Activities are registered either manually with the
+    :meth:`flowy.client.ActivityClient.register` method or via the
+    :meth:`flowy.client.ActivityClient.__call__` decorator.  When the client is
+    started using the :meth:`flowy.client.ActivityClient.start` method, it
+    starts polling for activities that need to be run, matching them based on
+    their name and version, and calling
+    :meth:`flowy.activity.ActivityProxy.call` for the actual execution of the
+    activity.
+
+    """
     def __init__(self):
         self._activities = {}
         self._register_queue = []
