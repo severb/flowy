@@ -845,6 +845,7 @@ class ActivityClient(object):
         return self._activities.get((name, version))
 
 
+workflow_client = WorkflowClient()
 activity_client = ActivityClient()
 
 
