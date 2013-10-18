@@ -569,8 +569,8 @@ class Decision(object):
                 )
                 self.input = initial_state['input']
             except (ValueError, KeyError):
-                logging.critical("Cannot load context: %s" % self._context)
-                sys.exit(1)
+                logging.critical("Could not load context: %s" % self._context)
+                exit(1)
 
     def _serialize_context(self):
         return json.dumps({
@@ -648,7 +648,7 @@ class WorkflowClient(object):
     def start(self, client):
         for args in self._register_queue:
             if not client.register_workflow(*args):
-                sys.exit(1)
+                exit(1)
         while 1:
             decision = client.next_decision()
             logging.info("Processing workflow: %s %s",
@@ -797,9 +797,16 @@ class ActivityClient(object):
         return self.start(client)
 
     def start(self, client):
+        """ Starts the ActivityClient with the given
+        :class:`flowy.client.SWFClient` *client*.
+
+        Registers all the activities in the registration queue and starts the
+        poll-execute-complete activity loop.
+
+        """
         for args in self._register_queue:
             if not client.register_activity(*args):
-                sys.exit(1)
+                exit(1)
         while 1:
             response = client.request_activity()
             logging.info("Processing activity: %s %s",
@@ -851,6 +858,7 @@ class ActivityClient(object):
         return self._activities.get((name, version))
 
 
+workflow_client = WorkflowClient()
 activity_client = ActivityClient()
 
 
