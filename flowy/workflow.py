@@ -213,7 +213,7 @@ class ActivityProxy(object):
                         'Error when calling activity: %s' % args_error
                     )
                 placeholders = self._has_placeholders(args, kwargs)
-                scheduled = context.is_activity_scheduled(call_id)
+                scheduled = context.is_activity_running(call_id)
                 if not placeholders and not scheduled:
                     input = self.serialize_activity_input(*args, **kwargs)
                     workflow._queue_activity(
