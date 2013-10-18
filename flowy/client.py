@@ -781,10 +781,9 @@ class ActivityClient(object):
     :meth:`flowy.client.ActivityClient.register` method or via the
     :meth:`flowy.client.ActivityClient.__call__` decorator.  When the client is
     started using the :meth:`flowy.client.ActivityClient.start` method, it
-    starts polling for activities that need to be run, matching them based on
+    starts polling for activities that need to be ran, matching them based on
     their name and version, and calling
-    :meth:`flowy.activity.ActivityProxy.call` for the actual execution of the
-    activity.
+    :meth:`flowy.activity.ActivityProxy.call` for their actual execution.
 
     """
     def __init__(self):
@@ -825,6 +824,13 @@ class ActivityClient(object):
                 response.complete(result)
 
     def __call__(self, name, version, *args, **kwargs):
+        """ Decorator used for configuring and registering an
+        :class:`flowy.activity.ActivityProxy`.
+
+        The configuration options specified in the decorator have the lowest
+        priority out of all the configuration specifications.
+
+        """
         version = str(version)
         optional_args = [
             'heartbeat',
