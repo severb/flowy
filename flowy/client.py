@@ -392,7 +392,7 @@ class WorkflowResponse(object):
         return dict((int(key), value) for key, value in d.items())
 
 
-class WorkflowLoop(object):
+class WorkflowClient(object):
     def __init__(self):
         self._workflows = {}
         self._register_queue = []
