@@ -401,18 +401,10 @@ class Decision(object):
 
     @property
     def name(self):
-        """ The name of the workflow type defined together with
-        :meth:`flowy.client.Decision.version`.
-
-        """
         return self._api_response['workflowType']['name']
 
     @property
     def version(self):
-        """ The version of the workflow type defined together with
-        :meth:`flowy.client.Decision.name`.
-
-        """
         return self._api_response['workflowType']['version']
 
     def queue_activity(self, call_id, name, version, input,
@@ -476,7 +468,7 @@ class Decision(object):
     def any_activity_running(self):
         """ Checks the history for any activities running.
 
-        See :meth:`flowy.client.Decorator.is_activity_running`.
+        See :meth:`flowy.client.Decision.is_activity_running`.
 
         """
         return bool(self._running)
