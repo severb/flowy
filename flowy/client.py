@@ -793,6 +793,15 @@ class ActivityClient(object):
     def register(self, name, version, activity_runner,
                  heartbeat=60, schedule_to_close=420, schedule_to_start=120,
                  start_to_close=300, doc=None):
+        """ Register an activity with the given *name* and *value* and bind
+        it to an *activity_runner*.
+
+        Internally the activity is added to a registration queue and the actual
+        registration of it will happen when calling
+        :meth:`flowy.client.ActivityClient.start` or
+        :meth:`flowy.client.ActivityClient.start_on`.
+
+        """
         # All versions are converted to string in SWF and that's how we should
         # store them too in order to be able to query for them
         self._activities[(name, str(version))] = activity_runner
@@ -801,6 +810,10 @@ class ActivityClient(object):
                                      start_to_close, doc))
 
     def start_on(self, domain, task_list, client=None):
+        """ Start a new ``ActivityClient`` in the given *domain* and
+        *task_list*, with an optional BOTO *client*.
+
+        """
         client = SWFClient(domain, task_list, client)
         return self.start(client)
 
