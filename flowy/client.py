@@ -791,7 +791,8 @@ class ActivityClient(object):
         return self.start(client)
 
     def start(self, client):
-        """ Starts the ActivityClient with the given BOTO *client*.
+        """ Starts the ActivityClient with the given
+        :class:`flowy.client.SWFClient` *client*.
 
         Registers all the activities in the registration queue and starts the
         poll-execute-complete activity loop.
