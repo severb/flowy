@@ -548,22 +548,18 @@ class Decision(object):
 
     def _restore_context(self):
         if self._context is not None:
-            try:
-                initial_state = json.loads(self._context)
-                self._event_to_call_id = self._fix_keys(
-                    initial_state['event_to_call_id']
-                )
-                self._retries = self._fix_keys(initial_state['retries'])
-                self._running = set(initial_state['scheduled'])
-                self._results = self._fix_keys(initial_state['results'])
-                self._timed_out = set(initial_state['timed_out'])
-                self._with_errors = self._fix_keys(
-                    initial_state['with_errors']
-                )
-                self.input = initial_state['input']
-            except (ValueError, KeyError):
-                logging.critical("Could not load context: %s" % self._context)
-                raise
+            initial_state = json.loads(self._context)
+            self._event_to_call_id = self._fix_keys(
+                initial_state['event_to_call_id']
+            )
+            self._retries = self._fix_keys(initial_state['retries'])
+            self._running = set(initial_state['scheduled'])
+            self._results = self._fix_keys(initial_state['results'])
+            self._timed_out = set(initial_state['timed_out'])
+            self._with_errors = self._fix_keys(
+                initial_state['with_errors']
+            )
+            self.input = initial_state['input']
 
     def _serialize_context(self):
         return json.dumps({
