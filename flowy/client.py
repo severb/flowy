@@ -754,16 +754,22 @@ class ActivityClient(object):
     """ The object responsable for managing the activity runs.
 
     Activities are registered either manually with the
-    :meth:`ActivityClient.register` method or using an instance of
-    this class as a decorator::
+    :meth:`ActivityClient.register` method or using an instance of this class
+    as a decorator. In addition any arguments used for registration can be
+    passed to the decorator as keyword arguments - additional arguments not
+    used for registration will be used to instantiate the ``Activity``
+    implementation::
 
-        client = ActivityClient()
-
-        @client(name='MyActivity', version=1)
-        class MyActivity(Activity):
-
-            def run(self):
-                pass
+    >>> client = ActivityClient()
+    >>> 
+    >>> @client(name='MyActivity', version=1, heartbeat=120, x=1, y=2)
+    >>> class MyActivity(Activity):
+    >>> 
+    >>>    def __init__(self, x, y=1):
+    >>>        pass
+    >>> 
+    >>>    def run(self):
+    >>>        pass
 
     When the client is started using the
     :meth:`ActivityClient.start` method, it starts the main loop
