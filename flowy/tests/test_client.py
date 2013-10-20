@@ -3,6 +3,7 @@ import unittest
 
 class DC(object):
     error = None
+    describe_error = None
 
     def __init__(self):
         self.registered = []
@@ -18,6 +19,8 @@ class DC(object):
                                 child_policy, doc))
 
     def describe_workflow_type(self, domain, name, version):
+        if self.describe_error is not None:
+            raise self.describe_error
         return {'configuration': {
             'defaultExecutionStartToCloseTimeout': '12',
             'defaultTaskStartToCloseTimeout': '13',
@@ -26,7 +29,7 @@ class DC(object):
         }}
 
 
-class SWFClientTest(unittest.TestCase):
+class SWFClientWorkflowTest(unittest.TestCase):
 
     def setUp(self):
         import logging
@@ -68,8 +71,8 @@ class SWFClientTest(unittest.TestCase):
 
     def test_registration_bad_defaults(self):
         dummy_client = DC()
-        from boto.swf.exceptions import SWFResponseError
-        dummy_client.error = SWFResponseError(None, None)
+        from boto.swf.exceptions import SWFTypeAlreadyExistsError
+        dummy_client.error = SWFTypeAlreadyExistsError(None, None)
         c = self._get_uut(dummy_client)
         self.assertFalse(
             c.register_workflow(name='name', version=3,
@@ -105,6 +108,20 @@ class SWFClientTest(unittest.TestCase):
         dummy_client = DC()
         from boto.swf.exceptions import SWFResponseError
         dummy_client.error = SWFResponseError(None, None)
+        c = self._get_uut(dummy_client)
+        r = c.register_workflow(name='name', version=3,
+                                execution_start_to_close=12,
+                                task_start_to_close=13,
+                                child_policy='TERMINATE',
+                                doc='documentation')
+        self.assertFalse(r)
+
+    def test_registration_defaults_check_fails(self):
+        dummy_client = DC()
+        from boto.swf.exceptions import SWFTypeAlreadyExistsError
+        from boto.swf.exceptions import SWFResponseError
+        dummy_client.error = SWFTypeAlreadyExistsError(None, None)
+        dummy_client.describe_error = SWFResponseError(None, None)
         c = self._get_uut(dummy_client)
         r = c.register_workflow(name='name', version=3,
                                 execution_start_to_close=12,

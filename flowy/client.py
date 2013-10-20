@@ -56,8 +56,13 @@ class SWFClient(object):
         except SWFTypeAlreadyExistsError:
             logging.warning("Workflow already registered: %s %s",
                             name, version)
-            reg_w = self.client.describe_workflow_type(self.domain, name,
-                                                       version)
+            try:
+                reg_w = self.client.describe_workflow_type(self.domain, name,
+                                                           version)
+            except SWFResponseError:
+                logging.warning("Could not check workflow defaults: %s %s",
+                                name, version)
+                return False
             conf = reg_w['configuration']
             reg_estc = conf['defaultExecutionStartToCloseTimeout']
             reg_tstc = conf['defaultTaskStartToCloseTimeout']
@@ -68,9 +73,9 @@ class SWFClient(object):
                     or reg_tstc != task_start_to_close
                     or reg_tl != self.task_list
                     or reg_cp != child_policy):
-                logging.critical("Registered workflow "
-                                 "has different defaults: %s %s",
-                                 name, version)
+                logging.warning("Registered workflow "
+                                "has different defaults: %s %s",
+                                name, version)
                 return False
         except SWFResponseError:
             logging.warning("Could not register workflow: %s %s",
@@ -248,9 +253,9 @@ class SWFClient(object):
                     or reg_tschtc != schedule_to_close
                     or reg_hb != heartbeat
                     or reg_tl != self.task_list):
-                logging.critical("Registered activity "
-                                 "has different defaults: %s %s",
-                                 name, version)
+                logging.waring("Registered activity "
+                               "has different defaults: %s %s",
+                               name, version)
                 return False
         except SWFResponseError:
             logging.warning("Could not register activity: %s %s",
