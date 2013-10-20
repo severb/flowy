@@ -2,20 +2,17 @@ import unittest
 
 
 class DC(object):
-    def __init__(self, err_type=0):
-        self.err_type = err_type
+    error = None
+
+    def __init__(self):
         self.registered = []
 
     def register_workflow_type(self, domain, name, version, task_list,
                                child_policy='TERMINATE',
                                execution_start_to_close=30,
                                task_start_to_close=20, doc=None):
-        if self.err_type == 1:
-            from boto.swf.exceptions import SWFTypeAlreadyExistsError
-            raise SWFTypeAlreadyExistsError(None, None)
-        if self.err_type == 2:
-            from boto.swf.exceptions import SWFResponseError
-            raise SWFResponseError(None, None)
+        if self.error is not None:
+            raise self.error
         self.registered.append((domain, name, version, task_list,
                                 execution_start_to_close, task_start_to_close,
                                 child_policy, doc))
@@ -30,6 +27,14 @@ class DC(object):
 
 
 class SWFClientTest(unittest.TestCase):
+
+    def setUp(self):
+        import logging
+        logging.root.disabled = True
+
+    def tearDown(self):
+        import logging
+        logging.root.disabled = False
 
     def _get_uut(self, client, domain='domain', task_list='tasklist'):
         from flowy.client import SWFClient
@@ -50,7 +55,9 @@ class SWFClientTest(unittest.TestCase):
                            'TERMINATE', 'documentation'))
 
     def test_already_registered(self):
-        dummy_client = DC(err_type=1)
+        dummy_client = DC()
+        from boto.swf.exceptions import SWFTypeAlreadyExistsError
+        dummy_client.error = SWFTypeAlreadyExistsError(None, None)
         c = self._get_uut(dummy_client, domain='dom', task_list='taskl')
         r = c.register_workflow(name='name', version=3,
                                 execution_start_to_close=12,
@@ -60,7 +67,10 @@ class SWFClientTest(unittest.TestCase):
         self.assertTrue(r)
 
     def test_registration_bad_defaults(self):
-        c = self._get_uut(DC(err_type=1))
+        dummy_client = DC()
+        from boto.swf.exceptions import SWFResponseError
+        dummy_client.error = SWFResponseError(None, None)
+        c = self._get_uut(dummy_client)
         self.assertFalse(
             c.register_workflow(name='name', version=3,
                                 execution_start_to_close=1,
@@ -82,7 +92,7 @@ class SWFClientTest(unittest.TestCase):
                                 child_policy='BADPOLICY',
                                 doc='documentation')
         )
-        c = self._get_uut(DC(err_type=1), task_list='badlist')
+        c = self._get_uut(dummy_client, task_list='badlist')
         self.assertFalse(
             c.register_workflow(name='name', version=3,
                                 execution_start_to_close=12,
@@ -92,7 +102,10 @@ class SWFClientTest(unittest.TestCase):
         )
 
     def test_registration_unknown_error(self):
-        c = self._get_uut(DC(err_type=2))
+        dummy_client = DC()
+        from boto.swf.exceptions import SWFResponseError
+        dummy_client.error = SWFResponseError(None, None)
+        c = self._get_uut(dummy_client)
         r = c.register_workflow(name='name', version=3,
                                 execution_start_to_close=12,
                                 task_start_to_close=13,
