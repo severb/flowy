@@ -845,7 +845,6 @@ class ActivityClient(object):
         return wrapper
 
     def _query(self, name, version):
-        # XXX: if we can't resolve this activity log the error and continue
         return self._activities.get((name, version))
 
 
