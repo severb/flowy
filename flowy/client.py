@@ -369,9 +369,10 @@ class Decision(object):
     context is a persistent customisable part of the workflow execution
     history.
 
-    This class also wraps some of the :py:class:`flowy.client.SWFClient`
-    functionality and automatically forwards some of the information about the
-    workflow for which a decision is needed like the ``token`` value.
+    This class also wraps the workflow specific funtionality of
+    :py:class:`flowy.client.SWFClient` and automatically forwards some of the
+    information about the workflow for which a decision is needed like the
+    ``token`` value.
 
     """
     def __init__(self, client):
@@ -438,9 +439,12 @@ class Decision(object):
 
         This method is also responsible for passing the ``token`` that
         identifies the workflow the activities will be scheduled within.
+        Returns a boolean indicating the success of the operation. On success
+        the internal collection of scheduled activities will be cleared.
 
         """
-        self.client.schedule_activities(self._token, self._serialize_context())
+        return self.client.schedule_activities(self._token,
+                                               self._serialize_context())
 
     def complete_workflow(self, result):
         """ Signal the successful completion of the workflow with a given
@@ -449,7 +453,7 @@ class Decision(object):
 
         This method is also responsable for passing the ``token`` that
         identifies the workflow that successfully completed.
-
+        Returns a boolean indicating the success of the operation.
         """
         return self.client.complete_workflow(self._token, result)
 
@@ -460,6 +464,7 @@ class Decision(object):
 
         This method is also responsable for passing the ``run_id`` that
         identifies the workflow that terminated.
+        Returns a boolean indicating the success of the operation.
 
         """
         run_id = self._api_response['workflowExecution']['workflowId']
