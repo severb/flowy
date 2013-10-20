@@ -562,7 +562,7 @@ class Decision(object):
                 self.input = initial_state['input']
             except (ValueError, KeyError):
                 logging.critical("Could not load context: %s" % self._context)
-                exit(1)
+                sys.exit(1)
 
     def _serialize_context(self):
         return json.dumps({
@@ -640,7 +640,7 @@ class WorkflowClient(object):
     def start(self, client):
         for args in self._register_queue:
             if not client.register_workflow(*args):
-                exit(1)
+                sys.exit(1)
         while 1:
             decision = client.next_decision()
             logging.info("Processing workflow: %s %s",
@@ -798,7 +798,7 @@ class ActivityClient(object):
         """
         for args in self._register_queue:
             if not client.register_activity(*args):
-                exit(1)
+                sys.exit(1)
         while 1:
             response = client.request_activity()
             logging.info("Processing activity: %s %s",
