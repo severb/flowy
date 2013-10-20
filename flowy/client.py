@@ -89,15 +89,13 @@ class SWFClient(object):
         This will schedule a run of a previously registered activity with the
         specified *name* and *version*. The *call_id* is used to assign a
         custom identity to this particular queued activity run inside its own
-        workflow history.
-        The queueing is done internally, without having the client make any
-        requests yet. The actual scheduling is done by calling
-        :meth:`SWFClient.schedule_activities`.
+        workflow history. The queueing is done internally, without having the
+        client make any requests yet. The actual scheduling is done by calling
+        :meth:`schedule_activities`.
 
         The activity options specified here, if any, have a higher priority
-        than the ones used when the activity was registered.
-        For more information about the various arguments see
-        :meth:`SWFClient.register_activity`.
+        than the ones used when the activity was registered. For more
+        information about the various arguments see :meth:`register_activity`.
 
         """
         self._scheduled_activities.append((
@@ -115,8 +113,8 @@ class SWFClient(object):
     def schedule_activities(self, token, context=None):
         """ Schedules all queued activities.
 
-        All activities previously queued by :meth:`SWFClient.queue_activity`
-        will be scheduled within the workflow identified by *token*.
+        All activities previously queued by :meth:`queue_activity` will be
+        scheduled within the workflow identified by *token*.
         An optional textual *context* can be set and will be available in the
         workflow history.
         Returns a boolean indicating the success of the operation. On success
@@ -162,8 +160,8 @@ class SWFClient(object):
         *reason*. All the workflow activities will be abandoned and the final
         result won't be available.
         The *run_id* required here is the one obtained when
-        :meth:`SWFClient.start_workflow` was called.  Returns a boolean
-        indicating the success of the operation.
+        :meth:`start_workflow` was called.
+        Returns a boolean indicating the success of the operation.
 
         """
         try:
@@ -342,7 +340,7 @@ class SWFClient(object):
         Returns the ``run_id`` that can be used to uniquely identify the
         workflow execution within a domain. If starting the execution
         encounters an error, ``None`` is returned.  The returned ``run_id`` can
-        be used when calling :meth:`SWFClient.terminate_workflow`.
+        be used when calling :meth:`terminate_workflow`.
 
         """
         try:
@@ -419,7 +417,7 @@ class Decision(object):
 
         This method also sets the internal retry counter in the workflow
         history context with a default value or the one specified with
-        *retries*. See :meth:`SWFClient.should_retry`.
+        *retries*. See :meth:`should_retry`.
 
         """
         self.client.queue_activity(
@@ -472,7 +470,7 @@ class Decision(object):
     def any_activity_running(self):
         """ Checks the history for any activities running.
 
-        See :meth:`Decision.is_activity_running`.
+        See :meth:`is_activity_running`.
 
         """
         return bool(self._running)
@@ -509,10 +507,9 @@ class Decision(object):
         retried.
 
         The total number of runs an activity will perform is the initial run
-        plus the number of retries set with
-        :meth:`Decision.queue_activity`. Whenever an activity
-        times out, the number of retries associated with that activity is
-        decremented by 1, until it reaches 0. The value of this flag is
+        plus the number of retries set with :meth:`queue_activity`. Whenever an
+        activity times out, the number of retries associated with that activity
+        is decremented by 1, until it reaches 0. The value of this flag is
         persisted in the workflow context.
 
         """
@@ -752,12 +749,11 @@ class ActivityResponse(object):
 class ActivityClient(object):
     """ The object responsable for managing the activity runs.
 
-    Activities are registered either manually with the
-    :meth:`ActivityClient.register` method or using an instance of this class
-    as a decorator. In addition any arguments used for registration can be
-    passed to the decorator as keyword arguments - additional arguments not
-    used for registration will be used to instantiate the ``Activity``
-    implementation::
+    Activities are registered either manually with the :meth:`register` method
+    or using an instance of this class as a decorator. In addition any
+    arguments used for registration can be passed to the decorator as keyword
+    arguments - additional arguments not used for registration will be used to
+    instantiate the ``Activity`` implementation::
 
     >>> client = ActivityClient()
     >>> 
@@ -770,10 +766,9 @@ class ActivityClient(object):
     >>>    def run(self):
     >>>        pass
 
-    When the client is started using the
-    :meth:`ActivityClient.start` method, it starts the main loop
-    polling for activities that need to be ran, matching them based on their
-    name and version and executing them.
+    When the client is started using the :meth:`start` method, it starts the
+    main loop polling for activities that need to be ran, matching them based
+    on their name and version and executing them.
 
     """
     def __init__(self):
@@ -794,10 +789,10 @@ class ActivityClient(object):
                                      start_to_close, doc))
 
     def start_on(self, domain, task_list, client=None):
-        """ A shortcut for :meth:`ActivityClient.start`.
+        """ A shortcut for :meth:`start`.
 
-        Start a new ``ActivityClient`` main loop in the given *domain* and
-        *task_list*, with an optional :class:`boto.swf.layer1.Layer1` *client*.
+        Start the main loop in the given *domain*, *task_list* and an optional
+        :class:`boto.swf.layer1.Layer1` *client*.
 
         """
         client = SWFClient(domain, task_list, client)
@@ -808,7 +803,7 @@ class ActivityClient(object):
 
         Calling this method will  start the loop responsible for polling
         activities, matching them on the names and versions used
-        with :meth:`ActivityClient.register` and running them.
+        with :meth:`register` and running them.
 
         """
         for args in self._register_queue:
