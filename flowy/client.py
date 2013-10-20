@@ -563,7 +563,7 @@ class Decision(object):
                 self.input = initial_state['input']
             except (ValueError, KeyError):
                 logging.critical("Could not load context: %s" % self._context)
-                sys.exit(1)
+                raise
 
     def _serialize_context(self):
         return json.dumps({
