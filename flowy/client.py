@@ -196,7 +196,7 @@ class SWFClient(object):
     def next_decision(self):
         """ Get the next available decision.
 
-        Returns the next :class:`flowy.client.Decision` instance available in
+        Returns the next :class:`Decision` instance available in
         the task list bound to this client. Because instantiating a
         ``Decision`` blocks until a decision is available, the same is true for
         this method.
@@ -328,7 +328,7 @@ class SWFClient(object):
     def next_activity(self):
         """ Get the next available activity.
 
-        Returns the next :class:`flowy.client.ActivityResponse` instance
+        Returns the next :class:`ActivityResponse` instance
         available in the task list bound to this client. Because
         instantiating an ``ActivityResponse`` blocks until an activity is
         available, the same is true for this method.
@@ -343,7 +343,7 @@ class SWFClient(object):
         Returns the ``run_id`` that can be used to uniquely identify the
         workflow execution within a domain. If starting the execution
         encounters an error, ``None`` is returned.  The returned ``run_id`` can
-        be used when calling :meth:`flowy.client.SWFClient.terminate_workflow`.
+        be used when calling :meth:`SWFClient.terminate_workflow`.
 
         """
         try:
@@ -370,7 +370,7 @@ class Decision(object):
     history.
 
     This class also wraps the workflow specific funtionality of
-    :py:class:`flowy.client.SWFClient` and automatically forwards some of the
+    :py:class:`SWFClient` and automatically forwards some of the
     information about the workflow for which a decision is needed like the
     ``token`` value.
 
@@ -416,11 +416,11 @@ class Decision(object):
                        task_list=None,
                        retries=3):
         """ Queue an activity using the bound client's
-        :meth:`flowy.client.SWFClient.queue_activity` method.
+        :meth:`SWFClient.queue_activity` method.
 
         This method also sets the internal retry counter in the workflow
         history context with a default value or the one specified with
-        *retries*. See :meth:`flowy.client.SWFClient.should_retry`.
+        *retries*. See :meth:`SWFClient.should_retry`.
 
         """
         self.client.queue_activity(
@@ -435,7 +435,7 @@ class Decision(object):
 
     def schedule_activities(self):
         """ Schedule all queued activities using the bound client's
-        :meth:`flowy.client.SWFClient.schedule_activities` method.
+        :meth:`SWFClient.schedule_activities` method.
 
         This method is also responsible for passing the ``token`` that
         identifies the workflow the activities will be scheduled within.
@@ -449,7 +449,7 @@ class Decision(object):
     def complete_workflow(self, result):
         """ Signal the successful completion of the workflow with a given
         *result* using the bound client's
-        :meth:`flowy.client.SWFClient.complete_workflow` method.
+        :meth:`SWFClient.complete_workflow` method.
 
         This method is also responsable for passing the ``token`` that
         identifies the workflow that successfully completed.
@@ -459,7 +459,7 @@ class Decision(object):
 
     def terminate_workflow(self, reason):
         """ Signal the termination of the workflow with a given *reason* using
-        the bound client's :meth:`flowy.client.SWFClient.terminate_workflow`
+        the bound client's :meth:`SWFClient.terminate_workflow`
         method.
 
         This method is also responsable for passing the ``run_id`` that
@@ -473,7 +473,7 @@ class Decision(object):
     def any_activity_running(self):
         """ Checks the history for any activities running.
 
-        See :meth:`flowy.client.Decision.is_activity_running`.
+        See :meth:`Decision.is_activity_running`.
 
         """
         return bool(self._running)
@@ -511,7 +511,7 @@ class Decision(object):
 
         The total number of runs an activity will perform is the initial run
         plus the number of retries set with
-        :meth:`flowy.client.Decision.queue_activity`. Whenever an activity
+        :meth:`Decision.queue_activity`. Whenever an activity
         times out, the number of retries associated with that activity is
         decremented by 1, until it reaches 0. The value of this flag is
         persisted in the workflow context.
@@ -754,7 +754,7 @@ class ActivityClient(object):
     """ The object responsable for managing the activity runs.
 
     Activities are registered either manually with the
-    :meth:`flowy.client.ActivityClient.register` method or using an instance of
+    :meth:`ActivityClient.register` method or using an instance of
     this class as a decorator::
 
         client = ActivityClient()
@@ -766,7 +766,7 @@ class ActivityClient(object):
                 pass
 
     When the client is started using the
-    :meth:`flowy.client.ActivityClient.start` method, it starts the main loop
+    :meth:`ActivityClient.start` method, it starts the main loop
     polling for activities that need to be ran, matching them based on their
     name and version and executing them.
 
@@ -783,8 +783,8 @@ class ActivityClient(object):
 
         Internally the activity is added to a registration queue and the actual
         registration of it will happen when calling
-        :meth:`flowy.client.ActivityClient.start` or
-        :meth:`flowy.client.ActivityClient.start_on`.
+        :meth:`ActivityClient.start` or
+        :meth:`ActivityClient.start_on`.
 
         """
         # All versions are converted to string in SWF and that's how we should
@@ -804,7 +804,7 @@ class ActivityClient(object):
 
     def start(self, client):
         """ Starts the ActivityClient with the given
-        :class:`flowy.client.SWFClient` *client*.
+        :class:`SWFClient` *client*.
 
         Registers all the activities in the registration queue and starts the
         poll-execute-complete activity loop.
