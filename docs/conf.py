@@ -264,4 +264,4 @@ texinfo_documents = [
 
 
 # Example configuration for intersphinx: refer to the Python standard library.
-intersphinx_mapping = {'boto': ('http://boto.readthedocs.org/en/latest/', None)}
+#intersphinx_mapping = {'boto': ('http://boto.readthedocs.org/en/latest/', None)}

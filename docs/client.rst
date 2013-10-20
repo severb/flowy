@@ -19,3 +19,6 @@
 
      The version of the workflow type defined together with
      :attr:`flowy.client.Decision.name`.
+
+.. autoclass:: ActivityClient
+   :members:

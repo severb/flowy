@@ -754,12 +754,21 @@ class ActivityClient(object):
     """ The object responsable for managing the activity runs.
 
     Activities are registered either manually with the
-    :meth:`flowy.client.ActivityClient.register` method or via the
-    :meth:`flowy.client.ActivityClient.__call__` decorator.  When the client is
-    started using the :meth:`flowy.client.ActivityClient.start` method, it
-    starts polling for activities that need to be ran, matching them based on
-    their name and version, and calling
-    :meth:`flowy.activity.ActivityProxy.call` for their actual execution.
+    :meth:`flowy.client.ActivityClient.register` method or using an instance of
+    this class as a decorator::
+
+        client = ActivityClient()
+
+        @client(name='MyActivity', version=1)
+        class MyActivity(Activity):
+
+            def run(self):
+                pass
+
+    When the client is started using the
+    :meth:`flowy.client.ActivityClient.start` method, it starts the main loop
+    polling for activities that need to be ran, matching them based on their
+    name and version and executing them.
 
     """
     def __init__(self):
