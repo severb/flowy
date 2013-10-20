@@ -18,7 +18,7 @@ class SWFClient(object):
     interface and some convenience.
 
     Initialize and bind the client to a *domain* and a *task_list*.  A custom
-    :py:class:`boto.swf.layer1.Layer1` instance can be sent as the *client*
+    :class:`boto.swf.layer1.Layer1` instance can be sent as the *client*
     argument and it will be used instead of the default one.
 
     """
@@ -196,10 +196,9 @@ class SWFClient(object):
     def next_decision(self):
         """ Get the next available decision.
 
-        Returns the next :class:`Decision` instance available in
-        the task list bound to this client. Because instantiating a
-        ``Decision`` blocks until a decision is available, the same is true for
-        this method.
+        Returns the next :class:`Decision` instance available in the task list
+        bound to this client. Because instantiating a ``Decision`` blocks until
+        a decision is available, the same is true for this method.
 
         """
         return Decision(self)
@@ -328,10 +327,10 @@ class SWFClient(object):
     def next_activity(self):
         """ Get the next available activity.
 
-        Returns the next :class:`ActivityResponse` instance
-        available in the task list bound to this client. Because
-        instantiating an ``ActivityResponse`` blocks until an activity is
-        available, the same is true for this method.
+        Returns the next :class:`ActivityResponse` instance available in the
+        task list bound to this client. Because instantiating an
+        ``ActivityResponse`` blocks until an activity is available, the same is
+        true for this method.
 
         """
         return ActivityResponse(self)
@@ -370,7 +369,7 @@ class Decision(object):
     history.
 
     This class also wraps the workflow specific funtionality of
-    :py:class:`SWFClient` and automatically forwards some of the
+    :class:`SWFClient` and automatically forwards some of the
     information about the workflow for which a decision is needed like the
     ``token`` value.
 
@@ -784,13 +783,7 @@ class ActivityClient(object):
     def register(self, name, version, activity_runner,
                  heartbeat=60, schedule_to_close=420, schedule_to_start=120,
                  start_to_close=300, doc=None):
-        """ Register an activity with the given *name* and *value* and bind
-        it to an *activity_runner*.
-
-        Internally the activity is added to a registration queue and the actual
-        registration of it will happen when calling
-        :meth:`ActivityClient.start` or
-        :meth:`ActivityClient.start_on`.
+        """ Register an activity with the given *name*, *value* and defaults.
 
         """
         # All versions are converted to string in SWF and that's how we should
@@ -801,19 +794,21 @@ class ActivityClient(object):
                                      start_to_close, doc))
 
     def start_on(self, domain, task_list, client=None):
-        """ Start a new ``ActivityClient`` in the given *domain* and
-        *task_list*, with an optional BOTO *client*.
+        """ A shortcut for :meth:`ActivityClient.start`.
+
+        Start a new ``ActivityClient`` main loop in the given *domain* and
+        *task_list*, with an optional :class:`boto.swf.layer1.Layer1` *client*.
 
         """
         client = SWFClient(domain, task_list, client)
         return self.start(client)
 
     def start(self, client):
-        """ Starts the ActivityClient with the given
-        :class:`SWFClient` *client*.
+        """ Starts the main loop using a specific  :class:`SWFClient` *client*.
 
-        Registers all the activities in the registration queue and starts the
-        poll-execute-complete activity loop.
+        Calling this method will  start the loop responsible for polling
+        activities, matching them on the names and versions used
+        with :meth:`ActivityClient.register` and running them.
 
         """
         for args in self._register_queue:
@@ -836,13 +831,6 @@ class ActivityClient(object):
                 response.complete(result)
 
     def __call__(self, name, version, *args, **kwargs):
-        """ Decorator used for configuring and registering an
-        :class:`flowy.activity.ActivityProxy`.
-
-        The configuration options specified in the decorator have the lowest
-        priority out of all the configuration specifications.
-
-        """
         version = str(version)
         optional_args = [
             'heartbeat',
