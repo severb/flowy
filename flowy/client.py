@@ -28,7 +28,7 @@ class SWFClient(object):
         self.task_list = task_list
         self._scheduled_activities = []
 
-    def register_workflow(self, name, version, workflow_runner,
+    def register_workflow(self, name, version,
                           execution_start_to_close=3600,
                           task_start_to_close=60,
                           child_policy='TERMINATE',

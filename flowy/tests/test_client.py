@@ -1,6 +1,106 @@
 import unittest
 
 
+class DC(object):
+    def __init__(self, err_type=0):
+        self.err_type = err_type
+        self.registered = []
+
+    def register_workflow_type(self, domain, name, version, task_list,
+                               child_policy='TERMINATE',
+                               execution_start_to_close=30,
+                               task_start_to_close=20, doc=None):
+        if self.err_type == 1:
+            from boto.swf.exceptions import SWFTypeAlreadyExistsError
+            raise SWFTypeAlreadyExistsError(None, None)
+        if self.err_type == 2:
+            from boto.swf.exceptions import SWFResponseError
+            raise SWFResponseError(None, None)
+        self.registered.append((domain, name, version, task_list,
+                                execution_start_to_close, task_start_to_close,
+                                child_policy, doc))
+
+    def describe_workflow_type(self, domain, name, version):
+        return {'configuration': {
+            'defaultExecutionStartToCloseTimeout': '12',
+            'defaultTaskStartToCloseTimeout': '13',
+            'defaultTaskList': {'name': 'taskl'},
+            'defaultChildPolicy': 'TERMINATE'
+        }}
+
+
+class SWFClientTest(unittest.TestCase):
+
+    def _get_uut(self, client, domain='domain', task_list='tasklist'):
+        from flowy.client import SWFClient
+        return SWFClient(domain, task_list, client)
+
+    def test_registration(self):
+        dummy_client = DC()
+        c = self._get_uut(dummy_client, domain='dom', task_list='taskl')
+        r = c.register_workflow(name='name', version=3,
+                                execution_start_to_close=12,
+                                task_start_to_close=13,
+                                child_policy='TERMINATE',
+                                doc='documentation')
+        self.assertTrue(r)
+        self.assertEquals(len(dummy_client.registered), 1)
+        self.assertEquals(dummy_client.registered[0],
+                          ('dom', 'name', '3', 'taskl', '12', '13',
+                           'TERMINATE', 'documentation'))
+
+    def test_already_registered(self):
+        dummy_client = DC(err_type=1)
+        c = self._get_uut(dummy_client, domain='dom', task_list='taskl')
+        r = c.register_workflow(name='name', version=3,
+                                execution_start_to_close=12,
+                                task_start_to_close=13,
+                                child_policy='TERMINATE',
+                                doc='documentation')
+        self.assertTrue(r)
+
+    def test_registration_bad_defaults(self):
+        c = self._get_uut(DC(err_type=1))
+        self.assertFalse(
+            c.register_workflow(name='name', version=3,
+                                execution_start_to_close=1,
+                                task_start_to_close=13,
+                                child_policy='TERMINATE',
+                                doc='documentation')
+        )
+        self.assertFalse(
+            c.register_workflow(name='name', version=3,
+                                execution_start_to_close=12,
+                                task_start_to_close=1,
+                                child_policy='TERMINATE',
+                                doc='documentation')
+        )
+        self.assertFalse(
+            c.register_workflow(name='name', version=3,
+                                execution_start_to_close=12,
+                                task_start_to_close=1,
+                                child_policy='BADPOLICY',
+                                doc='documentation')
+        )
+        c = self._get_uut(DC(err_type=1), task_list='badlist')
+        self.assertFalse(
+            c.register_workflow(name='name', version=3,
+                                execution_start_to_close=12,
+                                task_start_to_close=13,
+                                child_policy='TERMINATE',
+                                doc='documentation')
+        )
+
+    def test_registration_unknown_error(self):
+        c = self._get_uut(DC(err_type=2))
+        r = c.register_workflow(name='name', version=3,
+                                execution_start_to_close=12,
+                                task_start_to_close=13,
+                                child_policy='TERMINATE',
+                                doc='documentation')
+        self.assertFalse(r)
+
+
 class WorkflowResponseTest(unittest.TestCase):
 
     def _get_uut(self, client):
