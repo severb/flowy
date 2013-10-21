@@ -687,6 +687,8 @@ class WorkflowClient(object):
         decisions, matching a runner on the names and versions used with
         :meth:`register`, scheduling any activities that should be scheduled,
         and completing or terminating the workflow if needed.
+        The loop runs until there are no more activity tasks that need to be
+        scheduled, or an exception is encountered.
 
         """
         for args in self._register_queue:

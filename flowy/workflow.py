@@ -46,6 +46,10 @@ class MaybeResult(object):
 
 
 class Workflow(object):
+    """ The class that is inherited and needs to implement the activity task
+    coordination logic.
+
+    """
     def __init__(self):
         self._current_call_id = 0
         self._proxy_cache = dict()
@@ -53,6 +57,15 @@ class Workflow(object):
         self._error_handling_stack = [False]
 
     def resume(self, input, context):
+        """ Resumes the execution of the workflow.
+
+        Upon resume, the *input* is deserialized with
+        :meth:`deserialize_workflow_input`, the :meth:`run` method is executed,
+        result is serialized with :meth:`serialize_workflow_result` and
+        returned.
+        Whenever the workflow is resumed, the call id counter is reset.
+
+        """
         result = None
         self._context = context
         self._current_call_id = 0
@@ -65,15 +78,21 @@ class Workflow(object):
         return self.serialize_workflow_result(result), self._scheduled
 
     def run(self, *args, **kwargs):
+        """ The inheriting class must implement the activity task coordination
+        logic here.
+
+        """
         raise NotImplemented()
 
     @staticmethod
     def deserialize_workflow_input(data):
+        """ Deserialize the given workflow input *data*. """
         args_dict = json.loads(data)
         return args_dict['args'], args_dict['kwargs']
 
     @staticmethod
     def serialize_workflow_result(result):
+        """ Serialize the given workflow *result*. """
         return json.dumps(result)
 
     @contextmanager
