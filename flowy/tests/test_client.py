@@ -197,6 +197,29 @@ class SWFClientWorkflowTest(unittest.TestCase):
         r = c.schedule_activities('token', 'ctx')
         self.assertFalse(r)
 
+    def test_internal_list_on_scheduling_success(self):
+        dummy_client = DC()
+        c = self._get_uut(dummy_client)
+        c.queue_activity('call1', 'name1', 1, 'input1', 10, 11, 12, 13, 'tl1')
+        c.queue_activity('call2', 'name2', 2, 'input2', 20, 21, 22, 23, 'tl2')
+        c.schedule_activities('token', 'ctx')
+        r = c.schedule_activities('token', 'ctx')
+        self.assertTrue(r)
+        self.assertEquals(len(dummy_client.calls[1][1]), 0)
+
+    def test_internal_list_on_scheduling_error(self):
+        dummy_client = DC()
+        from boto.swf.exceptions import SWFResponseError
+        dummy_client.error = SWFResponseError(None, None)
+        c = self._get_uut(dummy_client)
+        c.queue_activity('call1', 'name1', 1, 'input1', 10, 11, 12, 13, 'tl1')
+        c.queue_activity('call2', 'name2', 2, 'input2', 20, 21, 22, 23, 'tl2')
+        c.schedule_activities('token', 'ctx')
+        dummy_client.error = None
+        r = c.schedule_activities('token', 'ctx')
+        self.assertTrue(r)
+        self.assertEquals(len(dummy_client.calls[0][1]), 2)
+
 
 class WorkflowResponseTest(unittest.TestCase):
 
