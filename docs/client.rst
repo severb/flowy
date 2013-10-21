@@ -22,3 +22,20 @@
 
 .. autoclass:: ActivityClient
    :members:
+
+.. autoclass:: ActivityResponse
+   :members:
+
+   .. attribute:: name
+
+    The name of the activity type defined together with
+    :attr:`ActivityResponse.version`.
+
+   .. attribute:: version
+
+    The version of the activity type defined together with
+    :attr:`ActivityResponse.name`.
+
+   .. attribute:: input
+
+    The input provided when the activity task was scheduled.
