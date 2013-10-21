@@ -7,6 +7,13 @@ __all__ = ['Workflow', 'ActivityProxy', 'ActivityError', 'ActivityTimedout']
 
 
 class MaybeResult(object):
+    """ This object is an abstraction of the result of an activity task.
+
+    The object has 3 possible states: with result, placeholder or with error.
+    Whenever :meth:`result` is called and the object is a placeholder, a
+    :class:`_SyncNeeded` exception is thrown.
+
+    """
 
     _sentinel = object()
 
