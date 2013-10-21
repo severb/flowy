@@ -96,7 +96,10 @@ class SWFClient(object):
         custom identity to this particular queued activity run inside its own
         workflow history. The queueing is done internally, without having the
         client make any requests yet. The actual scheduling is done by calling
-        :meth:`schedule_activities`.
+        :meth:`schedule_activities`. The activity will be queued in its default
+        task list that was set when it was registered, this can be changed by
+        setting a different *task_list* value. The task list that this client
+        is bound plays no role in the activity scheduling and will not be used.
 
         The activity options specified here, if any, have a higher priority
         than the ones used when the activity was registered. For more

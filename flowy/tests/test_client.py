@@ -6,7 +6,7 @@ class DC(object):
     describe_error = None
 
     def __init__(self):
-        self.registered = []
+        self.calls = []
 
     def register_workflow_type(self, domain, name, version, task_list,
                                child_policy='TERMINATE',
@@ -14,9 +14,9 @@ class DC(object):
                                task_start_to_close=20, doc=None):
         if self.error is not None:
             raise self.error
-        self.registered.append((domain, name, version, task_list,
-                                execution_start_to_close, task_start_to_close,
-                                child_policy, doc))
+        self.calls.append((domain, name, version, task_list,
+                           execution_start_to_close, task_start_to_close,
+                           child_policy, doc))
 
     def describe_workflow_type(self, domain, name, version):
         if self.describe_error is not None:
@@ -27,6 +27,11 @@ class DC(object):
             'defaultTaskList': {'name': 'taskl'},
             'defaultChildPolicy': 'TERMINATE'
         }}
+
+    def respond_decision_task_completed(self, token, data, context):
+        if self.error is not None:
+            raise self.error
+        self.calls.append((token, data, context))
 
 
 class SWFClientWorkflowTest(unittest.TestCase):
@@ -52,8 +57,8 @@ class SWFClientWorkflowTest(unittest.TestCase):
                                 child_policy='TERMINATE',
                                 doc='documentation')
         self.assertTrue(r)
-        self.assertEquals(len(dummy_client.registered), 1)
-        self.assertEquals(dummy_client.registered[0],
+        self.assertEquals(len(dummy_client.calls), 1)
+        self.assertEquals(dummy_client.calls[0],
                           ('dom', 'name', '3', 'taskl', '12', '13',
                            'TERMINATE', 'documentation'))
 
@@ -128,6 +133,68 @@ class SWFClientWorkflowTest(unittest.TestCase):
                                 task_start_to_close=13,
                                 child_policy='TERMINATE',
                                 doc='documentation')
+        self.assertFalse(r)
+
+    def test_empty_scheduling(self):
+        dummy_client = DC()
+        c = self._get_uut(dummy_client)
+        r = c.schedule_activities('token', 'ctx')
+        self.assertTrue(r)
+        self.assertEquals(len(dummy_client.calls), 1)
+        self.assertEquals(('token', [], 'ctx'), dummy_client.calls[0])
+
+    def test_scheduling(self):
+        dummy_client = DC()
+        c = self._get_uut(dummy_client)
+        c.queue_activity('call1', 'name1', 1, 'input1', 10, 11, 12, 13, 'tl1')
+        c.queue_activity('call2', 'name2', 2, 'input2', 20, 21, 22, 23, 'tl2')
+        r = c.schedule_activities('token', 'ctx')
+        self.assertTrue(r)
+        self.assertEquals(len(dummy_client.calls), 1)
+        a1 = {
+            'scheduleActivityTaskDecisionAttributes': {
+                'taskList': {
+                    'name': 'tl1'
+                },
+                'scheduleToCloseTimeout': '11',
+                'activityType': {
+                    'version': '1',
+                    'name': 'name1'
+                },
+                'heartbeatTimeout': '10',
+                'activityId': 'call1',
+                'scheduleToStartTimeout': '12',
+                'input': 'input1',
+                'startToCloseTimeout': '13'
+            },
+            'decisionType': 'ScheduleActivityTask'
+        }
+        a2 = {
+            'scheduleActivityTaskDecisionAttributes': {
+                'taskList': {
+                    'name': 'tl2'
+                },
+                'scheduleToCloseTimeout': '21',
+                'activityType': {
+                    'version': '2',
+                    'name': 'name2'
+                },
+                'heartbeatTimeout': '20',
+                'activityId': 'call2',
+                'scheduleToStartTimeout': '22',
+                'input': 'input2',
+                'startToCloseTimeout': '23'
+            },
+            'decisionType': 'ScheduleActivityTask'
+        }
+        self.assertEquals(('token', [a1, a2], 'ctx'), dummy_client.calls[0])
+
+    def test_error_when_scheduling(self):
+        dummy_client = DC()
+        from boto.swf.exceptions import SWFResponseError
+        dummy_client.error = SWFResponseError(None, None)
+        c = self._get_uut(dummy_client)
+        r = c.schedule_activities('token', 'ctx')
         self.assertFalse(r)
 
 
