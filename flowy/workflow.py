@@ -7,9 +7,12 @@ __all__ = ['Workflow', 'ActivityProxy', 'ActivityError', 'ActivityTimedout']
 
 
 class MaybeResult(object):
-    """ This object is an abstraction of the result of an activity task.
+    """ This object is an abstraction on the result of an activity task.
 
     The object has 3 possible states: with result, placeholder or with error.
+    If no *result* is set, the result is considered a placeholder, hence the
+    name. If the *is_result* parameter is set to True and :meth:`result` is
+    called, the exception that must be passed with *result* will be raised.
     Whenever :meth:`result` is called and the object is a placeholder, a
     :class:`_SyncNeeded` exception is thrown.
 
@@ -22,6 +25,14 @@ class MaybeResult(object):
         self._is_error = is_error
 
     def result(self):
+        """
+        Return the result or raise an exception if no result is set.
+
+        If the :class:`MaybeResult` object is a placeholder, an exception that
+        signals that the result is not yet ready is raised. If the result is an
+        error, the exception passed as the result will be raised.
+
+        """
         if self._is_placeholder():
             raise _SyncNeeded()
         if self._is_error:
