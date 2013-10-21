@@ -629,6 +629,30 @@ class Decision(object):
 
 
 class WorkflowClient(object):
+    """ The object responsible for managing workflows.
+
+    A workflow is registered either manually with the :meth:`register` method
+    or using an instance of this class as a decorator. In addition any
+    arguments used for registration can be passed to the decorator as keyword
+    arguments - additional arguments that aren't used for registration will be
+    used to instantiate the ``Workflow`` implementation::
+
+    >>> client = WorkflowClient()
+    >>>
+    >>> @client(name="MyWorkflow", version=1, x=2)
+    >>> class MyWorkflow(Workflow):
+    >>>
+    >>>     def __init__(self, x, y=3):
+    >>>         pass
+    >>>
+    >>>     def run(self):
+    >>>         pass
+
+    When the client is started using the :meth:`start` method, it starts the
+    main loop polling for decisions that need to be handled, matching them
+    based on their name and version.
+
+    """
     def __init__(self):
         self._workflows = {}
         self._register_queue = []
@@ -636,6 +660,9 @@ class WorkflowClient(object):
     def register(self, name, version, workflow_runner,
                  execution_start_to_close=3600, task_start_to_close=60,
                  child_policy='TERMINATE', doc=None):
+        """ Register a workflow with the given *name*, *value* and defaults.
+
+        """
         self._workflows[(name, str(version))] = workflow_runner
         self._register_queue.append((name, version, workflow_runner,
                                      execution_start_to_close,
@@ -643,6 +670,14 @@ class WorkflowClient(object):
                                      child_policy, doc))
 
     def start(self, client):
+        """ Starts the main loop using a specific :class:`SWFClient` *client*
+
+        Calling this method will start the loop responsible for polling
+        decisions, matching a runner on the names and versions used with
+        :meth:`register`, scheduling any activities that should be scheduled,
+        and completing or terminating the workflow if needed.
+
+        """
         for args in self._register_queue:
             if not client.register_workflow(*args):
                 sys.exit(1)
@@ -705,11 +740,19 @@ class WorkflowClient(object):
         return wrapper
 
     def schedule(self, name, version, *args, **kwargs):
+        """ Start the workflow having *name and *version*.
+
+        The arguments received by this method are serialized using the
+        :meth:`serialize_workflow_arguments` method and passed to the
+        :class:`SWFClient` client.
+
+        """
         input = self.serialize_workflow_arguments(*args, **kwargs)
         return self.client.start_workflow(name, version, input)
 
     @staticmethod
     def serialize_workflow_arguments(*args, **kwargs):
+        """ Serialize the given arguments. """
         return json.dumps({"args": args, "kwargs": kwargs})
 
     def _query(self, name, version):
@@ -722,7 +765,6 @@ class ActivityResponse(object):
 
     Initializing this class with a *client* will block until an activity task
     will be successfully polled.
-
     This class also wraps the activity specific functionality of
     :class:`SWFClient` and automatically forwards some of the information about
     the activity such as the ``token`` value.
@@ -788,7 +830,7 @@ class ActivityResponse(object):
 
 
 class ActivityClient(object):
-    """ The object responsable for managing the activity runs.
+    """ The object responsible for managing the activity runs.
 
     Activities are registered either manually with the :meth:`register` method
     or using an instance of this class as a decorator. In addition any
@@ -840,7 +882,7 @@ class ActivityClient(object):
         return self.start(client)
 
     def start(self, client):
-        """ Starts the main loop using a specific  :class:`SWFClient` *client*.
+        """ Starts the main loop using a specific :class:`SWFClient` *client*.
 
         Calling this method will  start the loop responsible for polling
         activities, matching them on the names and versions used
