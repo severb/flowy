@@ -728,6 +728,17 @@ class WorkflowClient(object):
 
 
 class ActivityResponse(object):
+    """ An object that abstracts an activity task and provides an API for its
+    more interesting functionality.
+
+    Initializing this class with a *client* will block until an activity task
+    will be successfully polled.
+
+    This class also wraps the activity specific functionality of
+    :class:`SWFClient` and automatically forwards some of the information about
+    the activity such as the ``token`` value.
+
+    """
     def __init__(self, client):
         self.client = client
         response = self.client.poll_activity()
@@ -736,12 +747,38 @@ class ActivityResponse(object):
         self._api_response = response
 
     def complete(self, result):
+        """ Signal the successful completion of the activity with a given
+        *result* using the bound client's :meth:`SWFClient.comeplete_activity`
+        method.
+
+        This method is also responsible for passing the ``token`` that
+        identifies the activity that completed.
+        Returns a boolean indicating the success of the operation.
+
+        """
         return self.client.complete_activity(self._token, result)
 
     def terminate(self, reason):
+        """ Signal the termination of the activity with a given *reason using
+        the bound client's :meth:`SWFClient.terminate_activity` method.
+
+        This method is also responsible for passing the ``token`` that
+        identifies the terminated activity.
+        Returns a boolean indicating the success of the operation.
+
+        """
         return self.client.terminate_activity(self._token, reason)
 
     def heartbeat(self):
+        """ Report that the activity is still making progress.
+
+        This method is also responsible for passing the ``token`` that
+        identifies the activity that the heartbeat is for.
+        Returns a boolean indicating the success of the operation or whether
+        the heartbeat timed out.
+
+        """
+
         return self.client.heartbeat(self._token)
 
     @property
@@ -771,13 +808,13 @@ class ActivityClient(object):
     instantiate the ``Activity`` implementation::
 
     >>> client = ActivityClient()
-    >>> 
+    >>>
     >>> @client(name='MyActivity', version=1, heartbeat=120, x=1, y=2)
     >>> class MyActivity(Activity):
-    >>> 
+    >>>
     >>>    def __init__(self, x, y=1):
     >>>        pass
-    >>> 
+    >>>
     >>>    def run(self):
     >>>        pass
 
@@ -825,7 +862,7 @@ class ActivityClient(object):
             if not client.register_activity(*args):
                 sys.exit(1)
         while 1:
-            response = client.request_activity()
+            response = client.next_activity()
             logging.info("Processing activity: %s %s",
                          response.name, response.version)
             activity_runner = self._query(response.name, response.version)
