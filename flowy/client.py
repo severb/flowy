@@ -17,7 +17,7 @@ class SWFClient(object):
     """ A simple wrapper around Boto's SWF Layer1 that provides a cleaner
     interface and some convenience.
 
-    Initialize and bind the client to a *domain* and a *task_list*.  A custom
+    Initialize and bind the client to a *domain* and a *task_list*. A custom
     :class:`boto.swf.layer1.Layer1` instance can be sent as the *client*
     argument and it will be used instead of the default one.
 
@@ -358,7 +358,7 @@ class SWFClient(object):
 
         Returns the ``workflow_id`` that can be used to uniquely identify the
         workflow execution within a domain. If starting the execution
-        encounters an error, ``None`` is returned.  The returned
+        encounters an error, ``None`` is returned. The returned
         ``workflow_id`` can be used when calling :meth:`terminate_workflow`.
 
         """
@@ -895,7 +895,7 @@ class ActivityClient(object):
     def start(self, client):
         """ Starts the main loop using a specific :class:`SWFClient` *client*.
 
-        Calling this method will  start the loop responsible for polling
+        Calling this method will start the loop responsible for polling
         activities, matching them on the names and versions used
         with :meth:`register` and running them.
 
