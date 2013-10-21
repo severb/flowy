@@ -717,7 +717,8 @@ class WorkflowClient(object):
 
 
 class ActivityResponse(object):
-    """ An ``ActivityResponse`` is the basic unit of work in a ``Workflow``.
+    """ An object that abstracts an activity task and provides an API for its
+    more interesting functionality.
 
     Initializing this class with a *client* will block until an activity task
     will be successfully polled.
