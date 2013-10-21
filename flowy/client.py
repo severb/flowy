@@ -32,7 +32,7 @@ class SWFClient(object):
                           execution_start_to_close=3600,
                           task_start_to_close=60,
                           child_policy='TERMINATE',
-                          doc=None):
+                          descr=None):
         """ Register a workflow with the given configuration options.
 
         If a workflow with the same *name* and *version* is already registered,
@@ -44,21 +44,28 @@ class SWFClient(object):
         limited by setting *task_start_to_close*.
 
         """
-        version = str(version)
-        execution_start_to_close = str(execution_start_to_close)
-        task_start_to_close = str(task_start_to_close)
+        v = str(version)
+        estc = str(execution_start_to_close)
+        tstc = str(task_start_to_close)
         try:
-            self.client.register_workflow_type(self.domain, name, version,
-                                               self.task_list, child_policy,
-                                               execution_start_to_close,
-                                               task_start_to_close, doc)
+            self.client.register_workflow_type(
+                domain=self.domain,
+                name=name,
+                version=v,
+                task_list=self.task_list,
+                default_child_policy=child_policy,
+                default_execution_start_to_close_timeout=estc,
+                default_task_start_to_close_timeout=tstc,
+                description=descr
+            )
             logging.info("Registered workflow: %s %s", name, version)
         except SWFTypeAlreadyExistsError:
             logging.warning("Workflow already registered: %s %s",
                             name, version)
             try:
-                reg_w = self.client.describe_workflow_type(self.domain, name,
-                                                           version)
+                reg_w = self.client.describe_workflow_type(
+                    domain=self.domain, workflow_name=name, workflow_version=v
+                )
             except SWFResponseError:
                 logging.warning("Could not check workflow defaults: %s %s",
                                 name, version)
@@ -69,8 +76,8 @@ class SWFClient(object):
             reg_tl = conf['defaultTaskList']['name']
             reg_cp = conf['defaultChildPolicy']
 
-            if (reg_estc != execution_start_to_close
-                    or reg_tstc != task_start_to_close
+            if (reg_estc != estc
+                    or reg_tstc != tstc
                     or reg_tl != self.task_list
                     or reg_cp != child_policy):
                 logging.warning("Registered workflow "
@@ -135,7 +142,9 @@ class SWFClient(object):
             logging.info("Scheduled activity: %s %s", name, version)
         data = d._data
         try:
-            self.client.respond_decision_task_completed(token, data, context)
+            self.client.respond_decision_task_completed(
+                task_token=token, decisions=data, execution_context=context
+            )
         except SWFResponseError:
             logging.warning("Could not send decisions: %s", token, exc_info=1)
             return False
@@ -153,7 +162,8 @@ class SWFClient(object):
         d.complete_workflow_execution(result=result)
         data = d._data
         try:
-            self.client.respond_decision_task_completed(token, decisions=data)
+            self.client.respond_decision_task_completed(task_token=token,
+                                                        decisions=data)
             logging.info("Completed workflow: %s %s", token, result)
         except SWFResponseError:
             logging.warning("Could not complete workflow: %s",
@@ -161,24 +171,25 @@ class SWFClient(object):
             return False
         return True
 
-    def terminate_workflow(self, run_id, reason):
+    def terminate_workflow(self, workflow_id, reason):
         """ Signals the termination of the workflow.
 
-        Terminate the workflow identified by *run_id* for the specified
+        Terminate the workflow identified by *workflow_id* for the specified
         *reason*. All the workflow activities will be abandoned and the final
         result won't be available.
-        The *run_id* required here is the one obtained when
+        The *workflow_id* required here is the one obtained when
         :meth:`start_workflow` was called.
         Returns a boolean indicating the success of the operation.
 
         """
         try:
-            self.client.terminate_workflow_execution(self.domain, run_id,
+            self.client.terminate_workflow_execution(domain=self.domain,
+                                                     workflow_id=workflow_id,
                                                      reason=reason)
-            logging.info("Terminated workflow: %s %s", run_id, reason)
+            logging.info("Terminated workflow: %s %s", workflow_id, reason)
         except SWFResponseError:
             logging.warning("Could not terminate workflow: %s",
-                            run_id, exc_info=1)
+                            workflow_id, exc_info=1)
             return False
         return True
 
@@ -345,10 +356,10 @@ class SWFClient(object):
         """ Starts the workflow identified by *name* and *version* with the
         given *input*.
 
-        Returns the ``run_id`` that can be used to uniquely identify the
+        Returns the ``workflow_id`` that can be used to uniquely identify the
         workflow execution within a domain. If starting the execution
-        encounters an error, ``None`` is returned.  The returned ``run_id`` can
-        be used when calling :meth:`terminate_workflow`.
+        encounters an error, ``None`` is returned.  The returned
+        ``workflow_id`` can be used when calling :meth:`terminate_workflow`.
 
         """
         try:
@@ -467,13 +478,13 @@ class Decision(object):
         the bound client's :meth:`SWFClient.terminate_workflow`
         method.
 
-        This method is also responsable for passing the ``run_id`` that
+        This method is also responsable for passing the ``workflow_id`` that
         identifies the workflow that terminated.
         Returns a boolean indicating the success of the operation.
 
         """
-        run_id = self._api_response['workflowExecution']['workflowId']
-        return self.client.terminate_workflow(run_id, reason)
+        workflow_id = self._api_response['workflowExecution']['workflowId']
+        return self.client.terminate_workflow(workflow_id, reason)
 
     def any_activity_running(self):
         """ Checks the history for any activities running.
