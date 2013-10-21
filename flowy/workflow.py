@@ -47,7 +47,7 @@ class MaybeResult(object):
 
 class Workflow(object):
     """ The class that is inherited and needs to implement the activity task
-    coordination logic.
+    coordination logic using the :meth:`run` method.
 
     """
     def __init__(self):
@@ -159,6 +159,17 @@ class Workflow(object):
 
 
 class ActivityProxy(object):
+    """ The object that represents an activity from the workflows point of
+    view.
+
+    Defines an activity with the given *name*, *version* and configuration
+    options. The configuration options set here have a higher priority than
+    the ones set when registering an activity.
+    As far as the workflow that instantiates objects of this type is concerned,
+    it has no relevance where these activities are processed, or in what
+    manner.
+
+    """
     def __init__(
         self, name, version,
         heartbeat=None,
@@ -189,10 +200,12 @@ class ActivityProxy(object):
 
     @staticmethod
     def serialize_activity_input(*args, **kwargs):
+        """ Serialize the given activity *args* and *kwargs*. """
         return json.dumps({'args': args, 'kwargs': kwargs})
 
     @staticmethod
     def deserialize_activity_result(result):
+        """ Deserialize the given *result*. """
         return json.loads(result)
 
     @staticmethod
