@@ -13,7 +13,7 @@ class Activity(object):
     def call(self, input, client):
         """ Call the activity with the given *input* and bind the
         :class:`flowy.client.SWFClient` *client* to this instance for the
-        duration of the call.
+        duration of the call so that heartbeats can be sent from the activity.
 
         """
         self._client = client

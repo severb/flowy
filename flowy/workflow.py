@@ -7,7 +7,7 @@ __all__ = ['Workflow', 'ActivityProxy', 'ActivityError', 'ActivityTimedout']
 
 
 class MaybeResult(object):
-    """ This object is an abstraction on the result of an activity task.
+    """ This object is an abstraction on the result of an activity.
 
     The object has 3 possible states: with result, placeholder or with error.
     If no *result* is set, the result is considered a placeholder, hence the
