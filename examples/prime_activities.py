@@ -2,7 +2,7 @@ from flowy.activity import Activity
 from flowy.client import activity_client
 
 
-@activity_client('NumberDivider', 4, heartbeat=5, start_to_close=60)
+@activity_client('NumberDivider', 4, 'div_list', heartbeat=5, start_to_close=60)
 class NumberDivider(Activity):
     """
     Divide numbers.

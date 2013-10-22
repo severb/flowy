@@ -1,3 +1,9 @@
 from flowy.client import workflow_client
 
-workflow_client.schedule_on('SeversTest', 'prime_task_list', 'MyPrime', 2)
+prime_w = workflow_client.scheduler_on(
+    domain='SeversTest',
+    name='MyPrime',
+    version=2,
+    task_list='prime_task_list',
+)
+prime_w()

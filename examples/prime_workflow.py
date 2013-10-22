@@ -2,7 +2,7 @@ from flowy.workflow import Workflow, ActivityProxy
 from flowy.client import workflow_client
 
 
-@workflow_client('MyPrime', 2)
+@workflow_client('MyPrime', 2, 'prime_task_list')
 class PrimeTest(Workflow):
     """
     Checks if a number is prime.

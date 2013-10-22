@@ -12,15 +12,15 @@ class SWFClientTest(unittest.TestCase):
         import logging
         logging.root.disabled = False
 
-    def _get_uut(self, domain='domain', task_list='tasklist'):
+    def _get_uut(self, domain='domain'):
         from flowy.client import SWFClient
         from boto.swf.layer1 import Layer1
         m = create_autospec(Layer1, instance=True)
-        return m, SWFClient(domain, task_list, m)
+        return m, SWFClient(domain, client=m)
 
     def test_workflow_registration(self):
-        m, c = self._get_uut(domain='dom', task_list='taskl')
-        r = c.register_workflow(name='name', version=3,
+        m, c = self._get_uut(domain='dom')
+        r = c.register_workflow(name='name', version=3, task_list='taskl',
                                 execution_start_to_close=12,
                                 task_start_to_close=13,
                                 child_policy='TERMINATE',
@@ -35,7 +35,7 @@ class SWFClientTest(unittest.TestCase):
         )
 
     def test_workflow_already_registered(self):
-        m, c = self._get_uut(domain='dom', task_list='taskl')
+        m, c = self._get_uut(domain='dom')
         from boto.swf.exceptions import SWFTypeAlreadyExistsError
         m.register_workflow_type.side_effect = SWFTypeAlreadyExistsError(0, 0)
         m.describe_workflow_type.return_value = {
@@ -46,7 +46,7 @@ class SWFClientTest(unittest.TestCase):
                 'defaultChildPolicy': 'TERMINATE'
             }
         }
-        r = c.register_workflow(name='name', version=3,
+        r = c.register_workflow(name='name', version=3, task_list='taskl',
                                 execution_start_to_close=12,
                                 task_start_to_close=13,
                                 child_policy='TERMINATE',
@@ -57,7 +57,7 @@ class SWFClientTest(unittest.TestCase):
         self.assertTrue(r)
 
     def test_workflow_registration_bad_defaults(self):
-        m, c = self._get_uut(task_list='taskl')
+        m, c = self._get_uut()
         from boto.swf.exceptions import SWFTypeAlreadyExistsError
         m.register_workflow_type.side_effect = SWFTypeAlreadyExistsError(0, 0)
         m.describe_workflow_type.return_value = {
@@ -69,30 +69,28 @@ class SWFClientTest(unittest.TestCase):
             }
         }
         self.assertFalse(
-            c.register_workflow(name='name', version=3,
+            c.register_workflow(name='name', version=3, task_list='taskl',
                                 execution_start_to_close=1,
                                 task_start_to_close=13,
                                 child_policy='TERMINATE',
                                 descr='description')
         )
         self.assertFalse(
-            c.register_workflow(name='name', version=3,
+            c.register_workflow(name='name', version=3, task_list='taskl',
                                 execution_start_to_close=12,
                                 task_start_to_close=1,
                                 child_policy='TERMINATE',
                                 descr='description')
         )
         self.assertFalse(
-            c.register_workflow(name='name', version=3,
+            c.register_workflow(name='name', version=3, task_list='taskl',
                                 execution_start_to_close=12,
                                 task_start_to_close=1,
                                 child_policy='BADPOLICY',
                                 descr='description')
         )
-        conf = m.describe_workflow_type.return_value['configuration']
-        conf['defaultTaskList']['name'] = 'badlist'
         self.assertFalse(
-            c.register_workflow(name='name', version=3,
+            c.register_workflow(name='name', version=3, task_list='badlist',
                                 execution_start_to_close=12,
                                 task_start_to_close=13,
                                 child_policy='TERMINATE',
@@ -103,7 +101,7 @@ class SWFClientTest(unittest.TestCase):
         m, c = self._get_uut()
         from boto.swf.exceptions import SWFResponseError
         m.register_workflow_type.side_effect = SWFResponseError(0, 0)
-        r = c.register_workflow(name='name', version=3,
+        r = c.register_workflow(name='name', version=3, task_list='taskl',
                                 execution_start_to_close=12,
                                 task_start_to_close=13,
                                 child_policy='TERMINATE',
@@ -116,7 +114,7 @@ class SWFClientTest(unittest.TestCase):
         from boto.swf.exceptions import SWFResponseError
         m.register_workflow_type.side_effect = SWFTypeAlreadyExistsError(0, 0)
         m.describe_workflow_type.side_effect = SWFResponseError(0, 0)
-        r = c.register_workflow(name='name', version=3,
+        r = c.register_workflow(name='name', version=3, task_list='taskl',
                                 execution_start_to_close=12,
                                 task_start_to_close=13,
                                 child_policy='TERMINATE',
@@ -256,17 +254,17 @@ class SWFClientTest(unittest.TestCase):
         self.assertFalse(r)
 
     def test_poll_decision(self):
-        m, c = self._get_uut(domain='dom', task_list='tskl')
+        m, c = self._get_uut(domain='dom')
         m.poll_for_decision_task.return_value = 'decision'
-        r = c.poll_decision()
+        r = c.poll_decision('taskl')
         self.assertEquals(r, 'decision')
         m.poll_for_decision_task.assert_called_once_with(
-            domain='dom', task_list='tskl',
+            domain='dom', task_list='taskl',
             next_page_token=None, reverse_order=True,
         )
-        r = c.poll_decision(next_page_token='nextpage')
+        r = c.poll_decision('taskl', next_page_token='nextpage')
         m.poll_for_decision_task.assert_called_with(
-            domain='dom', task_list='tskl',
+            domain='dom', task_list='taskl',
             next_page_token='nextpage', reverse_order=True,
         )
 
@@ -275,14 +273,15 @@ class SWFClientTest(unittest.TestCase):
         from boto.swf.exceptions import SWFResponseError
         err = SWFResponseError(0, 0)
         m.poll_for_decision_task.side_effect = [err] * 5 + ['decision']
-        r = c.poll_decision()
+        r = c.poll_decision('taskl')
         self.assertEquals(r, 'decision')
 
     def test_activity_registration(self):
-        m, c = self._get_uut(domain='dom', task_list='taskl')
-        r = c.register_activity(name='name', version=3, heartbeat=12,
-                                schedule_to_close=13, schedule_to_start=14,
-                                start_to_close=15, descr='description')
+        m, c = self._get_uut(domain='dom')
+        r = c.register_activity(name='name', version=3, task_list='taskl',
+                                heartbeat=12, schedule_to_close=13,
+                                schedule_to_start=14, start_to_close=15,
+                                descr='description')
         self.assertTrue(r)
         m.register_activity_type.assert_called_once_with(
             domain='dom', name='name', version='3', task_list='taskl',
@@ -294,7 +293,7 @@ class SWFClientTest(unittest.TestCase):
         )
 
     def test_activity_already_registered(self):
-        m, c = self._get_uut(domain='dom', task_list='taskl')
+        m, c = self._get_uut(domain='dom')
         from boto.swf.exceptions import SWFTypeAlreadyExistsError
         m.register_activity_type.side_effect = SWFTypeAlreadyExistsError(0, 0)
         m.describe_activity_type.return_value = {
@@ -306,16 +305,17 @@ class SWFClientTest(unittest.TestCase):
                 'defaultTaskList': {'name': 'taskl'}
             }
         }
-        r = c.register_activity(name='name', version=3, heartbeat=12,
-                                schedule_to_close=13, schedule_to_start=14,
-                                start_to_close=15, descr='description')
+        r = c.register_activity(name='name', version=3, task_list='taskl',
+                                heartbeat=12, schedule_to_close=13,
+                                schedule_to_start=14, start_to_close=15,
+                                descr='description')
         m.describe_activity_type.assert_called_once_with(
             domain='dom', activity_name='name', activity_version='3'
         )
         self.assertTrue(r)
 
     def test_activity_registration_bad_defaults(self):
-        m, c = self._get_uut(task_list='taskl')
+        m, c = self._get_uut()
         from boto.swf.exceptions import SWFTypeAlreadyExistsError
         m.register_activity_type.side_effect = SWFTypeAlreadyExistsError(0, 0)
         m.describe_activity_type.return_value = {
@@ -328,40 +328,44 @@ class SWFClientTest(unittest.TestCase):
             }
         }
         self.assertFalse(
-            c.register_activity(name='name', version=3, heartbeat=1,
-                                schedule_to_close=13, schedule_to_start=14,
-                                start_to_close=15, descr='description')
+            c.register_activity(name='name', version=3, task_list='taskl',
+                                heartbeat=1, schedule_to_close=13,
+                                schedule_to_start=14, start_to_close=15,
+                                descr='description')
         )
         self.assertFalse(
-            c.register_activity(name='name', version=3, heartbeat=12,
-                                schedule_to_close=1, schedule_to_start=14,
-                                start_to_close=15, descr='description')
+            c.register_activity(name='name', version=3, task_list='taskl',
+                                heartbeat=12, schedule_to_close=1,
+                                schedule_to_start=14, start_to_close=15,
+                                descr='description')
         )
         self.assertFalse(
-            c.register_activity(name='name', version=3, heartbeat=12,
-                                schedule_to_close=13, schedule_to_start=1,
-                                start_to_close=15, descr='description')
+            c.register_activity(name='name', version=3, task_list='taskl',
+                                heartbeat=12, schedule_to_close=13,
+                                schedule_to_start=1, start_to_close=15,
+                                descr='description')
         )
         self.assertFalse(
-            c.register_activity(name='name', version=3, heartbeat=12,
-                                schedule_to_close=13, schedule_to_start=14,
-                                start_to_close=1, descr='description')
+            c.register_activity(name='name', version=3, task_list='taskl',
+                                heartbeat=12, schedule_to_close=13,
+                                schedule_to_start=14, start_to_close=1,
+                                descr='description')
         )
-        conf = m.describe_activity_type.return_value['configuration']
-        conf['defaultTaskList']['name'] = 'badlist'
         self.assertFalse(
-            c.register_activity(name='name', version=3, heartbeat=12,
-                                schedule_to_close=13, schedule_to_start=14,
-                                start_to_close=15, descr='description')
+            c.register_activity(name='name', version=3, task_list='badlist',
+                                heartbeat=12, schedule_to_close=13,
+                                schedule_to_start=14, start_to_close=15,
+                                descr='description')
         )
 
     def test_activity_registration_unknown_error(self):
         m, c = self._get_uut()
         from boto.swf.exceptions import SWFResponseError
         m.register_activity_type.side_effect = SWFResponseError(0, 0)
-        r = c.register_activity(name='name', version=3, heartbeat=12,
-                                schedule_to_close=13, schedule_to_start=14,
-                                start_to_close=15, descr='description')
+        r = c.register_activity(name='name', version=3, task_list='taskl',
+                                heartbeat=12, schedule_to_close=13,
+                                schedule_to_start=14, start_to_close=15,
+                                descr='description')
         self.assertFalse(r)
 
     def test_activity_registration_defaults_check_fails(self):
@@ -370,9 +374,10 @@ class SWFClientTest(unittest.TestCase):
         from boto.swf.exceptions import SWFResponseError
         m.register_activity_type.side_effect = SWFTypeAlreadyExistsError(0, 0)
         m.describe_activity_type.side_effect = SWFResponseError(0, 0)
-        r = c.register_activity(name='name', version=3, heartbeat=12,
-                                schedule_to_close=13, schedule_to_start=14,
-                                start_to_close=15, descr='description')
+        r = c.register_activity(name='name', version=3, task_list='taskl',
+                                heartbeat=12, schedule_to_close=13,
+                                schedule_to_start=14, start_to_close=15,
+                                descr='description')
         self.assertFalse(r)
 
     def test_activity_complete(self):
@@ -421,12 +426,12 @@ class SWFClientTest(unittest.TestCase):
         self.assertFalse(r)
 
     def test_poll_activity(self):
-        m, c = self._get_uut(domain='dom', task_list='tskl')
+        m, c = self._get_uut(domain='dom')
         m.poll_for_activity_task.return_value = 'activity'
-        r = c.poll_activity()
+        r = c.poll_activity('taskl')
         self.assertEquals(r, 'activity')
         m.poll_for_activity_task.assert_called_once_with(
-            domain='dom', task_list='tskl',
+            domain='dom', task_list='taskl',
         )
 
     def test_poll_activity_skip_errors(self):
@@ -434,5 +439,5 @@ class SWFClientTest(unittest.TestCase):
         from boto.swf.exceptions import SWFResponseError
         err = SWFResponseError(0, 0)
         m.poll_for_activity_task.side_effect = [err] * 5 + ['activity']
-        r = c.poll_activity()
+        r = c.poll_activity('taskl')
         self.assertEquals(r, 'activity')

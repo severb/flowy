@@ -17,18 +17,17 @@ class SWFClient(object):
     """ A simple wrapper around Boto's SWF Layer1 that provides a cleaner
     interface and some convenience.
 
-    Initialize and bind the client to a *domain* and a *task_list*. A custom
+    Initialize and bind the client to a *domain*. A custom
     :class:`boto.swf.layer1.Layer1` instance can be sent as the *client*
     argument and it will be used instead of the default one.
 
     """
-    def __init__(self, domain, task_list, client=None):
+    def __init__(self, domain, client=None):
         self.client = client if client is not None else Layer1()
         self.domain = domain
-        self.task_list = task_list
         self._scheduled_activities = []
 
-    def register_workflow(self, name, version,
+    def register_workflow(self, name, version, task_list,
                           execution_start_to_close=3600,
                           task_start_to_close=60,
                           child_policy='TERMINATE',
@@ -41,7 +40,9 @@ class SWFClient(object):
         registered using the same default values. The default total workflow
         running time can be specified in seconds using
         *execution_start_to_close* and a specific decision task runtime can be
-        limited by setting *task_start_to_close*.
+        limited by setting *task_start_to_close*. The default task list the
+        workflows of this type will be scheduled on can be set with
+        *task_list*.
 
         """
         v = str(version)
@@ -52,7 +53,7 @@ class SWFClient(object):
                 domain=self.domain,
                 name=name,
                 version=v,
-                task_list=self.task_list,
+                task_list=task_list,
                 default_child_policy=child_policy,
                 default_execution_start_to_close_timeout=estc,
                 default_task_start_to_close_timeout=tstc,
@@ -78,7 +79,7 @@ class SWFClient(object):
 
             if (reg_estc != estc
                     or reg_tstc != tstc
-                    or reg_tl != self.task_list
+                    or reg_tl != task_list
                     or reg_cp != child_policy):
                 logging.warning("Registered workflow "
                                 "has different defaults: %s %s",
@@ -105,8 +106,7 @@ class SWFClient(object):
         client make any requests yet. The actual scheduling is done by calling
         :meth:`schedule_activities`. The activity will be queued in its default
         task list that was set when it was registered, this can be changed by
-        setting a different *task_list* value. The task list that this client
-        is bound plays no role in the activity scheduling and will not be used.
+        setting a different *task_list* value.
 
         The activity options specified here, if any, have a higher priority
         than the ones used when the activity was registered. For more
@@ -193,35 +193,35 @@ class SWFClient(object):
             return False
         return True
 
-    def poll_decision(self, next_page_token=None):
+    def poll_decision(self, task_list, next_page_token=None):
         """ Poll for a new decision task.
 
-        Blocks until a decision is available in the task list bound to this
-        client. In case of larger responses *next_page_token* can be used to
-        retrieve paginated decisions.
+        Blocks until a decision is available in the *task_list*. In case of
+        larger responses *next_page_token* can be used to retrieve paginated
+        decisions.
 
         """
         poll = self.client.poll_for_decision_task
         while 1:
             try:
-                return poll(domain=self.domain, task_list=self.task_list,
+                return poll(domain=self.domain, task_list=task_list,
                             reverse_order=True,
                             next_page_token=next_page_token)
             except (IOError, SWFResponseError):
                 logging.warning("Unknown error when pulling decisions: %s %s",
-                                self.domain, self.task_list, exc_info=1)
+                                self.domain, task_list, exc_info=1)
 
-    def next_decision(self):
+    def next_decision(self, task_list):
         """ Get the next available decision.
 
-        Returns the next :class:`Decision` instance available in the task list
-        bound to this client. Because instantiating a ``Decision`` blocks until
-        a decision is available, the same is true for this method.
+        Returns the next :class:`Decision` instance available in the
+        *task_list*. Because instantiating a ``Decision`` blocks until a
+        decision is available, the same is true for this method.
 
         """
-        return Decision(self)
+        return Decision(self, task_list)
 
-    def register_activity(self, name, version, heartbeat=60,
+    def register_activity(self, name, version, task_list, heartbeat=60,
                           schedule_to_close=420, schedule_to_start=120,
                           start_to_close=300, descr=None):
         """ Register an activity with the given configuration options.
@@ -234,7 +234,9 @@ class SWFClient(object):
         *start_to_close*, the allowed time from the moment it was scheduled
         to the moment it finished can be specified using *schedule_to_close*
         and the time it can spend in the queue before the processing itself
-        starts can be specified using *schedule_to_start*.
+        starts can be specified using *schedule_to_start*. The default task
+        list the activities of this type will be scheduled on can be set with
+        *task_list*.
 
         """
         version = str(version)
@@ -247,7 +249,7 @@ class SWFClient(object):
                 domain=self.domain,
                 name=name,
                 version=version,
-                task_list=self.task_list,
+                task_list=task_list,
                 default_task_heartbeat_timeout=heartbeat,
                 default_task_schedule_to_close_timeout=schedule_to_close,
                 default_task_schedule_to_start_timeout=schedule_to_start,
@@ -278,7 +280,7 @@ class SWFClient(object):
                     or reg_tsts != schedule_to_start
                     or reg_tschtc != schedule_to_close
                     or reg_hb != heartbeat
-                    or reg_tl != self.task_list):
+                    or reg_tl != task_list):
                 logging.warning("Registered activity "
                                 "has different defaults: %s %s",
                                 name, version)
@@ -340,35 +342,34 @@ class SWFClient(object):
             return False
         return True
 
-    def poll_activity(self):
+    def poll_activity(self, task_list):
         """ Poll for a new activity task.
 
-        Blocks until an activity is available in the task list bound to this
-        client.
+        Blocks until an activity is available in the *task_list* and returns
+        it.
 
         """
         poll = self.client.poll_for_activity_task
         while 1:
             try:
-                return poll(domain=self.domain, task_list=self.task_list)
+                return poll(domain=self.domain, task_list=task_list)
             except (IOError, SWFResponseError):
                 logging.warning("Unknown error when pulling activities: %s %s",
-                                self.domain, self.task_list, exc_info=1)
+                                self.domain, task_list, exc_info=1)
 
-    def next_activity(self):
+    def next_activity(self, task_list):
         """ Get the next available activity.
 
         Returns the next :class:`ActivityResponse` instance available in the
-        task list bound to this client. Because instantiating an
-        ``ActivityResponse`` blocks until an activity is available, the same is
-        true for this method.
+        *task_list*. Because instantiating an ``ActivityResponse`` blocks until
+        an activity is available, the same is true for this method.
 
         """
-        return ActivityResponse(self)
+        return ActivityResponse(self, task_list)
 
-    def start_workflow(self, name, version, input):
+    def start_workflow(self, name, version, task_list, input):
         """ Starts the workflow identified by *name* and *version* with the
-        given *input*.
+        given *input* on *task_list*.
 
         Returns the ``workflow_id`` that can be used to uniquely identify the
         workflow execution within a domain. If starting the execution
@@ -380,7 +381,7 @@ class SWFClient(object):
             r = self.client.start_workflow_execution(self.domain,
                                                      str(uuid.uuid4()),
                                                      name, str(version),
-                                                     task_list=self.task_list,
+                                                     task_list=task_list,
                                                      input=input)
         except SWFResponseError:
             logging.warning("Could not start workflow: %s %s",
@@ -405,7 +406,7 @@ class Decision(object):
     ``token`` value.
 
     """
-    def __init__(self, client):
+    def __init__(self, client, task_list):
         self.client = client
         self._event_to_call_id = {}
         self._retries = {}
@@ -414,10 +415,11 @@ class Decision(object):
         self._timed_out = set()
         self._with_errors = {}
         self.input = None
+        self.task_list = task_list
 
         response = {}
         while 'taskToken' not in response or not response['taskToken']:
-            response = self.client.poll_decision()
+            response = self.client.poll_decision(task_list)
         self._api_response = response
 
         self._restore_context()
@@ -626,6 +628,7 @@ class Decision(object):
                 for event in api_response['events']:
                     events.append(event)
                 api_response = self.client.poll_decision(
+                    self.task_list,
                     next_page_token=api_response['nextPageToken']
                 )
             for event in api_response['events']:
@@ -664,7 +667,7 @@ class WorkflowClient(object):
 
     >>> client = WorkflowClient()
     >>> 
-    >>> @client(name="MyWorkflow", version=1, x=2)
+    >>> @client(name="MyWorkflow", version=1, task_list='mylist', x=2)
     >>> class MyWorkflow(Workflow):
     >>> 
     >>>     def __init__(self, x, y=3):
@@ -682,14 +685,15 @@ class WorkflowClient(object):
         self._workflows = {}
         self._register_queue = []
 
-    def register(self, name, version, workflow_runner,
+    def register(self, name, version, task_list, workflow_runner,
                  execution_start_to_close=3600, task_start_to_close=60,
                  child_policy='TERMINATE', doc=None):
         """ Register a workflow with the given *name*, *value* and defaults.
 
         """
         self._workflows[(name, str(version))] = workflow_runner
-        self._register_queue.append((name, version, execution_start_to_close,
+        self._register_queue.append((name, version, task_list,
+                                     execution_start_to_close,
                                      task_start_to_close, child_policy, doc))
 
     def start_on(self, domain, task_list, client=None):
@@ -699,11 +703,12 @@ class WorkflowClient(object):
         :class:`boto.swf.layer1.Layer1` *client*.
 
         """
-        client = SWFClient(domain, task_list, client)
-        return self.start(client)
+        client = SWFClient(domain, client=client)
+        return self.start(client, task_list)
 
-    def start(self, client):
-        """ Starts the main loop using a specific :class:`SWFClient` *client*
+    def start(self, client, task_list):
+        """ Starts the main loop polling on *task_list* and using a specific
+        :class:`SWFClient` *client*.
 
         Calling this method will start the loop responsible for polling
         decisions, matching a runner on the names and versions used with
@@ -717,7 +722,7 @@ class WorkflowClient(object):
             if not client.register_workflow(*args):
                 sys.exit(1)
         while 1:
-            decision = client.next_decision()
+            decision = client.next_decision(task_list)
             logging.info("Processing workflow: %s %s",
                          decision.name, decision.version)
             workflow_runner = self._query(decision.name, decision.version)
@@ -755,7 +760,7 @@ class WorkflowClient(object):
                 else:
                     decision.complete_workflow(result)
 
-    def __call__(self, name, version, *args, **kwargs):
+    def __call__(self, name, version, task_list, *args, **kwargs):
         optional_args = [
             'execution_start_to_close',
             'task_start_to_close',
@@ -769,25 +774,39 @@ class WorkflowClient(object):
 
         def wrapper(workflow):
             r_kwargs['doc'] = workflow.__doc__.strip()
-            self.register(name, version, workflow(*args, **kwargs), **r_kwargs)
+            self.register(name, version, task_list, workflow(*args, **kwargs),
+                          **r_kwargs)
             return workflow
 
         return wrapper
 
-    def schedule_on(self, domain, task_list, name, version, *args, **kwargs):
-        c = SWFClient(domain=domain, task_list=task_list)
-        return self.schedule(c, name, version, *args, **kwargs)
+    def scheduler_on(self, domain, name, version, task_list, client=None):
+        """ A shortcut for :meth:`scheduler`.
 
-    def schedule(self, client, name, version, *args, **kwargs):
-        """ Start the workflow having *name and *version*.
-
-        The arguments received by this method are serialized using the
-        :meth:`serialize_workflow_arguments` method and passed to the
-        :class:`SWFClient` client.
+        An optional :class:`boto.swf.layer1.Layer1` can be set as *client*.
 
         """
-        input = self.serialize_workflow_arguments(*args, **kwargs)
-        return client.start_workflow(name, version, input)
+        c = SWFClient(domain, client=client)
+        return self.scheduler(name, version, task_list, c)
+
+    def scheduler(self, name, version, task_list, client):
+        """ Create a scheduler for the workflow with the *name* and *version*
+        on the specific *task_list* using an instance of :class:`SWFClient` as
+        *client*.
+
+        This method returns a function that can be used to trigger the
+        scheduling of a workflow with the previously defined attributes::
+
+        >>> my_wf = wclient.scheduler('MyWorkflow', 1, 'mylist', swfclient)
+        >>> my_wf(1, x=0)
+        >>> my_wf(2, x=0) # Note: schedules two executions of this workflow
+
+        """
+        def wrapper(*args, **kwargs):
+            input = self.serialize_workflow_arguments(*args, **kwargs)
+            return client.start_workflow(name, version, task_list, input)
+
+        return wrapper
 
     @staticmethod
     def serialize_workflow_arguments(*args, **kwargs):
@@ -809,11 +828,12 @@ class ActivityResponse(object):
     the activity such as the ``token`` value.
 
     """
-    def __init__(self, client):
+    def __init__(self, client, task_list):
         self.client = client
-        response = self.client.poll_activity()
+        self.task_list = task_list
+        response = self.client.poll_activity(task_list)
         while 'taskToken' not in response or not response['taskToken']:
-            response = self.client.poll_activity()
+            response = self.client.poll_activity(task_list)
         self._api_response = response
 
     def complete(self, result):
@@ -897,7 +917,7 @@ class ActivityClient(object):
         self._activities = {}
         self._register_queue = []
 
-    def register(self, name, version, activity_runner,
+    def register(self, name, version, task_list, activity_runner,
                  heartbeat=60, schedule_to_close=420, schedule_to_start=120,
                  start_to_close=300, doc=None):
         """ Register an activity with the given *name*, *value* and defaults.
@@ -906,7 +926,7 @@ class ActivityClient(object):
         # All versions are converted to string in SWF and that's how we should
         # store them too in order to be able to query for them
         self._activities[(name, str(version))] = activity_runner
-        self._register_queue.append((name, version, heartbeat,
+        self._register_queue.append((name, version, task_list, heartbeat,
                                      schedule_to_close, schedule_to_start,
                                      start_to_close, doc))
 
@@ -917,11 +937,12 @@ class ActivityClient(object):
         :class:`boto.swf.layer1.Layer1` *client*.
 
         """
-        client = SWFClient(domain, task_list, client)
-        return self.start(client)
+        client = SWFClient(domain, client=client)
+        return self.start(client, task_list)
 
-    def start(self, client):
-        """ Starts the main loop using a specific :class:`SWFClient` *client*.
+    def start(self, client, task_list):
+        """ Starts the main loop polling on *task_list* using a specific
+        :class:`SWFClient` *client*.
 
         Calling this method will start the loop responsible for polling
         activities, matching them on the names and versions used
@@ -932,7 +953,7 @@ class ActivityClient(object):
             if not client.register_activity(*args):
                 sys.exit(1)
         while 1:
-            response = client.next_activity()
+            response = client.next_activity(task_list)
             logging.info("Processing activity: %s %s",
                          response.name, response.version)
             activity_runner = self._query(response.name, response.version)
@@ -947,7 +968,7 @@ class ActivityClient(object):
             else:
                 response.complete(result)
 
-    def __call__(self, name, version, *args, **kwargs):
+    def __call__(self, name, version, task_list, *args, **kwargs):
         version = str(version)
         optional_args = [
             'heartbeat',
@@ -964,7 +985,7 @@ class ActivityClient(object):
         def wrapper(activity):
             r_kwargs['doc'] = activity.__doc__.strip()
             self.register(
-                name, version, activity(*args, **kwargs), **r_kwargs
+                name, version, task_list, activity(*args, **kwargs), **r_kwargs
             )
             return activity
 
