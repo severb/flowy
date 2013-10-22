@@ -7,6 +7,9 @@
 .. autoclass:: SWFClient
    :members:
 
+.. autoclass:: WorkflowClient
+   :members:
+
 .. autoclass:: Decision
    :members:
 
