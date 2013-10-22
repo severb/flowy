@@ -13,8 +13,8 @@ class MaybeResult(object):
     If no *result* is set, the result is considered a placeholder, hence the
     name. If the *is_result* parameter is set to True and :meth:`result` is
     called, the exception that must be passed with *result* will be raised.
-    Whenever :meth:`result` is called and the object is a placeholder, a
-    :class:`_SyncNeeded` exception is thrown.
+    Whenever :meth:`result` is called and the object is a placeholder, an
+    exception indicating that is raised.
 
     """
 
