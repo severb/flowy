@@ -2,7 +2,7 @@ import unittest
 from mock import create_autospec
 
 
-class SWFClientWorkflowTest(unittest.TestCase):
+class SWFClientTest(unittest.TestCase):
 
     def setUp(self):
         import logging
@@ -18,23 +18,23 @@ class SWFClientWorkflowTest(unittest.TestCase):
         m = create_autospec(Layer1, instance=True)
         return m, SWFClient(domain, task_list, m)
 
-    def test_registration(self):
+    def test_workflow_registration(self):
         m, c = self._get_uut(domain='dom', task_list='taskl')
         r = c.register_workflow(name='name', version=3,
                                 execution_start_to_close=12,
                                 task_start_to_close=13,
                                 child_policy='TERMINATE',
-                                descr='documentation')
+                                descr='description')
         self.assertTrue(r)
         m.register_workflow_type.assert_called_once_with(
             domain='dom', name='name', version='3', task_list='taskl',
             default_child_policy='TERMINATE',
             default_execution_start_to_close_timeout='12',
             default_task_start_to_close_timeout='13',
-            description='documentation'
+            description='description'
         )
 
-    def test_already_registered(self):
+    def test_workflow_already_registered(self):
         m, c = self._get_uut(domain='dom', task_list='taskl')
         from boto.swf.exceptions import SWFTypeAlreadyExistsError
         m.register_workflow_type.side_effect = SWFTypeAlreadyExistsError(0, 0)
@@ -50,13 +50,13 @@ class SWFClientWorkflowTest(unittest.TestCase):
                                 execution_start_to_close=12,
                                 task_start_to_close=13,
                                 child_policy='TERMINATE',
-                                descr='documentation')
+                                descr='description')
         m.describe_workflow_type.assert_called_once_with(
             domain='dom', workflow_name='name', workflow_version='3'
         )
         self.assertTrue(r)
 
-    def test_registration_bad_defaults(self):
+    def test_workflow_registration_bad_defaults(self):
         m, c = self._get_uut(task_list='taskl')
         from boto.swf.exceptions import SWFTypeAlreadyExistsError
         m.register_workflow_type.side_effect = SWFTypeAlreadyExistsError(0, 0)
@@ -73,21 +73,21 @@ class SWFClientWorkflowTest(unittest.TestCase):
                                 execution_start_to_close=1,
                                 task_start_to_close=13,
                                 child_policy='TERMINATE',
-                                descr='documentation')
+                                descr='description')
         )
         self.assertFalse(
             c.register_workflow(name='name', version=3,
                                 execution_start_to_close=12,
                                 task_start_to_close=1,
                                 child_policy='TERMINATE',
-                                descr='documentation')
+                                descr='description')
         )
         self.assertFalse(
             c.register_workflow(name='name', version=3,
                                 execution_start_to_close=12,
                                 task_start_to_close=1,
                                 child_policy='BADPOLICY',
-                                descr='documentation')
+                                descr='description')
         )
         conf = m.describe_workflow_type.return_value['configuration']
         conf['defaultTaskList']['name'] = 'badlist'
@@ -96,10 +96,10 @@ class SWFClientWorkflowTest(unittest.TestCase):
                                 execution_start_to_close=12,
                                 task_start_to_close=13,
                                 child_policy='TERMINATE',
-                                descr='documentation')
+                                descr='description')
         )
 
-    def test_registration_unknown_error(self):
+    def test_workflow_registration_unknown_error(self):
         m, c = self._get_uut()
         from boto.swf.exceptions import SWFResponseError
         m.register_workflow_type.side_effect = SWFResponseError(0, 0)
@@ -107,10 +107,10 @@ class SWFClientWorkflowTest(unittest.TestCase):
                                 execution_start_to_close=12,
                                 task_start_to_close=13,
                                 child_policy='TERMINATE',
-                                descr='documentation')
+                                descr='description')
         self.assertFalse(r)
 
-    def test_registration_defaults_check_fails(self):
+    def test_workflow_registration_defaults_check_fails(self):
         m, c = self._get_uut()
         from boto.swf.exceptions import SWFTypeAlreadyExistsError
         from boto.swf.exceptions import SWFResponseError
@@ -120,7 +120,7 @@ class SWFClientWorkflowTest(unittest.TestCase):
                                 execution_start_to_close=12,
                                 task_start_to_close=13,
                                 child_policy='TERMINATE',
-                                descr='documentation')
+                                descr='description')
         self.assertFalse(r)
 
     def test_empty_scheduling(self):
@@ -202,7 +202,7 @@ class SWFClientWorkflowTest(unittest.TestCase):
             execution_context='ctx'
         )
 
-    def test_complete(self):
+    def test_workflow_complete(self):
         m, c = self._get_uut()
         r = c.complete_workflow('token', 'result')
         self.assertTrue(r)
@@ -216,14 +216,14 @@ class SWFClientWorkflowTest(unittest.TestCase):
             task_token='token', decisions=[d]
         )
 
-    def test_complete_error(self):
+    def test_workflow_complete_error(self):
         m, c = self._get_uut()
         from boto.swf.exceptions import SWFResponseError
         m.respond_decision_task_completed.side_effect = SWFResponseError(0, 0)
         r = c.complete_workflow('token', 'result')
         self.assertFalse(r)
 
-    def test_terminate(self):
+    def test_workflow_terminate(self):
         m, c = self._get_uut(domain='dom')
         r = c.terminate_workflow('workflow_id', 'reason')
         self.assertTrue(r)
@@ -231,225 +231,191 @@ class SWFClientWorkflowTest(unittest.TestCase):
             domain='dom', workflow_id='workflow_id', reason='reason'
         )
 
-    def test_terminate_error(self):
-        m, c = self._get_uut(domain='dom')
+    def test_workflow_terminate_error(self):
+        m, c = self._get_uut()
         from boto.swf.exceptions import SWFResponseError
         m.terminate_workflow_execution.side_effect = SWFResponseError(0, 0)
         r = c.terminate_workflow('workflow_id', 'reason')
         self.assertFalse(r)
 
+    def test_poll_decision(self):
+        m, c = self._get_uut(domain='dom', task_list='tskl')
+        m.poll_for_decision_task.return_value = 'decision'
+        r = c.poll_decision()
+        self.assertEquals(r, 'decision')
+        m.poll_for_decision_task.assert_called_once_with(
+            domain='dom', task_list='tskl',
+            next_page_token=None, reverse_order=True,
+        )
+        r = c.poll_decision(next_page_token='nextpage')
+        m.poll_for_decision_task.assert_called_with(
+            domain='dom', task_list='tskl',
+            next_page_token='nextpage', reverse_order=True,
+        )
 
-class WorkflowResponseTest(unittest.TestCase):
+    def test_poll_decision_skip_errors(self):
+        m, c = self._get_uut()
+        from boto.swf.exceptions import SWFResponseError
+        err = SWFResponseError(0, 0)
+        m.poll_for_decision_task.side_effect = [err] * 5 + ['decision']
+        r = c.poll_decision()
+        self.assertEquals(r, 'decision')
 
-    def _get_uut(self, client):
-        from flowy.client import WorkflowResponse
-        return WorkflowResponse(client)
+    def test_activity_registration(self):
+        m, c = self._get_uut(domain='dom', task_list='taskl')
+        r = c.register_activity(name='name', version=3, heartbeat=12,
+                                schedule_to_close=13, schedule_to_start=14,
+                                start_to_close=15, descr='description')
+        self.assertTrue(r)
+        m.register_activity_type.assert_called_once_with(
+            domain='dom', name='name', version='3', task_list='taskl',
+            default_task_heartbeat_timeout='12',
+            default_task_schedule_to_close_timeout='13',
+            default_task_schedule_to_start_timeout='14',
+            default_task_start_to_close_timeout='15',
+            description='description'
+        )
 
-    def test_name_version(self):
-        dummy_client = DummyClient(name='Name', version='123')
-        workflow_response = self._get_uut(dummy_client)
-        self.assertEqual('Name', workflow_response.name)
-        self.assertEqual('123', workflow_response.version)
-
-    def test_scheduled_activities(self):
-        dummy_client = DummyClient(token='token')
-        workflow_response = self._get_uut(dummy_client)
-        workflow_response.queue_activity('call1', 'activity1', 'v1', 'input1')
-        workflow_response.queue_activity('call2', 'activity2', 'v2', 'input2')
-        workflow_response.schedule_activities()
-        self.assertEqual(set([
-            ('call1', 'activity1', 'v1', 'input1'),
-            ('call2', 'activity2', 'v2', 'input2'),
-        ]), dummy_client.scheduled)
-        self.assertEqual('token', dummy_client.token)
-
-    def test_no_scheduled_activities(self):
-        dummy_client = DummyClient(token='token')
-        workflow_response = self._get_uut(dummy_client)
-        workflow_response.schedule_activities()
-        self.assertEqual(set(), dummy_client.scheduled)
-        self.assertEqual('token', dummy_client.token)
-
-    def test_complete_workflow(self):
-        dummy_client = DummyClient(token='token')
-        workflow_response = self._get_uut(dummy_client)
-        workflow_response.complete_workflow('result')
-        self.assertEqual('result', dummy_client.result)
-        self.assertEqual('token', dummy_client.token)
-
-    def test_teriminate_workflow(self):
-        dummy_client = DummyClient(workflow_id='workflow_id')
-        workflow_response = self._get_uut(dummy_client)
-        workflow_response.terminate_workflow('reason')
-        self.assertEqual('reason', dummy_client.reason)
-        self.assertEqual('workflow_id', dummy_client.workflow_id)
-
-
-class WorkflowNewEventsTest(unittest.TestCase):
-
-    def _get_uut(self, client):
-        from flowy.client import WorkflowResponse
-        return WorkflowResponse(client)
-
-    def test_first_few_events(self):
-        dummy_client = DummyClient()
-        for _ in range(4):
-            dummy_client.add_dummy_event()
-        workflow_response = self._get_uut(dummy_client)
-        self.assertEqual(len(list(workflow_response._new_events)), 5)
-
-    def test_paginated_new_events(self):
-        dummy_client = DummyClient(page_size=3)
-        for _ in range(8):
-            dummy_client.add_dummy_event()
-        workflow_response = self._get_uut(dummy_client)
-        self.assertEqual(len(list(workflow_response._new_events)), 9)
-
-    def test_first_few_new_events(self):
-        dummy_client = DummyClient(previous_started_event_id='3')
-        for _ in range(5):
-            dummy_client.add_dummy_event()
-        workflow_response = self._get_uut(dummy_client)
-        self.assertEqual(len(list(workflow_response._new_events)), 4)
-
-    def test_first_few_paginated_new_events(self):
-        dummy_client = DummyClient(page_size=3, previous_started_event_id='13')
-        for _ in range(18):
-            dummy_client.add_dummy_event()
-        workflow_response = self._get_uut(dummy_client)
-        self.assertEqual(len(list(workflow_response._new_events)), 14)
-
-    def test_no_new_events(self):
-        dummy_client = DummyClient()
-        workflow_response = self._get_uut(dummy_client)
-        self.assertEqual(len(list(workflow_response._new_events)), 1)
-
-
-class WorkflowContextTest(unittest.TestCase):
-
-    def _get_uut(self, client):
-        from flowy.client import WorkflowResponse
-        return WorkflowResponse(client)
-
-    def test_no_context(self):
-        dummy_client = DummyClient()
-        for _ in range(4):
-            dummy_client.add_dummy_event()
-        workflow_response = self._get_uut(dummy_client)
-        self.assertEqual(workflow_response._context, None)
-
-    def test_no_context_paginated(self):
-        dummy_client = DummyClient()
-        for _ in range(44):
-            dummy_client.add_dummy_event()
-        workflow_response = self._get_uut(dummy_client)
-        self.assertEqual(workflow_response._context, None)
-
-    def test_context(self):
-        dummy_client = DummyClient()
-        workflow_response = self._get_uut(dummy_client)
-        context = workflow_response._serialize_context()
-        dummy_client = DummyClient(previous_started_event_id='5')
-        dummy_client.add_dummy_event()
-        dummy_client.add_decision_completed(context, '4', '3')
-        for _ in range(5):
-            dummy_client.add_dummy_event()
-        workflow_response = self._get_uut(dummy_client)
-        self.assertEqual(workflow_response._context, context)
-
-    def test_context_paginated(self):
-        dummy_client = DummyClient()
-        workflow_response = self._get_uut(dummy_client)
-        context = workflow_response._serialize_context()
-        dummy_client = DummyClient(previous_started_event_id='20', page_size=5)
-        for _ in range(13):
-            dummy_client.add_dummy_event()
-        dummy_client.add_decision_completed(context, '4', '3')
-        for _ in range(12):
-            dummy_client.add_dummy_event()
-        workflow_response = self._get_uut(dummy_client)
-        self.assertEqual(workflow_response._context, context)
-
-
-class DummyClient(object):
-    def __init__(self,
-        previous_started_event_id=None, page_size=10, token='token',
-        input='', name='name', version='version', workflow_id='wfid'
-    ):
-        self.page_size = page_size
-        self.events = [{
-            'eventType': 'WorkflowExecutionStarted',
-            'eventTimestamp': 1234567,
-            'eventId': 'start',
-            'workflowExecutionStartedEventAttributes': {
-                'input': input,
-            }
-        }]
-        self.current_token = None
-        self.next_start = 0
-        self.previous_started_event_id = previous_started_event_id
-        self.token = token
-        self.id = 0
-        self.name = name
-        self.version = version
-        self.scheduled = set()
-        self.workflow_id = workflow_id
-
-    def add_event(event):
-        self.events.append(event)
-
-    def add_decision_completed(self, context, scheduled_id, started_id):
-        d = {
-            'eventType': 'DecisionTaskCompleted',
-            'eventTimestamp': 1234567,
-            'eventId': str(self.id),
-            'decisionTaskCompletedEventAttributes': {
-                'executionContext': context,
-                'scheduledEventId': scheduled_id,
-                'startedEventId': started_id
+    def test_activity_already_registered(self):
+        m, c = self._get_uut(domain='dom', task_list='taskl')
+        from boto.swf.exceptions import SWFTypeAlreadyExistsError
+        m.register_activity_type.side_effect = SWFTypeAlreadyExistsError(0, 0)
+        m.describe_activity_type.return_value = {
+            'configuration': {
+                'defaultTaskStartToCloseTimeout': '15',
+                'defaultTaskScheduleToStartTimeout': '14',
+                'defaultTaskScheduleToCloseTimeout': '13',
+                'defaultTaskHeartbeatTimeout': '12',
+                'defaultTaskList': {'name': 'taskl'}
             }
         }
-        self.id += 1
-        self.events.append(d)
+        r = c.register_activity(name='name', version=3, heartbeat=12,
+                                schedule_to_close=13, schedule_to_start=14,
+                                start_to_close=15, descr='description')
+        m.describe_activity_type.assert_called_once_with(
+            domain='dom', activity_name='name', activity_version='3'
+        )
+        self.assertTrue(r)
 
-    def add_dummy_event(self):
-        d = {
-            'eventType': 'Dummy',
-            'eventTimestamp': 1234567,
-            'eventId': str(self.id),
+    def test_activity_registration_bad_defaults(self):
+        m, c = self._get_uut(task_list='taskl')
+        from boto.swf.exceptions import SWFTypeAlreadyExistsError
+        m.register_activity_type.side_effect = SWFTypeAlreadyExistsError(0, 0)
+        m.describe_activity_type.return_value = {
+            'configuration': {
+                'defaultTaskStartToCloseTimeout': '15',
+                'defaultTaskScheduleToStartTimeout': '14',
+                'defaultTaskScheduleToCloseTimeout': '13',
+                'defaultTaskHeartbeatTimeout': '12',
+                'defaultTaskList': {'name': 'taskl'}
+            }
         }
-        self.id += 1
-        self.events.append(d)
+        self.assertFalse(
+            c.register_activity(name='name', version=3, heartbeat=1,
+                                schedule_to_close=13, schedule_to_start=14,
+                                start_to_close=15, descr='description')
+        )
+        self.assertFalse(
+            c.register_activity(name='name', version=3, heartbeat=12,
+                                schedule_to_close=1, schedule_to_start=14,
+                                start_to_close=15, descr='description')
+        )
+        self.assertFalse(
+            c.register_activity(name='name', version=3, heartbeat=12,
+                                schedule_to_close=13, schedule_to_start=1,
+                                start_to_close=15, descr='description')
+        )
+        self.assertFalse(
+            c.register_activity(name='name', version=3, heartbeat=12,
+                                schedule_to_close=13, schedule_to_start=14,
+                                start_to_close=1, descr='description')
+        )
+        conf = m.describe_activity_type.return_value['configuration']
+        conf['defaultTaskList']['name'] = 'badlist'
+        self.assertFalse(
+            c.register_activity(name='name', version=3, heartbeat=12,
+                                schedule_to_close=13, schedule_to_start=14,
+                                start_to_close=15, descr='description')
+        )
 
-    def queue_activity(self, *args, **kwargs):
-        self.scheduled.add(args)
+    def test_activity_registration_unknown_error(self):
+        m, c = self._get_uut()
+        from boto.swf.exceptions import SWFResponseError
+        m.register_activity_type.side_effect = SWFResponseError(0, 0)
+        r = c.register_activity(name='name', version=3, heartbeat=12,
+                                schedule_to_close=13, schedule_to_start=14,
+                                start_to_close=15, descr='description')
+        self.assertFalse(r)
 
-    def schedule_activities(self, token, context):
-        self.token = token
-        self.context = context
+    def test_activity_registration_defaults_check_fails(self):
+        m, c = self._get_uut()
+        from boto.swf.exceptions import SWFTypeAlreadyExistsError
+        from boto.swf.exceptions import SWFResponseError
+        m.register_activity_type.side_effect = SWFTypeAlreadyExistsError(0, 0)
+        m.describe_activity_type.side_effect = SWFResponseError(0, 0)
+        r = c.register_activity(name='name', version=3, heartbeat=12,
+                                schedule_to_close=13, schedule_to_start=14,
+                                start_to_close=15, descr='description')
+        self.assertFalse(r)
 
-    def terminate_workflow(self, workflow_id, reason):
-        self.workflow_id = workflow_id
-        self.reason = reason
+    def test_activity_complete(self):
+        m, c = self._get_uut()
+        r = c.complete_activity('token', 'result')
+        self.assertTrue(r)
+        m.respond_activity_task_completed.assert_called_once_with(
+            task_token='token', result='result'
+        )
 
-    def complete_workflow(self, token, result):
-        self.token = token
-        self.result = result
+    def test_activity_complete_error(self):
+        m, c = self._get_uut()
+        from boto.swf.exceptions import SWFResponseError
+        m.respond_activity_task_completed.side_effect = SWFResponseError(0, 0)
+        r = c.complete_activity('token', 'result')
+        self.assertFalse(r)
 
-    def poll_workflow(self, next_page_token=None):
-        if not next_page_token == self.current_token:
-            raise AssertionError('Invalid page token')
-        r = self.events[self.next_start:self.next_start + self.page_size]
-        self.next_start += self.page_size
-        self.current_token = 'token_%s' % (self.next_start / self.page_size)
-        page =  {
-            'events': r,
-            'workflowType': {'name': self.name, 'version': self.version},
-            'taskToken': self.token,
-            'workflowExecution': {'workflowId': self.workflow_id}
-        }
-        if len(self.events) > self.next_start:
-            page['nextPageToken'] = self.current_token
-        if self.previous_started_event_id is not None:
-            page['previousStartedEventId'] = self.previous_started_event_id
-        return page
+    def test_activity_terminate(self):
+        m, c = self._get_uut()
+        r = c.terminate_activity('token', 'reason')
+        self.assertTrue(r)
+        m.respond_activity_task_failed.assert_called_once_with(
+            task_token='token', reason='reason'
+        )
+
+    def test_activity_terminate_error(self):
+        m, c = self._get_uut()
+        from boto.swf.exceptions import SWFResponseError
+        m.respond_activity_task_failed.side_effect = SWFResponseError(0, 0)
+        r = c.terminate_activity('token', 'reason')
+        self.assertFalse(r)
+
+    def test_activity_heartbeat(self):
+        m, c = self._get_uut()
+        r = c.heartbeat('token')
+        self.assertTrue(r)
+        m.record_activity_task_heartbeat.assert_called_once_with(
+            task_token='token'
+        )
+
+    def test_activity_heartbeat_error(self):
+        m, c = self._get_uut()
+        from boto.swf.exceptions import SWFResponseError
+        m.record_activity_task_heartbeat.side_effect = SWFResponseError(0, 0)
+        r = c.heartbeat('token')
+        self.assertFalse(r)
+
+    def test_poll_activity(self):
+        m, c = self._get_uut(domain='dom', task_list='tskl')
+        m.poll_for_activity_task.return_value = 'activity'
+        r = c.poll_activity()
+        self.assertEquals(r, 'activity')
+        m.poll_for_activity_task.assert_called_once_with(
+            domain='dom', task_list='tskl',
+        )
+
+    def test_poll_activity_skip_errors(self):
+        m, c = self._get_uut()
+        from boto.swf.exceptions import SWFResponseError
+        err = SWFResponseError(0, 0)
+        m.poll_for_activity_task.side_effect = [err] * 5 + ['activity']
+        r = c.poll_activity()
+        self.assertEquals(r, 'activity')

@@ -204,7 +204,8 @@ class SWFClient(object):
         poll = self.client.poll_for_decision_task
         while 1:
             try:
-                return poll(self.domain, self.task_list, reverse_order=True,
+                return poll(domain=self.domain, task_list=self.task_list,
+                            reverse_order=True,
                             next_page_token=next_page_token)
             except (IOError, SWFResponseError):
                 logging.warning("Unknown error when pulling decisions: %s %s",
@@ -220,12 +221,9 @@ class SWFClient(object):
         """
         return Decision(self)
 
-    def register_activity(self, name, version, activity_runner,
-                          heartbeat=60,
-                          schedule_to_close=420,
-                          schedule_to_start=120,
-                          start_to_close=300,
-                          doc=None):
+    def register_activity(self, name, version, heartbeat=60,
+                          schedule_to_close=420, schedule_to_start=120,
+                          start_to_close=300, descr=None):
         """ Register an activity with the given configuration options.
 
         If an activity with the same *name* and *version* is already
@@ -239,22 +237,36 @@ class SWFClient(object):
         starts can be specified using *schedule_to_start*.
 
         """
+        version = str(version)
         schedule_to_close = str(schedule_to_close)
         schedule_to_start = str(schedule_to_start)
         start_to_close = str(start_to_close)
         heartbeat = str(heartbeat)
         try:
-            self.client.register_activity_type(self.domain, name, version,
-                                               self.task_list, heartbeat,
-                                               schedule_to_close,
-                                               schedule_to_start,
-                                               start_to_close, doc)
+            self.client.register_activity_type(
+                domain=self.domain,
+                name=name,
+                version=version,
+                task_list=self.task_list,
+                default_task_heartbeat_timeout=heartbeat,
+                default_task_schedule_to_close_timeout=schedule_to_close,
+                default_task_schedule_to_start_timeout=schedule_to_start,
+                default_task_start_to_close_timeout=start_to_close,
+                description=descr
+            )
             logging.info("Registered activity: %s %s", name, version)
         except SWFTypeAlreadyExistsError:
             logging.warning("Activity already registered: %s %s",
                             name, version)
-            reg_a = self.client.describe_activity_type(self.domain, name,
-                                                       version)
+            try:
+                reg_a = self.client.describe_activity_type(
+                    domain=self.domain, activity_name=name,
+                    activity_version=version
+                )
+            except SWFResponseError:
+                logging.warning("Could not check activity defaults: %s %s",
+                                name, version)
+                return False
             conf = reg_a['configuration']
             reg_tstc = conf['defaultTaskStartToCloseTimeout']
             reg_tsts = conf['defaultTaskScheduleToStartTimeout']
@@ -267,30 +279,15 @@ class SWFClient(object):
                     or reg_tschtc != schedule_to_close
                     or reg_hb != heartbeat
                     or reg_tl != self.task_list):
-                logging.waring("Registered activity "
-                               "has different defaults: %s %s",
-                               name, version)
+                logging.warning("Registered activity "
+                                "has different defaults: %s %s",
+                                name, version)
                 return False
         except SWFResponseError:
             logging.warning("Could not register activity: %s %s",
                             name, version, exc_info=1)
             return False
         return True
-
-    def poll_activity(self):
-        """ Poll for a new activity task.
-
-        Blocks until an activity is available in the task list bound to this
-        client.
-
-        """
-        poll = self.client.poll_for_activity_task
-        while 1:
-            try:
-                return poll(self.domain, self.task_list)
-            except (IOError, SWFResponseError):
-                logging.warning("Unknown error when pulling activities: %s %s",
-                                self.domain, self.task_list, exc_info=1)
 
     def complete_activity(self, token, result):
         """ Signals the successful completion of an activity.
@@ -300,7 +297,8 @@ class SWFClient(object):
 
         """
         try:
-            self.client.respond_activity_task_completed(token, result)
+            self.client.respond_activity_task_completed(task_token=token,
+                                                        result=result)
             logging.info("Completed activity: %s %s", token, result)
         except SWFResponseError:
             logging.warning("Could not complete activity: %s",
@@ -315,7 +313,8 @@ class SWFClient(object):
         *reason*. Returns a boolean indicating the success of the operation.
         """
         try:
-            self.client.respond_activity_task_failed(token, reason=reason)
+            self.client.respond_activity_task_failed(task_token=token,
+                                                     reason=reason)
             logging.info("Terminated activity: %s %s", token, reason)
         except SWFResponseError:
             logging.warning("Could not terminate activity: %s",
@@ -333,13 +332,28 @@ class SWFClient(object):
 
         """
         try:
-            self.client.record_activity_task_heartbeat(token)
+            self.client.record_activity_task_heartbeat(task_token=token)
             logging.info("Sent activity heartbeat: %s", token)
         except SWFResponseError:
             logging.warning("Error when sending activity heartbeat: %s",
                             token, exc_info=1)
             return False
         return True
+
+    def poll_activity(self):
+        """ Poll for a new activity task.
+
+        Blocks until an activity is available in the task list bound to this
+        client.
+
+        """
+        poll = self.client.poll_for_activity_task
+        while 1:
+            try:
+                return poll(domain=self.domain, task_list=self.task_list)
+            except (IOError, SWFResponseError):
+                logging.warning("Unknown error when pulling activities: %s %s",
+                                self.domain, self.task_list, exc_info=1)
 
     def next_activity(self):
         """ Get the next available activity.
@@ -892,7 +906,7 @@ class ActivityClient(object):
         # All versions are converted to string in SWF and that's how we should
         # store them too in order to be able to query for them
         self._activities[(name, str(version))] = activity_runner
-        self._register_queue.append((name, version, activity_runner, heartbeat,
+        self._register_queue.append((name, version, heartbeat,
                                      schedule_to_close, schedule_to_start,
                                      start_to_close, doc))
 
