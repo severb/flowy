@@ -1,11 +1,8 @@
 from flowy.activity import Activity
-from flowy.client import ActivityClient
+from flowy.client import activity_client
 
 
-my_client = ActivityClient.for_domain('SeversTest', 'div_list')
-
-
-@my_client('NumberDivider', 4, heartbeat=5, start_to_close=60)
+@activity_client('NumberDivider', 4, heartbeat=5, start_to_close=60)
 class NumberDivider(Activity):
     """
     Divide numbers.
@@ -26,4 +23,4 @@ class NumberDivider(Activity):
         return n % x == 0
 
 
-my_client.start()
+activity_client.start_on('SeversTest', 'div_list')

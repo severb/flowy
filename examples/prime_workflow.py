@@ -1,11 +1,8 @@
 from flowy.workflow import Workflow, ActivityProxy
-from flowy.client import WorkflowClient
+from flowy.client import workflow_client
 
 
-my_client = WorkflowClient.for_domain('SeversTest', 'prime_task_list')
-
-
-@my_client('MyPrime', 2)
+@workflow_client('MyPrime', 2)
 class PrimeTest(Workflow):
     """
     Checks if a number is prime.
@@ -27,4 +24,4 @@ class PrimeTest(Workflow):
         return 'prime'
 
 
-my_client.start()
+workflow_client.start_on('SeversTest', 'prime_task_list')

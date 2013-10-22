@@ -649,13 +649,13 @@ class WorkflowClient(object):
     used to instantiate the ``Workflow`` implementation::
 
     >>> client = WorkflowClient()
-    >>>
+    >>> 
     >>> @client(name="MyWorkflow", version=1, x=2)
     >>> class MyWorkflow(Workflow):
-    >>>
+    >>> 
     >>>     def __init__(self, x, y=3):
     >>>         pass
-    >>>
+    >>> 
     >>>     def run(self):
     >>>         pass
 
@@ -675,10 +675,18 @@ class WorkflowClient(object):
 
         """
         self._workflows[(name, str(version))] = workflow_runner
-        self._register_queue.append((name, version, workflow_runner,
-                                     execution_start_to_close,
-                                     task_start_to_close,
-                                     child_policy, doc))
+        self._register_queue.append((name, version, execution_start_to_close,
+                                     task_start_to_close, child_policy, doc))
+
+    def start_on(self, domain, task_list, client=None):
+        """ A shortcut for :meth:`start`.
+
+        Start the main loop in the given *domain*, *task_list* and an optional
+        :class:`boto.swf.layer1.Layer1` *client*.
+
+        """
+        client = SWFClient(domain, task_list, client)
+        return self.start(client)
 
     def start(self, client):
         """ Starts the main loop using a specific :class:`SWFClient` *client*
@@ -752,7 +760,11 @@ class WorkflowClient(object):
 
         return wrapper
 
-    def schedule(self, name, version, *args, **kwargs):
+    def schedule_on(self, domain, task_list, name, version, *args, **kwargs):
+        c = SWFClient(domain=domain, task_list=task_list)
+        return self.schedule(c, name, version, *args, **kwargs)
+
+    def schedule(self, client, name, version, *args, **kwargs):
         """ Start the workflow having *name and *version*.
 
         The arguments received by this method are serialized using the
@@ -761,7 +773,7 @@ class WorkflowClient(object):
 
         """
         input = self.serialize_workflow_arguments(*args, **kwargs)
-        return self.client.start_workflow(name, version, input)
+        return client.start_workflow(name, version, input)
 
     @staticmethod
     def serialize_workflow_arguments(*args, **kwargs):
@@ -852,13 +864,13 @@ class ActivityClient(object):
     instantiate the ``Activity`` implementation::
 
     >>> client = ActivityClient()
-    >>>
+    >>> 
     >>> @client(name='MyActivity', version=1, heartbeat=120, x=1, y=2)
     >>> class MyActivity(Activity):
-    >>>
+    >>> 
     >>>    def __init__(self, x, y=1):
     >>>        pass
-    >>>
+    >>> 
     >>>    def run(self):
     >>>        pass
 
