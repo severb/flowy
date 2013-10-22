@@ -1,5 +1,6 @@
+import copy
 import unittest
-from mock import create_autospec
+from mock import create_autospec, ANY
 
 
 class SWFClientTest(unittest.TestCase):
@@ -441,3 +442,127 @@ class SWFClientTest(unittest.TestCase):
         m.poll_for_activity_task.side_effect = [err] * 5 + ['activity']
         r = c.poll_activity('taskl')
         self.assertEquals(r, 'activity')
+
+
+class DecisionTest(unittest.TestCase):
+
+    def setUp(self):
+        import logging
+        logging.root.disabled = True
+
+    def tearDown(self):
+        import logging
+        logging.root.disabled = False
+
+    def _get_uut(self, client, task_list='tasklist'):
+        from flowy.client import Decision
+        return Decision(client, task_list)
+
+    def _get_client_mock(self):
+        from flowy.client import SWFClient
+        return create_autospec(SWFClient, instance=True)
+
+    simple_decision = {
+        'taskToken': 'token',
+        'workflowType': {'name': 'name', 'version': 'version'},
+        'workflowExecution': {'workflowId': 'workflowid'},
+        'events': [{
+            'eventType': 'WorkflowExecutionStarted',
+            'workflowExecutionStartedEventAttributes': {'input': 'input'},
+        }]
+    }
+
+    def test_decision_creation(self):
+        m = self._get_client_mock()
+        m.poll_decision.return_value = self.simple_decision
+        d = self._get_uut(m, task_list='taskl')
+        self.assertEquals(d.input, 'input')
+        self.assertEquals(d.name, 'name')
+        self.assertEquals(d.version, 'version')
+        m.poll_decision.assert_called_once_with(task_list='taskl')
+
+    def test_queue_activity(self):
+        m = self._get_client_mock()
+        m.poll_decision.return_value = self.simple_decision
+        d = self._get_uut(m, task_list='taskl')
+        d.queue_activity('callid', 'name', 'version', 'input',
+                         11, 12, 13, 14, 'taskl', 10)
+        m.queue_activity.assert_called_once_with(
+            call_id='callid', name='name', version='version', input='input',
+            heartbeat=11, schedule_to_close=12, schedule_to_start=13,
+            start_to_close=14, task_list='taskl'
+        )
+
+    def test_schedule_activities(self):
+        m = self._get_client_mock()
+        m.poll_decision.return_value = self.simple_decision
+        d = self._get_uut(m, task_list='taskl')
+        r = d.schedule_activities()
+        m.schedule_activities.assert_called_once_with(token='token',
+                                                      context=ANY)
+        self.assertTrue(r)
+
+    def test_complete_workflow(self):
+        m = self._get_client_mock()
+        m.poll_decision.return_value = self.simple_decision
+        d = self._get_uut(m, task_list='taskl')
+        r = d.complete_workflow('result')
+        m.complete_workflow.assert_called_once_with(token='token',
+                                                    result='result')
+        self.assertTrue(r)
+
+    def test_terminate_workflow(self):
+        m = self._get_client_mock()
+        m.poll_decision.return_value = self.simple_decision
+        d = self._get_uut(m, task_list='taskl')
+        r = d.terminate_workflow('reason')
+        m.terminate_workflow.assert_called_once_with(workflow_id='workflowid',
+                                                     reason='reason')
+        self.assertTrue(r)
+
+    def test_is_activity_running(self):
+        m = self._get_client_mock()
+        m.poll_decision.return_value = self.simple_decision
+        d = self._get_uut(m, task_list='taskl')
+        self.assertFalse(d.is_activity_running(1))
+
+        decision = copy.deepcopy(self.simple_decision)
+        decision['events'].insert(0, {
+            'eventType': 'ActivityTaskScheduled',
+            'eventId': 100,
+            'activityTaskScheduledEventAttributes': {'activityId': 1}
+        })
+        m.poll_decision.return_value = decision
+        d = self._get_uut(m, task_list='taskl')
+        self.assertTrue(d.is_activity_running(1))
+
+        completed_decision = copy.deepcopy(decision)
+        completed_decision['events'].insert(0, {
+            'eventType': 'ActivityTaskCompleted',
+            'activityTaskCompletedEventAttributes': {
+                'scheduledEventId': 100, 'result': 'result',
+            }
+        })
+        m.poll_decision.return_value = completed_decision
+        d = self._get_uut(m, task_list='taskl')
+        self.assertFalse(d.is_activity_running(1))
+
+        failed_decision = copy.deepcopy(decision)
+        failed_decision['events'].insert(0, {
+            'eventType': 'ActivityTaskFailed',
+            'activityTaskFailedEventAttributes': {
+                'scheduledEventId': 100, 'reason': 'reason'
+            }
+        })
+        m.poll_decision.return_value = failed_decision
+        d = self._get_uut(m, task_list='taskl')
+        self.assertFalse(d.is_activity_running(1))
+
+        timedout_decision = copy.deepcopy(decision)
+        timedout_decision['events'].insert(0, {
+            'eventType': 'ActivityTaskTimedOut',
+            'activityTaskTimedOutEventAttributes': {'scheduledEventId': 100}
+        })
+        m.poll_decision.return_value = timedout_decision
+        d = self._get_uut(m, task_list='taskl')
+        self.assertFalse(d.is_activity_running(1))

@@ -394,11 +394,11 @@ class Decision(object):
     """ A decision that must be taken every time the workflow state changes.
 
     Initializing this class with a *client* will block until a decision task
-    will be successfully polled. Every decision has access to the entire
-    workflow execution history. This class provides an API for the interesting
-    parts of the workflow execution history and for managing the context. The
-    context is a persistent customisable part of the workflow execution
-    history.
+    will be successfully polled from the *task_list*. Every decision has access
+    to the entire workflow execution history. This class provides an API for
+    the interesting parts of the workflow execution history and for managing
+    the context. The context is a persistent customisable part of the workflow
+    execution history.
 
     This class also wraps the workflow specific funtionality of
     :class:`SWFClient` and automatically forwards some of the
@@ -419,7 +419,7 @@ class Decision(object):
 
         response = {}
         while 'taskToken' not in response or not response['taskToken']:
-            response = self.client.poll_decision(task_list)
+            response = self.client.poll_decision(task_list=task_list)
         self._api_response = response
 
         self._restore_context()
@@ -456,7 +456,10 @@ class Decision(object):
 
         """
         self.client.queue_activity(
-            call_id, name, version, input,
+            call_id=call_id,
+            name=name,
+            version=version,
+            input=input,
             heartbeat=heartbeat,
             schedule_to_close=schedule_to_close,
             schedule_to_start=schedule_to_start,
@@ -475,8 +478,9 @@ class Decision(object):
         the internal collection of scheduled activities will be cleared.
 
         """
-        return self.client.schedule_activities(self._token,
-                                               self._serialize_context())
+        return self.client.schedule_activities(
+            token=self._token, context=self._serialize_context()
+        )
 
     def complete_workflow(self, result):
         """ Signal the successful completion of the workflow with a given
@@ -487,7 +491,7 @@ class Decision(object):
         identifies the workflow that successfully completed.
         Returns a boolean indicating the success of the operation.
         """
-        return self.client.complete_workflow(self._token, result)
+        return self.client.complete_workflow(token=self._token, result=result)
 
     def terminate_workflow(self, reason):
         """ Signal the termination of the workflow with a given *reason* using
@@ -500,7 +504,8 @@ class Decision(object):
 
         """
         workflow_id = self._api_response['workflowExecution']['workflowId']
-        return self.client.terminate_workflow(workflow_id, reason)
+        return self.client.terminate_workflow(workflow_id=workflow_id,
+                                              reason=reason)
 
     def any_activity_running(self):
         """ Checks the history for any activities running.
@@ -568,6 +573,7 @@ class Decision(object):
     def _ActivityTaskFailed(self, event):
         subdict = event['activityTaskFailedEventAttributes']
         event_id, reason = subdict['scheduledEventId'], subdict['reason']
+        self._running.remove(self._event_to_call_id[event_id])
         self._with_errors[self._event_to_call_id[event_id]] = reason
 
     def _ActivityTaskTimedOut(self, event):
