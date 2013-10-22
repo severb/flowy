@@ -169,6 +169,23 @@ class SWFClientTest(unittest.TestCase):
             execution_context='ctx'
         )
 
+    def test_scheduling_defaults(self):
+        m, c = self._get_uut()
+        c.queue_activity('call1', 'name1', 1, 'input1')
+        r = c.schedule_activities('token', 'ctx')
+        self.assertTrue(r)
+        m.respond_decision_task_completed.assert_called_once_with(
+            task_token='token', decisions=[{
+                'scheduleActivityTaskDecisionAttributes': {
+                    'input': 'input1',
+                    'activityId': 'call1',
+                    'activityType': {'version': '1', 'name': 'name1'}
+                },
+                'decisionType': 'ScheduleActivityTask'
+            }],
+            execution_context='ctx'
+        )
+
     def test_error_when_scheduling(self):
         m, c = self._get_uut()
         from boto.swf.exceptions import SWFResponseError
