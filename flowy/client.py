@@ -829,7 +829,7 @@ class ActivityResponse(object):
         return self.client.complete_activity(self._token, result)
 
     def terminate(self, reason):
-        """ Signal the termination of the activity with a given *reason using
+        """ Signal the termination of the activity with a given *reason* using
         the bound client's :meth:`SWFClient.terminate_activity` method.
 
         This method is also responsible for passing the ``token`` that

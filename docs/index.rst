@@ -18,6 +18,8 @@ API Documentation
    :maxdepth: 1
 
    client
+   workflow
+   activity
 
 
 Indices and tables
