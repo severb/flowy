@@ -25,13 +25,16 @@ Here is one of the simplest :app:`Flowy` applications you can make:
 
 .. literalinclude:: tutorial/simple_example.py
 
+See the :ref:`tutorial` for a full explanation on how this application
+works and how to build a complete workflow from start to finish.
+
 Contents:
 =================
 .. toctree::
    :maxdepth: 2
 
    installation
-   tutorial
+   tutorial/tutorial.rst
 
 API Documentation
 =================
