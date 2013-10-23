@@ -15,6 +15,9 @@
 import sys
 import os
 
+from docutils import nodes
+from docutils import utils
+
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
@@ -103,7 +106,7 @@ pygments_style = 'sphinx'
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-html_theme = 'default'
+html_theme = 'pyramid'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
@@ -265,3 +268,16 @@ texinfo_documents = [
 
 # Example configuration for intersphinx: refer to the Python standard library.
 #intersphinx_mapping = {'boto': ('http://boto.readthedocs.org/en/latest/', None)}
+
+def app_role(role, rawtext, text, lineno, inliner, options={}, content=[]):
+    """custom role for :app: marker, does nothing in particular except allow
+    :app:`Flowy` to work (for later search and replace)."""
+    if 'class' in options:
+        assert 'classes' not in options
+        options['classes'] = options['class']
+        del options['class']
+    return [nodes.inline(rawtext, utils.unescape(text), **options)], []
+
+
+def setup(app):
+    app.add_role('app', app_role)
