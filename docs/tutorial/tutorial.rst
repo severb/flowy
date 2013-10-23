@@ -37,5 +37,5 @@ can go ahead and create an activity for the video transcoding.
 Creating our first Activity:
 ----------------------------
 
-.. code-block:: python
+.. literalinclude:: tutorial/transcoding.py
 
