@@ -18,10 +18,8 @@ application.
    with :app:`Flowy`
 
 The basic idea of our mock application is that users upload video files to our
-servers, and the people can browse, view or rate them. Think YouTube.
-
-As far as our app's backend is concerned we can identify the following logical
-flow:
+servers, and the people can browse, view or rate them. Think YouTube.  As far
+as our app's backend is concerned we can identify the following logical flow:
 
 #TODO:
 Graph showing a basic sequential flow. Upload -> Transcoding -> Thumbnail
@@ -34,8 +32,45 @@ As you can see, our flow is divided into several units of work, each
 corresponding to an activity within :app:`Flowy`, so without further adieu, we
 can go ahead and create an activity for the video transcoding.
 
-Creating our first Activity:
-----------------------------
+Creating our first Activity
+---------------------------
 
-.. literalinclude:: tutorial/transcoding.py
+.. literalinclude:: transcoding.py
+
+So inserting this code into a Python script named transcoding_activity.py
+grants us our first activity. Let's examine it piece-by-piece.
+
+Imports
+~~~~~~~
+
+The above activity uses the following set of import statements:
+
+.. literalinclude:: transcoding.py
+   :linenos:
+   :lines: 1-2
+
+The script imports the :class:`~flowy.activity.Activity` class from the
+:mod:`flowy.activity` module. Our activity must inherit this class. We also
+import ``activity_client`` which is an instance of
+:class:`~flowy.client.ActivityClient` which we will use to decorate our
+activity, specifying the activity's name, version and task list (several other
+options can be specified here as well).
+
+Activity class definition
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Defining our activity is done in the following manner:
+
+.. literalinclude:: transcoding.py
+   :language: python
+   :linenos:
+   :lines: 4-6
+
+When decorating the activity class with ``activity_client`` we must specify
+a name, version, and a task list to bind our activity to. Several activities
+can share the same name, however, they must differ in version number.
+
+
+
+
 

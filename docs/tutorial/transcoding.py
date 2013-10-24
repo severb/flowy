@@ -3,7 +3,7 @@ from flowy.client import activity_client
 
 
 @activity_client('Transcoding', 1, 'transcoding_list')
-class EvenChecker(Activity):
+class Transcoding(Activity):
 
     def some_transcoding_function(self, source):
         # Business logic goes here, but we're not interested in that
