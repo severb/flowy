@@ -19,6 +19,8 @@ SWFActivityScheduled = namedtuple('SWFActivityScheduled', 'event_id call_id')
 SWFActivityCompleted = namedtuple('SWFActivityCompleted', 'event_id result')
 SWFActivityFailed = namedtuple('SWFActivityFailed', 'event_id reason')
 SWFActivityTimedout = namedtuple('SWFActivityTimedout', 'event_id')
+SWFDecision = namedtuple('SWFDecision',
+                         'name version token context input events')
 
 
 class SWFClient(object):
@@ -201,12 +203,13 @@ class SWFClient(object):
             return False
         return True
 
-    def poll_decision(self, task_list, next_page_token=None):
+    def poll_decision(self, task_list):
         """ Poll for a new decision task.
 
-        Blocks until a decision is available in the *task_list*. In case of
-        larger responses *next_page_token* can be used to retrieve paginated
-        decisions.
+        Blocks until a decision is available in the *task_list*. A decision is
+        a :class:`SWFDecision` instance. When polling return the first decision
+        for a workflow the ``context`` will be empty, the subsequent decisions
+        for the same workflow will have an empty ``input`` value.
 
         """
         def poll_page(next_page_token=None):
@@ -298,19 +301,9 @@ class SWFClient(object):
             input = first_event['workflowExecutionStartedEventAttributes']
             input = input['input']
 
-        return (
+        return SWFDecision(
             name, version, token, context, input, tuple(typed_events(events))
         )
-
-    def next_decision(self, task_list):
-        """ Get the next available decision.
-
-        Returns the next :class:`Decision` instance available in the
-        *task_list*. Because instantiating a ``Decision`` blocks until a
-        decision is available, the same is true for this method.
-
-        """
-        return Decision(self, task_list)
 
     def register_activity(self, name, version, task_list, heartbeat=60,
                           schedule_to_close=420, schedule_to_start=120,
