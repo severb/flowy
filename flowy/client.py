@@ -2,6 +2,8 @@ import sys
 import json
 import uuid
 import logging
+from collections import namedtuple
+from itertools import chain
 
 from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
@@ -11,6 +13,12 @@ from flowy.workflow import _UnhandledActivityError
 
 
 __all__ = ['ActivityClient', 'WorkflowClient']
+
+
+SWFActivityScheduled = namedtuple('SWFActivityScheduled', 'event_id call_id')
+SWFActivityCompleted = namedtuple('SWFActivityCompleted', 'event_id result')
+SWFActivityFailed = namedtuple('SWFActivityFailed', 'event_id reason')
+SWFActivityTimedout = namedtuple('SWFActivityTimedout', 'event_id')
 
 
 class SWFClient(object):
@@ -201,15 +209,98 @@ class SWFClient(object):
         decisions.
 
         """
-        poll = self.client.poll_for_decision_task
-        while 1:
-            try:
-                return poll(domain=self.domain, task_list=task_list,
-                            reverse_order=True,
-                            next_page_token=next_page_token)
-            except (IOError, SWFResponseError):
-                logging.warning("Unknown error when pulling decisions: %s %s",
-                                self.domain, task_list, exc_info=1)
+        def poll_page(next_page_token=None):
+            poll = self.client.poll_for_decision_task
+            response = {}
+            while 'taskToken' not in response or not response['taskToken']:
+                while not response:
+                    try:
+                        response = poll(domain=self.domain,
+                                        task_list=task_list,
+                                        reverse_order=True,
+                                        next_page_token=next_page_token)
+                    except (IOError, SWFResponseError):
+                        logging.warning("Unknown error when pulling"
+                                        " decisions: %s %s",
+                                        self.domain, task_list, exc_info=1)
+            return response
+
+        def poll_all_pages():
+            page = poll_page()
+            yield page
+            while 'nextPageToken' in page:
+                page = poll_page(next_page_token=page['nextPageToken'])
+
+        def all_events(pages):
+            for page in pages:
+                for event in page['events']:
+                    yield event
+
+        def new_events(prev_id, events):
+            decisions_completed = 0
+            events = []
+            for event in events:
+                if event['eventType'] == 'DecisionTaskCompleted':
+                    decisions_completed += 1
+                if event['eventId'] == prev_id:
+                    break
+                events.append(event)
+            assert decisions_completed <= 1
+            return reversed(events)
+
+        def typed_events(events):
+            for event in events:
+                event_type = event['eventType']
+                if event_type == 'ActivityTaskScheduled':
+                    ATSEA = 'activityTaskScheduledEventAttributes'
+                    event_id = event['eventId']
+                    call_id = event[ATSEA]['activityId']
+                    yield SWFActivityScheduled(event_id, call_id)
+                elif event_type == 'ActivityTaskCompleted':
+                    ATCEA = 'activityTaskCompletedEventAttributes'
+                    event_id = event[ATCEA]['scheduledEventId']
+                    result = event[ATCEA]['result']
+                    yield SWFActivityCompleted(event_id, result)
+                elif event_type == 'ActivityTaskFailed':
+                    ATFEA = 'activityTaskFailedEventAttributes'
+                    event_id = event[ATFEA]['scheduledEventId']
+                    reason = event[ATFEA]['reason']
+                    yield SWFActivityFailed(event_id, reason)
+                elif event_type == 'ActivityTaskTimedOut':
+                    ATTOEA = 'activityTaskTimedOutEventAttributes'
+                    event_id = event[ATTOEA]['scheduledEventId']
+                    yield SWFActivityTimedout(event_id)
+
+        all_pages = poll_all_pages()
+        first_page = all_pages.next()
+        all_pages = chain([first_page], all_pages)
+
+        name = first_page['workflowType']['name']
+        version = first_page['workflowType']['version']
+        token = first_page['taskToken']
+
+        prev_id = first_page.get('previousStartedEventId')
+        events = all_events(all_pages)
+        if prev_id:
+            events = new_events(prev_id, events)
+        events = tuple(events)
+
+        context = None
+        for event in events:
+            if event['eventType'] == 'DecisionTaskCompleted':
+                DTCEA = 'decisionTaskCompletedEventAttributes'
+                context = event[DTCEA]['executionContext']
+                break
+
+        input = None
+        first_event = events[0]
+        if first_event['eventType'] == 'WorkflowExecutionStarted':
+            input = first_event['workflowExecutionStartedEventAttributes']
+            input = input['input']
+
+        return (
+            name, version, token, context, input, tuple(typed_events(events))
+        )
 
     def next_decision(self, task_list):
         """ Get the next available decision.
