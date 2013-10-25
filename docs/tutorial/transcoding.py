@@ -10,7 +10,7 @@ class Transcoding(Activity):
         pass
 
     def run(self, source_file):
-        status = self.some_transcoding_function(source_file)
+        status = self.some_transcoding_method(source_file)
         return status
 
 

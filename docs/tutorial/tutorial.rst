@@ -15,7 +15,7 @@ application.
 .. note:: In this tutorial our focus will be on creating the workflow and not
    the video streaming app itself. The point of said app is to illustrate
    how several logical components can interract within a workflow constructed
-   with :app:`Flowy`
+   with :app:`Flowy`.
 
 The basic idea of our mock application is that users upload video files to our
 servers, and the people can browse, view or rate them. Think YouTube.  As far
@@ -36,6 +36,7 @@ Creating our first Activity
 ---------------------------
 
 .. literalinclude:: transcoding.py
+   :linenos:
 
 So inserting this code into a Python script named transcoding_activity.py
 grants us our first activity. Let's examine it piece-by-piece.
@@ -46,7 +47,6 @@ Imports
 The above activity uses the following set of import statements:
 
 .. literalinclude:: transcoding.py
-   :linenos:
    :lines: 1-2
 
 The script imports the :class:`~flowy.activity.Activity` class from the
@@ -54,23 +54,49 @@ The script imports the :class:`~flowy.activity.Activity` class from the
 import ``activity_client`` which is an instance of
 :class:`~flowy.client.ActivityClient` which we will use to decorate our
 activity, specifying the activity's name, version and task list (several other
-options can be specified here as well).
+options can be specified here as well). Activities can also be registered
+manually with the :meth:`~flowy.client.ActivityClient.register` method.
 
-Activity class definition
-~~~~~~~~~~~~~~~~~~~~~~~~~
+Creating our first Activity
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Defining our activity is done in the following manner:
+Defining our activity class is done in the following manner:
 
 .. literalinclude:: transcoding.py
    :language: python
-   :linenos:
    :lines: 4-6
 
 When decorating the activity class with ``activity_client`` we must specify
-a name, version, and a task list to bind our activity to. Several activities
-can share the same name, however, they must differ in version number.
+a name, version, and a task list to register the activity with. The activity
+will be scheduled on the task list called ``transcoding_list``, and only
+processes that poll for activities on that task list will receive it for
+processing.  Our activity class must also inherit
+:class:`~flowy.client.ActivityClient`.
 
+.. literalinclude:: transcoding.py
+   :language: python
+   :lines: 8-14
 
+The :meth:`~flowy.activity.Activity.run` method is the heart of our activity.
+That is where we must implement the activity logic itself. The
+``some_transcoding_method`` method is just a placeholder for some business
+logic however complex it might be.
 
+.. seealso:: See :meth:`~flowy.client.SWFClient.register_activity` for a full
+   list of options that can be specified via the decorator or the
+   :meth:`~flowy.client.SWFClient.register` method.
+
+Finally, we have:
+
+.. literalinclude:: transcoding.py
+   :language: python
+   :lines: 16-17
+
+What this does, is start the main activity polling loop on the
+``transcoding_list`` task list. Notice, the same task list was specified when
+creating our activity.
+
+Creating our first Workflow
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
