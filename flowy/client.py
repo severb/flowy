@@ -289,8 +289,8 @@ class ActivityTask(object):
 
         """
         try:
-            self.client.respond_activity_task_failed(task_token=self._token,
-                                                     reason=reason)
+            self._client.respond_activity_task_failed(task_token=self._token,
+                                                      reason=reason)
             logging.info("Terminated activity: %s %s", self._token, reason)
         except SWFResponseError:
             logging.warning("Could not terminate activity: %s",
@@ -307,7 +307,7 @@ class ActivityTask(object):
 
         """
         try:
-            self.client.record_activity_task_heartbeat(task_token=self._token)
+            self._client.record_activity_task_heartbeat(task_token=self._token)
             logging.info("Sent activity heartbeat: %s", self._token)
         except SWFResponseError:
             logging.warning("Error when sending activity heartbeat: %s",
@@ -332,7 +332,7 @@ class SWFClient(object):
 
     """
     def __init__(self, domain, client=None):
-        self.client = client if client is not None else Layer1()
+        self._client = client if client is not None else Layer1()
         self.domain = domain
         self._scheduled_activities = []
 
@@ -358,7 +358,7 @@ class SWFClient(object):
         estc = str(execution_start_to_close)
         tstc = str(task_start_to_close)
         try:
-            self.client.register_workflow_type(
+            self._client.register_workflow_type(
                 domain=self.domain,
                 name=name,
                 version=v,
@@ -373,7 +373,7 @@ class SWFClient(object):
             logging.warning("Workflow already registered: %s %s",
                             name, version)
             try:
-                reg_w = self.client.describe_workflow_type(
+                reg_w = self._client.describe_workflow_type(
                     domain=self.domain, workflow_name=name, workflow_version=v
                 )
             except SWFResponseError:
@@ -408,7 +408,7 @@ class SWFClient(object):
 
         """
         def poll_page(next_page_token=None):
-            poll = self.client.poll_for_decision_task
+            poll = self._client.poll_for_decision_task
             response = {}
             while 'taskToken' not in response or not response['taskToken']:
                 try:
@@ -433,16 +433,13 @@ class SWFClient(object):
                     yield event
 
         def new_events(prev_id, events):
-            decisions_completed = 0
-            events = []
+            result = []
             for event in events:
                 if event['eventType'] == 'DecisionTaskCompleted':
-                    decisions_completed += 1
-                if event['eventId'] == prev_id:
+                    assert event['eventId'] == prev_id
                     break
-                events.append(event)
-            assert decisions_completed <= 1
-            return reversed(events)
+                result.append(event)
+            return reversed(result), event['executionContext']
 
         def typed_events(events):
             for event in events:
@@ -474,28 +471,25 @@ class SWFClient(object):
         name = first_page['workflowType']['name']
         version = first_page['workflowType']['version']
         token = first_page['taskToken']
+        input = None
+        context = None
+
+        events = all_events(all_pages)
 
         prev_id = first_page.get('previousStartedEventId')
-        events = all_events(all_pages)
         if prev_id:
-            events = new_events(prev_id, events)
-        events = tuple(events)
+            events, context = new_events(prev_id, events)
+        else:
+            first_event = events.next()
+            assert first_event['eventType'] == 'WorkflowExecutionStarted'
+            WESEA = 'workflowExecutionStartedEventAttributes'
+            input = first_event[WESEA]['input']
 
-        context = None
-        for event in events:
-            if event['eventType'] == 'DecisionTaskCompleted':
-                DTCEA = 'decisionTaskCompletedEventAttributes'
-                context = event[DTCEA]['executionContext']
-                break
+        new_events = tuple(typed_events(events))  # cache the result
 
-        input = None
-        first_event = events[0]
-        if first_event['eventType'] == 'WorkflowExecutionStarted':
-            input = first_event['workflowExecutionStartedEventAttributes']
-            input = input['input']
-
-        return decision_factory(name, version, token, self._client,
-                                context, input, new_events)
+        return decision_factory(name=name, version=version, token=token,
+                                client=self._client, context=context,
+                                input=input, new_events=new_events)
 
     def register_activity(self, name, version, task_list, heartbeat=60,
                           schedule_to_close=420, schedule_to_start=120,
@@ -521,7 +515,7 @@ class SWFClient(object):
         start_to_close = str(start_to_close)
         heartbeat = str(heartbeat)
         try:
-            self.client.register_activity_type(
+            self._client.register_activity_type(
                 domain=self.domain,
                 name=name,
                 version=version,
@@ -537,7 +531,7 @@ class SWFClient(object):
             logging.warning("Activity already registered: %s %s",
                             name, version)
             try:
-                reg_a = self.client.describe_activity_type(
+                reg_a = self._client.describe_activity_type(
                     domain=self.domain, activity_name=name,
                     activity_version=version
                 )
@@ -574,7 +568,7 @@ class SWFClient(object):
         it.
 
         """
-        poll = self.client.poll_for_activity_task
+        poll = self._client.poll_for_activity_task
         response = {}
         while 'taskToken' not in response or not response['taskToken']:
             try:
@@ -588,7 +582,8 @@ class SWFClient(object):
         input = response['input']
         token = response['taskToken']
 
-        return activity_factory(name, version, input, token, self._client)
+        return activity_factory(name=name, version=version, input=input,
+                                token=token, client=self._client)
 
     def start_workflow(self, name, version, task_list, input):
         """ Starts the workflow identified by *name* and *version* with the
@@ -601,11 +596,11 @@ class SWFClient(object):
 
         """
         try:
-            r = self.client.start_workflow_execution(self.domain,
-                                                     str(uuid.uuid4()),
-                                                     name, str(version),
-                                                     task_list=task_list,
-                                                     input=input)
+            r = self._client.start_workflow_execution(self.domain,
+                                                      str(uuid.uuid4()),
+                                                      name, str(version),
+                                                      task_list=task_list,
+                                                      input=input)
         except SWFResponseError:
             logging.warning("Could not start workflow: %s %s",
                             name, version, exc_info=1)
@@ -788,11 +783,11 @@ class ActivityClient(object):
     >>> @client(name='MyActivity', version=1, heartbeat=120, x=1, y=2)
     >>> class MyActivity(Activity):
     >>> 
-    >>>    def __init__(self, x, y=1):
-    >>>        pass
+    >>>     def __init__(self, x, y=1):
+    >>>         pass
     >>> 
-    >>>    def run(self):
-    >>>        pass
+    >>>     def run(self):
+    >>>         pass
 
     When the client is started using the :meth:`start` method, it starts the
     main loop polling for activities that need to be ran, matching them based
