@@ -4,7 +4,7 @@ import uuid
 import logging
 from collections import namedtuple
 from itertools import chain
-from pkgutils import simplegeneric
+from pkgutil import simplegeneric
 
 from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
