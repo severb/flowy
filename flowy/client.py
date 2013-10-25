@@ -4,6 +4,7 @@ import uuid
 import logging
 from collections import namedtuple
 from itertools import chain
+from pkgutils import simplegeneric
 
 from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
@@ -19,8 +20,6 @@ SWFActivityScheduled = namedtuple('SWFActivityScheduled', 'event_id call_id')
 SWFActivityCompleted = namedtuple('SWFActivityCompleted', 'event_id result')
 SWFActivityFailed = namedtuple('SWFActivityFailed', 'event_id reason')
 SWFActivityTimedout = namedtuple('SWFActivityTimedout', 'event_id')
-SWFDecision = namedtuple('SWFDecision',
-                         'name version token context input events')
 
 
 class SWFClient(object):
@@ -101,131 +100,25 @@ class SWFClient(object):
             return False
         return True
 
-    def queue_activity(self, call_id, name, version, input,
-                       heartbeat=None,
-                       schedule_to_close=None,
-                       schedule_to_start=None,
-                       start_to_close=None,
-                       task_list=None):
-        """ Queue an activity.
-
-        This will schedule a run of a previously registered activity with the
-        specified *name* and *version*. The *call_id* is used to assign a
-        custom identity to this particular queued activity run inside its own
-        workflow history. The queueing is done internally, without having the
-        client make any requests yet. The actual scheduling is done by calling
-        :meth:`schedule_activities`. The activity will be queued in its default
-        task list that was set when it was registered, this can be changed by
-        setting a different *task_list* value.
-
-        The activity options specified here, if any, have a higher priority
-        than the ones used when the activity was registered. For more
-        information about the various arguments see :meth:`register_activity`.
-
-        """
-        self._scheduled_activities.append((
-            (str(call_id), name, str(version)),
-            {
-                'heartbeat_timeout': _str_or_none(heartbeat),
-                'schedule_to_close_timeout': _str_or_none(schedule_to_close),
-                'schedule_to_start_timeout': _str_or_none(schedule_to_start),
-                'start_to_close_timeout': _str_or_none(start_to_close),
-                'task_list': task_list,
-                'input': input
-            }
-        ))
-
-    def schedule_activities(self, token, context=None):
-        """ Schedules all queued activities.
-
-        All activities previously queued by :meth:`queue_activity` will be
-        scheduled within the workflow identified by *token*.
-        An optional textual *context* can be set and will be available in the
-        workflow history.
-        Returns a boolean indicating the success of the operation. On success
-        the internal collection of scheduled activities will be cleared.
-        """
-        d = Layer1Decisions()
-        for args, kwargs in self._scheduled_activities:
-            d.schedule_activity_task(*args, **kwargs)
-            name, version = args[1:]
-            logging.info("Scheduled activity: %s %s", name, version)
-        data = d._data
-        try:
-            self.client.respond_decision_task_completed(
-                task_token=token, decisions=data, execution_context=context
-            )
-        except SWFResponseError:
-            logging.warning("Could not send decisions: %s", token, exc_info=1)
-            return False
-        self._scheduled_activities = []
-        return True
-
-    def complete_workflow(self, token, result):
-        """ Signals the successful completion of the workflow.
-
-        Completes the workflow identified by *token* with the *result* value.
-        Returns a boolean indicating the success of the operation.
-
-        """
-        d = Layer1Decisions()
-        d.complete_workflow_execution(result=result)
-        data = d._data
-        try:
-            self.client.respond_decision_task_completed(task_token=token,
-                                                        decisions=data)
-            logging.info("Completed workflow: %s %s", token, result)
-        except SWFResponseError:
-            logging.warning("Could not complete workflow: %s",
-                            token, exc_info=1)
-            return False
-        return True
-
-    def terminate_workflow(self, workflow_id, reason):
-        """ Signals the termination of the workflow.
-
-        Terminate the workflow identified by *workflow_id* for the specified
-        *reason*. All the workflow activities will be abandoned and the final
-        result won't be available.
-        The *workflow_id* required here is the one obtained when
-        :meth:`start_workflow` was called.
-        Returns a boolean indicating the success of the operation.
-
-        """
-        try:
-            self.client.terminate_workflow_execution(domain=self.domain,
-                                                     workflow_id=workflow_id,
-                                                     reason=reason)
-            logging.info("Terminated workflow: %s %s", workflow_id, reason)
-        except SWFResponseError:
-            logging.warning("Could not terminate workflow: %s",
-                            workflow_id, exc_info=1)
-            return False
-        return True
-
     def poll_decision(self, task_list):
         """ Poll for a new decision task.
 
         Blocks until a decision is available in the *task_list*. A decision is
-        a :class:`SWFDecision` instance. When polling return the first decision
-        for a workflow the ``context`` will be empty, the subsequent decisions
-        for the same workflow will have an empty ``input`` value.
+        a :class:`Decision` instance.
 
         """
         def poll_page(next_page_token=None):
             poll = self.client.poll_for_decision_task
             response = {}
             while 'taskToken' not in response or not response['taskToken']:
-                while not response:
-                    try:
-                        response = poll(domain=self.domain,
-                                        task_list=task_list,
-                                        reverse_order=True,
-                                        next_page_token=next_page_token)
-                    except (IOError, SWFResponseError):
-                        logging.warning("Unknown error when pulling"
-                                        " decisions: %s %s",
-                                        self.domain, task_list, exc_info=1)
+                try:
+                    response = poll(domain=self.domain, task_list=task_list,
+                                    reverse_order=True,
+                                    next_page_token=next_page_token)
+                except (IOError, SWFResponseError):
+                    logging.warning("Unknown error when pulling"
+                                    " decisions: %s %s",
+                                    self.domain, task_list, exc_info=1)
             return response
 
         def poll_all_pages():
@@ -301,9 +194,13 @@ class SWFClient(object):
             input = first_event['workflowExecutionStartedEventAttributes']
             input = input['input']
 
-        return SWFDecision(
+        self._make_decision(
             name, version, token, context, input, tuple(typed_events(events))
         )
+
+    def _make_decision(self, name, version, token, context, input, new_events):
+        return Decision(name, version, token, self._client,
+                        context, input, new_events)
 
     def register_activity(self, name, version, task_list, heartbeat=60,
                           schedule_to_close=420, schedule_to_start=120,
@@ -375,57 +272,6 @@ class SWFClient(object):
             return False
         return True
 
-    def complete_activity(self, token, result):
-        """ Signals the successful completion of an activity.
-
-        Completes the activity identified by *token* with the *result* value.
-        Returns a boolean indicating the success of the operation.
-
-        """
-        try:
-            self.client.respond_activity_task_completed(task_token=token,
-                                                        result=result)
-            logging.info("Completed activity: %s %s", token, result)
-        except SWFResponseError:
-            logging.warning("Could not complete activity: %s",
-                            token, exc_info=1)
-            return False
-        return True
-
-    def terminate_activity(self, token, reason):
-        """ Signals the termination of the activity.
-
-        Terminate the activity identified by *token* for the specified
-        *reason*. Returns a boolean indicating the success of the operation.
-        """
-        try:
-            self.client.respond_activity_task_failed(task_token=token,
-                                                     reason=reason)
-            logging.info("Terminated activity: %s %s", token, reason)
-        except SWFResponseError:
-            logging.warning("Could not terminate activity: %s",
-                            token, exc_info=1)
-            return False
-        return True
-
-    def heartbeat(self, token):
-        """ Report that the activity identified by *token* is still making
-        progress.
-
-        Returns a boolean indicating the success of the operation or whether
-        the heartbeat exceeded the time it should have taken to report activity
-        progress. In the latter case the activity execution should be stopped.
-
-        """
-        try:
-            self.client.record_activity_task_heartbeat(task_token=token)
-            logging.info("Sent activity heartbeat: %s", token)
-        except SWFResponseError:
-            logging.warning("Error when sending activity heartbeat: %s",
-                            token, exc_info=1)
-            return False
-        return True
-
     def poll_activity(self, task_list):
         """ Poll for a new activity task.
 
@@ -434,22 +280,23 @@ class SWFClient(object):
 
         """
         poll = self.client.poll_for_activity_task
-        while 1:
+        response = {}
+        while 'taskToken' not in response or not response['taskToken']:
             try:
-                return poll(domain=self.domain, task_list=task_list)
+                response = poll(domain=self.domain, task_list=task_list)
             except (IOError, SWFResponseError):
                 logging.warning("Unknown error when pulling activities: %s %s",
                                 self.domain, task_list, exc_info=1)
 
-    def next_activity(self, task_list):
-        """ Get the next available activity.
+        name = response['activityType']['name']
+        version = response['activityType']['version']
+        input = response['input']
+        token = response['taskToken']
 
-        Returns the next :class:`ActivityResponse` instance available in the
-        *task_list*. Because instantiating an ``ActivityResponse`` blocks until
-        an activity is available, the same is true for this method.
+        return self._make_activitytask(name, version, input, token)
 
-        """
-        return ActivityResponse(self, task_list)
+    def _make_activitytask(self, name, version, input, token):
+        return ActivityTask(self, name, version, input, token, self._client)
 
     def start_workflow(self, name, version, task_list, input):
         """ Starts the workflow identified by *name* and *version* with the
@@ -490,39 +337,37 @@ class Decision(object):
     ``token`` value.
 
     """
-    def __init__(self, client, task_list):
-        self.client = client
+    def __init__(self, name, version, token, client,
+                 input=None, context=None, new_events=[]):
+        self.name = name
+        self.version = version
+        self._token = token
+        self._client = client
+        self._scheduled_activities = []
         self._event_to_call_id = {}
-        self._retries = {}
         self._running = set()
         self._results = {}
         self._timed_out = set()
-        self._with_errors = {}
-        self.input = None
-        self.task_list = task_list
+        self._activity_ctx = {}
+        self._errors = {}
+        self.input = input
 
-        response = {}
-        while 'taskToken' not in response or not response['taskToken']:
-            response = self.client.poll_decision(task_list=task_list)
-        self._api_response = response
+        if context is not None:
+            self.input, history, self.context = json.loads(context)
+            self._event_to_call_id = history['id_mapping']
+            self._running = history['running']
+            self._results = history['results']
+            self._timed_out = history['timed_out']
+            self._errors = history['errors']
+            self._activity_ctx = history['activity_ctx']
 
-        self._restore_context()
-
-        # Update the context with all new events
-        for new_event in self._new_events:
-            event_type = new_event['eventType']
-            getattr(self, '_%s' % event_type, lambda x: 0)(new_event)
-
-        # Assuming workflow started is always the first event
-        assert self.input is not None
-
-    @property
-    def name(self):
-        return self._api_response['workflowType']['name']
-
-    @property
-    def version(self):
-        return self._api_response['workflowType']['version']
+        reg = self._register = simplegeneric(self._register)
+        reg.register(SWFActivityScheduled, self._register_activity_scheduled)
+        reg.register(SWFActivityCompleted, self._register_activity_completed)
+        reg.register(SWFActivityFailed, self._register_activity_failed)
+        reg.register(SWFActivityTimedout, self._register_activity_timedout)
+        for event in new_events:
+            reg(event)
 
     def queue_activity(self, call_id, name, version, input,
                        heartbeat=None,
@@ -530,66 +375,121 @@ class Decision(object):
                        schedule_to_start=None,
                        start_to_close=None,
                        task_list=None,
-                       retries=3):
-        """ Queue an activity using the bound client's
-        :meth:`SWFClient.queue_activity` method.
+                       context=None):
+        """ Queue an activity.
 
-        This method also sets the internal retry counter in the workflow
-        history context with a default value or the one specified with
-        *retries*. See :meth:`should_retry`.
+        This will schedule a run of a previously registered activity with the
+        specified *name* and *version*. The *call_id* is used to assign a
+        custom identity to this particular queued activity run inside its own
+        workflow history. The queueing is done internally, without having the
+        client make any requests yet. The actual scheduling is done by calling
+        :meth:`schedule_activities`. The activity will be queued in its default
+        task list that was set when it was registered, this can be changed by
+        setting a different *task_list* value.
+
+        The activity options specified here, if any, have a higher priority
+        than the ones used when the activity was registered. For more
+        information about the various arguments see :meth:`register_activity`.
+
+        When queueing an acctivity a custom *context* can be set. It can be
+        retrieved later uisg :meth:`activity_context`.
 
         """
-        self.client.queue_activity(
-            call_id=call_id,
-            name=name,
-            version=version,
-            input=input,
-            heartbeat=heartbeat,
-            schedule_to_close=schedule_to_close,
-            schedule_to_start=schedule_to_start,
-            start_to_close=start_to_close,
-            task_list=task_list
-        )
-        self._retries.setdefault(call_id, retries + 1)
+        call_id = str(call_id)
+        self._scheduled_activities.append((
+            (str(call_id), name, str(version)),
+            {
+                'heartbeat_timeout': _str_or_none(heartbeat),
+                'schedule_to_close_timeout': _str_or_none(schedule_to_close),
+                'schedule_to_start_timeout': _str_or_none(schedule_to_start),
+                'start_to_close_timeout': _str_or_none(start_to_close),
+                'task_list': task_list,
+                'input': input
+            }
+        ))
+        if context is not None:
+            self._activity_ctx[call_id] = context
 
-    def schedule_activities(self):
-        """ Schedule all queued activities using the bound client's
-        :meth:`SWFClient.schedule_activities` method.
+    def schedule_activities(self, context=None):
+        """ Schedules all queued activities.
 
-        This method is also responsible for passing the ``token`` that
-        identifies the workflow the activities will be scheduled within.
+        All activities previously queued by :meth:`queue_activity` will be
+        scheduled within the workflow. An optional textual *context* can be
+        set and will be available in subsequent decisions as :attr:`context`.
         Returns a boolean indicating the success of the operation. On success
         the internal collection of scheduled activities will be cleared.
-
         """
-        return self.client.schedule_activities(
-            token=self._token, context=self._serialize_context()
-        )
+        d = Layer1Decisions()
+        for args, kwargs in self._scheduled_activities:
+            d.schedule_activity_task(*args, **kwargs)
+            name, version = args[1:]
+            logging.info("Scheduled activity: %s %s", name, version)
+        data = d._data
+        c = self.context
+        if context is not None:
+            c = context
+        history = {
+            'id_mapping': self._event_to_call_id,
+            'running': self._running,
+            'results': self._results,
+            'timed_out': self._timed_out,
+            'errors': self._errors,
+            'activity_ctx': self._activity_ctx,
+        }
+        try:
+            self._client.respond_decision_task_completed(
+                task_token=self._token,
+                decisions=data,
+                execution_context=json.dumps((self.input, history, c))
+            )
+        except SWFResponseError:
+            logging.warning("Could not send decisions: %s",
+                            self.token, exc_info=1)
+            return False
+        self._scheduled_activities = []
+        return True
 
     def complete_workflow(self, result):
-        """ Signal the successful completion of the workflow with a given
-        *result* using the bound client's
-        :meth:`SWFClient.complete_workflow` method.
+        """ Signals the successful completion of the workflow.
 
-        This method is also responsable for passing the ``token`` that
-        identifies the workflow that successfully completed.
-        Returns a boolean indicating the success of the operation.
-        """
-        return self.client.complete_workflow(token=self._token, result=result)
-
-    def terminate_workflow(self, reason):
-        """ Signal the termination of the workflow with a given *reason* using
-        the bound client's :meth:`SWFClient.terminate_workflow`
-        method.
-
-        This method is also responsable for passing the ``workflow_id`` that
-        identifies the workflow that terminated.
-        Returns a boolean indicating the success of the operation.
+        Completes the workflow the *result* value. Returns a boolean indicating
+        the success of the operation.
 
         """
-        workflow_id = self._api_response['workflowExecution']['workflowId']
-        return self.client.terminate_workflow(workflow_id=workflow_id,
-                                              reason=reason)
+        d = Layer1Decisions()
+        d.complete_workflow_execution(result=result)
+        data = d._data
+        try:
+            self._client.respond_decision_task_completed(task_token=self.token,
+                                                         decisions=data)
+            logging.info("Completed workflow: %s %s", self.token, result)
+        except SWFResponseError:
+            logging.warning("Could not complete workflow: %s",
+                            self.token, exc_info=1)
+            return False
+        return True
+
+    def terminate_workflow(self, workflow_id, reason):
+        """ Signals the termination of the workflow.
+
+        Terminate the workflow identified by *workflow_id* for the specified
+        *reason*. All the workflow activities will be abandoned and the final
+        result won't be available.
+        The *workflow_id* required here is the one obtained when
+        :meth:`start_workflow` was called.
+        Returns a boolean indicating the success of the operation.
+
+        """
+        try:
+            self._client.terminate_workflow_execution(domain=self.domain,
+                                                      workflow_id=workflow_id,
+                                                      reason=reason)
+            logging.info("Terminated workflow: %s %s", workflow_id, reason)
+        except SWFResponseError:
+            logging.warning("Could not terminate workflow: %s",
+                            workflow_id, exc_info=1)
+            return False
+        return True
 
     def any_activity_running(self):
         """ Checks the history for any activities running.
@@ -613,6 +513,7 @@ class Decision(object):
         with an optional *default* value.
 
         """
+        call_id = str(call_id)
         return self._results.get(call_id, default)
 
     def activity_error(self, call_id, default=None):
@@ -620,130 +521,104 @@ class Decision(object):
         or a *default* one if no such reason is found.
 
         """
-        return self._with_errors.get(call_id, default)
+        call_id = str(call_id)
+        return self._errors.get(call_id, default)
 
     def is_activity_timedout(self, call_id):
         """ Check whether the activity identified by *call_id* timed out. """
+        call_id = str(call_id)
         return call_id in self._timed_out
 
-    def should_retry(self, call_id):
-        """ Check whether the activity identified by *call_id* should be
-        retried.
+    def _register(self, event):
+        pass
 
-        The total number of runs an activity will perform is the initial run
-        plus the number of retries set with :meth:`queue_activity`. Whenever an
-        activity times out, the number of retries associated with that activity
-        is decremented by 1, until it reaches 0. The value of this flag is
-        persisted in the workflow context.
-
-        """
-        return self._retries[call_id] > 0
-
-    def _ActivityTaskScheduled(self, event):
-        event_id = event['eventId']
-        subdict = event['activityTaskScheduledEventAttributes']
-        call_id = int(subdict['activityId'])
+    def _register_activity_scheduled(self, event):
+        event_id = str(event.event_id)
+        call_id = str(event.call_id)
         self._event_to_call_id[event_id] = call_id
         self._running.add(call_id)
         if call_id in self._timed_out:
             self._timed_out.remove(call_id)
 
-    def _ActivityTaskCompleted(self, event):
-        subdict = event['activityTaskCompletedEventAttributes']
-        event_id, result = subdict['scheduledEventId'], subdict['result']
-        self._running.remove(self._event_to_call_id[event_id])
-        self._results[self._event_to_call_id[event_id]] = result
+    def _register_activity_completed(self, event):
+        event_id = str(event.event_id)
+        call_id = self._event_to_call_id[event_id]
+        self._running.remove(call_id)
+        self._results[call_id] = event.result
 
-    def _ActivityTaskFailed(self, event):
-        subdict = event['activityTaskFailedEventAttributes']
-        event_id, reason = subdict['scheduledEventId'], subdict['reason']
-        self._running.remove(self._event_to_call_id[event_id])
-        self._with_errors[self._event_to_call_id[event_id]] = reason
+    def _register_activity_failed(self, event):
+        event_id = str(event.event_id)
+        call_id = self._event_to_call_id[event_id]
+        self._running.remove(call_id)
+        self._errors[call_id] = event.reason
 
-    def _ActivityTaskTimedOut(self, event):
-        subdict = event['activityTaskTimedOutEventAttributes']
-        event_id = subdict['scheduledEventId']
-        self._running.remove(self._event_to_call_id[event_id])
-        self._timed_out.add(self._event_to_call_id[event_id])
-        self._retries[self._event_to_call_id[event_id]] -= 1
+    def _register_activity_timedout(self, event):
+        event_id = str(event.event_id)
+        call_id = self._event_to_call_id[event_id]
+        self._running.remove(call_id)
+        self._timed_out.add(call_id)
 
-    def _WorkflowExecutionStarted(self, event):
-        subdict = event['workflowExecutionStartedEventAttributes']
-        self.input = subdict['input']
 
-    def _restore_context(self):
-        if self._context is not None:
-            initial_state = json.loads(self._context)
-            self._event_to_call_id = self._fix_keys(
-                initial_state['event_to_call_id']
+class ActivityTask(object):
+    """ An object that abstracts an activity and its functionality. """
+    def __init__(self, name, version, input, token, client):
+        self.name = name
+        self.version = version
+        self.input = input
+        self._token = token
+        self._client = client
+
+    def complete(self, result):
+        """ Signals the successful completion of an activity.
+
+        Completes the activity with the *result* value. Returns a boolean
+        indicating the success of the operation.
+
+        """
+        try:
+            self._client.respond_activity_task_completed(
+                task_token=self._token, result=result
             )
-            self._retries = self._fix_keys(initial_state['retries'])
-            self._running = set(initial_state['scheduled'])
-            self._results = self._fix_keys(initial_state['results'])
-            self._timed_out = set(initial_state['timed_out'])
-            self._with_errors = self._fix_keys(
-                initial_state['with_errors']
-            )
-            self.input = initial_state['input']
+            logging.info("Completed activity: %s %s", self._token, result)
+        except SWFResponseError:
+            logging.warning("Could not complete activity: %s",
+                            self._token, exc_info=1)
+            return False
+        return True
 
-    def _serialize_context(self):
-        return json.dumps({
-            'event_to_call_id': self._event_to_call_id,
-            'retries': self._retries,
-            'scheduled': list(self._running),
-            'results': self._results,
-            'timed_out': list(self._timed_out),
-            'with_errors': self._with_errors,
-            'input': self.input,
-        })
+    def terminate_activity(self, reason):
+        """ Signals the termination of the activity.
 
-    @property
-    def _token(self):
-        return self._api_response['taskToken']
+        Terminate the activity for the specified *reason*. Returns a boolean
+        indicating the success of the operation.
 
-    @property
-    def _context(self):
-        for event in self._new_events:
-            if event['eventType'] == 'DecisionTaskCompleted':
-                DTCEA = 'decisionTaskCompletedEventAttributes'
-                return event[DTCEA]['executionContext']
-        return None
+        """
+        try:
+            self.client.respond_activity_task_failed(task_token=self._token,
+                                                     reason=reason)
+            logging.info("Terminated activity: %s %s", self._token, reason)
+        except SWFResponseError:
+            logging.warning("Could not terminate activity: %s",
+                            self._token, exc_info=1)
+            return False
+        return True
 
-    @property
-    def _events(self):
-        if not hasattr(self, '_cached_events'):
-            events = []
-            api_response = self._api_response
-            while api_response.get('nextPageToken'):
-                for event in api_response['events']:
-                    events.append(event)
-                api_response = self.client.poll_decision(
-                    self.task_list,
-                    next_page_token=api_response['nextPageToken']
-                )
-            for event in api_response['events']:
-                events.append(event)
-            self._cached_events = events
-        return self._cached_events
+    def heartbeat(self):
+        """ Report that the activity is still making progress.
 
-    @property
-    def _new_events(self):
-        decisions_completed = 0
-        events = []
-        prev_id = self._api_response.get('previousStartedEventId')
-        for event in self._events:
-            if event['eventType'] == 'DecisionTaskCompleted':
-                decisions_completed += 1
-            if prev_id and event['eventId'] == prev_id:
-                break
-            events.append(event)
-        assert decisions_completed <= 1
-        return reversed(events)
+        Returns a boolean indicating the success of the operation or whether
+        the heartbeat exceeded the time it should have taken to report activity
+        progress. In the latter case the activity execution should be stopped.
 
-    @staticmethod
-    def _fix_keys(d):
-        # Fix json's stupid silent key conversion from int to string
-        return dict((int(key), value) for key, value in d.items())
+        """
+        try:
+            self.client.record_activity_task_heartbeat(task_token=self._token)
+            logging.info("Sent activity heartbeat: %s", self._token)
+        except SWFResponseError:
+            logging.warning("Error when sending activity heartbeat: %s",
+                            self._token, exc_info=1)
+            return False
+        return True
 
 
 class WorkflowClient(object):
@@ -905,77 +780,6 @@ class WorkflowClient(object):
 
     def _query(self, name, version):
         return self._workflows.get((name, version))
-
-
-class ActivityResponse(object):
-    """ An object that abstracts an activity task and provides an API for its
-    more interesting functionality.
-
-    Initializing this class with a *client* will block until an activity task
-    will be successfully polled.
-    This class also wraps the activity specific functionality of
-    :class:`SWFClient` and automatically forwards some of the information about
-    the activity such as the ``token`` value.
-
-    """
-    def __init__(self, client, task_list):
-        self.client = client
-        self.task_list = task_list
-        response = self.client.poll_activity(task_list)
-        while 'taskToken' not in response or not response['taskToken']:
-            response = self.client.poll_activity(task_list)
-        self._api_response = response
-
-    def complete(self, result):
-        """ Signal the successful completion of the activity with a given
-        *result* using the bound client's :meth:`SWFClient.comeplete_activity`
-        method.
-
-        This method is also responsible for passing the ``token`` that
-        identifies the activity that completed.
-        Returns a boolean indicating the success of the operation.
-
-        """
-        return self.client.complete_activity(self._token, result)
-
-    def terminate(self, reason):
-        """ Signal the termination of the activity with a given *reason* using
-        the bound client's :meth:`SWFClient.terminate_activity` method.
-
-        This method is also responsible for passing the ``token`` that
-        identifies the terminated activity.
-        Returns a boolean indicating the success of the operation.
-
-        """
-        return self.client.terminate_activity(self._token, reason)
-
-    def heartbeat(self):
-        """ Report that the activity is still making progress.
-
-        This method is also responsible for passing the ``token`` that
-        identifies the activity that the heartbeat is for.
-        Returns a boolean indicating the success of the operation or whether
-        the heartbeat timed out.
-
-        """
-
-        return self.client.heartbeat(self._token)
-
-    @property
-    def name(self):
-        return self._api_response['activityType']['name']
-
-    @property
-    def version(self):
-        return self._api_response['activityType']['version']
-
-    @property
-    def input(self):
-        return self._api_response['input']
-
-    @property
-    def _token(self):
-        return self._api_response['taskToken']
 
 
 class ActivityClient(object):
