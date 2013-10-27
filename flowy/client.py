@@ -3,6 +3,7 @@ import json
 import uuid
 import logging
 from collections import namedtuple
+from functools import partial
 from itertools import chain
 from pkgutil import simplegeneric
 
@@ -14,6 +15,125 @@ from flowy.workflow import _UnhandledActivityError
 
 
 __all__ = ['ActivityClient', 'WorkflowClient']
+
+
+_DecisionPage = namedtuple(
+    '_DecisionPage',
+    ['name', 'version', 'events', 'next_page_token', 'last_event_id', 'token']
+)
+_DecisionCollapsed = namedtuple(
+    '_DecisionCollapsed',
+    ['name', 'version', 'all_events', 'last_event_id', 'token']
+)
+_DecisionResponse = namedtuple(
+    '_DecisionResponse',
+    ['name', 'version', 'new_events', 'token', 'context', 'input']
+)
+
+_ActivityScheduled = namedtuple('_ActivityScheduled', ['event_id', 'call_id'])
+_ActivityCompleted = namedtuple('_ActivityCompleted', ['event_id', 'result'])
+_ActivityFailed = namedtuple('_ActivityFailed', ['event_id', 'reason'])
+_ActivityTimedout = namedtuple('_ActivityTimedout', ['event_id'])
+_WorkflowStarted = namedtuple('_WorkflowStarted', ['input'])
+_DecisionCompleted = namedtuple('_DecisionCompleted', ['event_id', 'context'])
+
+
+def _decision_event(event):
+    event_type = event['eventType']
+    if event_type == 'ActivityTaskScheduled':
+        ATSEA = 'activityTaskScheduledEventAttributes'
+        event_id = event['eventId']
+        call_id = event[ATSEA]['activityId']
+        return _ActivityScheduled(event_id, call_id)
+    elif event_type == 'ActivityTaskCompleted':
+        ATCEA = 'activityTaskCompletedEventAttributes'
+        event_id = event[ATCEA]['scheduledEventId']
+        result = event[ATCEA]['result']
+        return _ActivityCompleted(event_id, result)
+    elif event_type == 'ActivityTaskFailed':
+        ATFEA = 'activityTaskFailedEventAttributes'
+        event_id = event[ATFEA]['scheduledEventId']
+        reason = event[ATFEA]['reason']
+        return _ActivityFailed(event_id, reason)
+    elif event_type == 'ActivityTaskTimedOut':
+        ATTOEA = 'activityTaskTimedOutEventAttributes'
+        event_id = event[ATTOEA]['scheduledEventId']
+        return _ActivityTimedout(event_id)
+
+
+def _decision_page(response, event_maker=_decision_event):
+    return _DecisionPage(
+        name=response['workflowType']['name'],
+        version=response['workflowType']['version'],
+        token=response['taskToken'],
+        next_page_token=response.get('nextPageToken'),
+        last_event_id=response.get('previousStartedEventId'),
+        events=[event_maker(e) for e in response['events']],
+    )
+
+
+def _poll_decision_page(poller, page_token=None, decision_page=_decision_page):
+    response = {}
+    while 'taskToken' not in response or not response['taskToken']:
+        try:
+            response = poller(next_page_token=page_token)
+        except (IOError, SWFResponseError):
+            logging.warning("Unknown error when pulling decision.", exc_info=1)
+    return decision_page(response)
+
+
+def _poll_decision_collapsed(poller):
+
+    first_page = poller()
+
+    def all_events():
+        page = first_page
+        while 1:
+            for event in page.events:
+                yield event
+            if page.next_page_token is None:
+                break
+            p = poller(page_token=page.next_page_token)
+            assert (
+                p.name == page.name
+                and p.version == page.version
+                and p.token == page.token
+                and p.last_event_id == page.last_event_id
+            ), 'Inconsistent decision pages.'
+
+    return _DecisionCollapsed(name=first_page.name, version=first_page.version,
+                              all_events=all_events(), token=first_page.token,
+                              last_event_id=first_page.last_event_id)
+
+
+def _decision_response(decision_collapsed):
+    input = None
+    context = None
+
+    if decision_collapsed.last_event_id is None:
+        # seach for input
+        pass
+        new_events = decision_collapsed.events
+    else:
+        # search for context
+        # filter events
+        new_events = decision_collapsed.events
+        pass
+
+    return _DecisionResponse(
+        name=decision_collapsed.name,
+        version=decision_collapsed.version,
+        token=decision_collapsed.token,
+        decision_collapsed=new_events,
+        context=context,
+        input=input
+    )
+
+
+def _poll_decision_response(poller):
+    paged_poller = partial(_poll_decision_page, poller)
+    decision_collapsed = _poll_decision_collapsed(paged_poller)
+    return _decision_response(decision_collapsed)
 
 
 class Decision(object):
