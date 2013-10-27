@@ -59,6 +59,14 @@ def _decision_event(event):
         ATTOEA = 'activityTaskTimedOutEventAttributes'
         event_id = event[ATTOEA]['scheduledEventId']
         return _ActivityTimedout(event_id)
+    elif event_type == 'WorkflowExecutionStarted':
+        WESEA = 'workflowExecutionStartedEventAttributes'
+        input = event[WESEA]['input']
+        return _WorkflowStarted(input)
+    elif event_type == 'DecisionTaskCompleted':
+        event_id = event['eventId']
+        context = event['executionContext']
+        return _DecisionCompleted(event_id, context)
 
 
 def _decision_page(response, event_maker=_decision_event):
@@ -111,14 +119,25 @@ def _decision_response(decision_collapsed):
     context = None
 
     if decision_collapsed.last_event_id is None:
-        # seach for input
-        pass
-        new_events = decision_collapsed.events
+        # The first decision is always just after a workflow started and at
+        # this point this should also be first event in the history but it may
+        # not be the only one - there may be also be previos decisions that
+        # have timed out.
+        new_events = tuple(decision_collapsed.events)
+        workflow_started = new_events[-1]
+        assert isinstance(workflow_started, _WorkflowStarted)
+        input = workflow_started.input
     else:
-        # search for context
-        # filter events
-        new_events = decision_collapsed.events
-        pass
+        # The workflow had previous decisions completed and we should search
+        # for the last one
+        new_events = []
+        for event in decision_collapsed.events:
+            if isinstance(event, _WorkflowStarted):
+                break
+            new_events.append(event)
+        else:
+            raise AssertionError('Last decision was not found.')
+        assert event.event_id == decision_collapsed.last_event_id
 
     return _DecisionResponse(
         name=decision_collapsed.name,
@@ -126,7 +145,9 @@ def _decision_response(decision_collapsed):
         token=decision_collapsed.token,
         decision_collapsed=new_events,
         context=context,
-        input=input
+        input=input,
+        # Preserve the order in which the events happend.
+        new_events=tuple(reversed(new_events))
     )
 
 
@@ -134,6 +155,68 @@ def _poll_decision_response(poller):
     paged_poller = partial(_poll_decision_page, poller)
     decision_collapsed = _poll_decision_collapsed(paged_poller)
     return _decision_response(decision_collapsed)
+
+
+class _InputBoundClient(object):
+    def __init__(self, client, context_or_input, first_run=True):
+        self._client = client
+        self.context = None
+        if first_run:
+            self.input = context_or_input
+        else:
+            self.input, self.context = json.loads(context_or_input)
+
+    def respond_decision_task_completed(self, task_token,
+                                        decisions=None,
+                                        execution_context=None):
+        context = self.context
+        if execution_context is not None:
+            context = execution_context
+        self._client.respond_decision_task_completed(
+            task_token=task_token,
+            decisions=decisions,
+            execution_context=json.dumps((self.input, context))
+        )
+
+    def __getattr__(self, key):
+        return getattr(self._client, key)
+
+
+class Decision(object):
+    def __init__(self, client, token, context, new_events):
+        self._client = client
+        self._token = token
+        self._new_events = new_events
+        self._event_to_call_id = {}
+        self._activity_contexts = {}
+        if context is not None:
+            self._event_to_call_id, self._activity_contexts, self._g = context
+        for event in new_events:
+            self._internal_update(event)
+
+    def global_context(self, default=None):
+        if self._g is None:
+            return default
+        return self._g
+
+    def activity_context(self, call_id, default=None):
+        if call_id not in self._activity_contexts:
+            return default
+        return self._activity_contexts[call_id]
+
+    def dispatch_new_events(self, obj):
+        for event in self._new_events:
+            self._dispatch_event(event, obj)
+
+    def _dispatch_event(self, event, obj):
+        pass
+
+    def _dispatch_activity_scheduled(self, event, obj):
+        pass
+
+    def _dispatch_if_exists(self, obj, method_name, *args):
+        if hasattr(obj, method_name):
+            getattr(obj, method_name)(*args)
 
 
 class Decision(object):
