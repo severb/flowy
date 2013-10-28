@@ -27,7 +27,7 @@ _DecisionCollapsed = namedtuple(
 )
 _DecisionResponse = namedtuple(
     '_DecisionResponse',
-    ['name', 'version', 'new_events', 'token', 'context', 'input']
+    ['name', 'version', 'new_events', 'token', 'data', 'first_run']
 )
 
 _ActivityScheduled = namedtuple('_ActivityScheduled', ['event_id', 'call_id'])
@@ -115,10 +115,8 @@ def _poll_decision_collapsed(poller):
 
 
 def _decision_response(decision_collapsed):
-    input = None
-    context = None
-
-    if decision_collapsed.last_event_id is None:
+    first_run = decision_collapsed.last_event_id is None
+    if first_run:
         # The first decision is always just after a workflow started and at
         # this point this should also be first event in the history but it may
         # not be the only one - there may be also be previos decisions that
@@ -126,26 +124,27 @@ def _decision_response(decision_collapsed):
         new_events = tuple(decision_collapsed.events)
         workflow_started = new_events[-1]
         assert isinstance(workflow_started, _WorkflowStarted)
-        input = workflow_started.input
+        data = workflow_started.input
     else:
         # The workflow had previous decisions completed and we should search
         # for the last one
         new_events = []
         for event in decision_collapsed.events:
-            if isinstance(event, _WorkflowStarted):
+            if isinstance(event, _DecisionCompleted):
                 break
             new_events.append(event)
         else:
             raise AssertionError('Last decision was not found.')
         assert event.event_id == decision_collapsed.last_event_id
+        data = event.context
 
     return _DecisionResponse(
         name=decision_collapsed.name,
         version=decision_collapsed.version,
         token=decision_collapsed.token,
         decision_collapsed=new_events,
-        context=context,
-        input=input,
+        data=data,
+        first_run=first_run,
         # Preserve the order in which the events happend.
         new_events=tuple(reversed(new_events))
     )
@@ -157,67 +156,27 @@ def _poll_decision_response(poller):
     return _decision_response(decision_collapsed)
 
 
-class JSONDecisionContext(object):
-    def __init__(self, context):
-        self._context = context
-        self._event_to_call_id, _, _ = json.loads(context)
-        self._activity_contexts = {}
-
-    def global_context(self, default=None):
-        if self._context is None:
-            return default
-        _, _, global_context = json.loads(self._context)
-        return global_context
-
-    def scheduled_activity_context(self, call_id, default=None):
-        if self._context is None:
-            return default
-        _, scheduled_activity_contexts, _ = json.loads(self._context)
-        return scheduled_activity_contexts.get(call_id, default)
-
-    def set_activity_context(self, call_id, context):
-        self._activity_contexts[call_id] = context
-
-    def map_event_to_call(self, event_id, call_id):
-        self._event_to_call_id[event_id] = call_id
-
-    def event_to_call(self, event_id):
-        return self._event_to_call_id[event_id]
-
-    def serialize(self, new_global_context=None):
-        _, activity_contexts, global_context = json.loads(self._context)
-        activity_contexts.update(self._activity_contexts)
-        g = global_context
-        if new_global_context is not None:
-            g = new_global_context
-        return json.dumps((self._event_to_call_id, activity_contexts, g))
-
-
 class DecisionData(object):
-    def __init__(self, context, input):
-        self._context = context
-        self._input = input
+    def __init__(self, data, first_run=False):
+        self._data = data
+        self._first_run = first_run
         self._new_context = None
 
     @classmethod
-    def for_first_run(cls, input):
-        return cls(None, input)
-
-    @classmethod
-    def from_context(cls, context):
-        return cls(context, None)
+    def for_first_run(cls, data):
+        return cls(data, first_run=True)
 
     @property
     def context(self):
-        if self._context is None:
+        if self._first_run:
             return None
-        _, context = json.loads(self._context)
+        _, context = json.loads(self._data)
         return context
 
     @property
     def input(self):
-        if self._input is not None:
-            return self._input
+        if self._first_run:
+            return self._data
         input, _ = json.loads(self._context)
         return input
 
@@ -308,6 +267,44 @@ class DecisionClient(object):
         return True
 
 
+class JSONDecisionContext(object):
+    def __init__(self, context=None):
+        self._context = context
+        self._event_to_call_id = {}
+        if context is not None:
+            self._event_to_call_id, _, _ = json.loads(context)
+        self._activity_contexts = {}
+
+    def global_context(self, default=None):
+        if self._context is None:
+            return default
+        _, _, global_context = json.loads(self._context)
+        return global_context
+
+    def scheduled_activity_context(self, call_id, default=None):
+        if self._context is None:
+            return default
+        _, scheduled_activity_contexts, _ = json.loads(self._context)
+        return scheduled_activity_contexts.get(call_id, default)
+
+    def set_activity_context(self, call_id, context):
+        self._activity_contexts[call_id] = context
+
+    def map_event_to_call(self, event_id, call_id):
+        self._event_to_call_id[event_id] = call_id
+
+    def event_to_call(self, event_id):
+        return self._event_to_call_id[event_id]
+
+    def serialize(self, new_global_context=None):
+        _, activity_contexts, global_context = json.loads(self._context)
+        activity_contexts.update(self._activity_contexts)
+        g = global_context
+        if new_global_context is not None:
+            g = new_global_context
+        return json.dumps((self._event_to_call_id, activity_contexts, g))
+
+
 class Decision(object):
     def __init__(self, client, context, new_events):
         self._client = client
@@ -369,7 +366,7 @@ class Decision(object):
         """ Dispatch an event for internal purposes. """
 
     def _internal_activity_scheduled(self, event):
-        self.map_event_to_call(event.event_id, event.call_id)
+        self._context.map_event_to_call(event.event_id, event.call_id)
 
     def queue_activity(self, call_id, name, version, input,
                        heartbeat=None,
@@ -444,6 +441,12 @@ class Decision(object):
 
         """
         return self._client.terminate_workflow(workflow_id, reason)
+
+    def global_context(self, default=None):
+        return self._context.global_context(default)
+
+    def scheduled_activity_context(self, call_id, default=None):
+        return self._context.scheduled_activity_context(call_id, default)
 
 
 class ActivityTask(object):
