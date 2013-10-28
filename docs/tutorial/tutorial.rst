@@ -1,5 +1,6 @@
 .. _tutorial:
 
+========
 Tutorial
 ========
 
@@ -44,7 +45,7 @@ grants us our first activity. Let's examine it piece-by-piece.
 Imports
 ~~~~~~~
 
-The above activity uses the following set of import statements:
+The activity above uses the following set of import statements:
 
 .. literalinclude:: transcoding.py
    :lines: 1-2
@@ -57,8 +58,8 @@ activity, specifying the activity's name, version and task list (several other
 options can be specified here as well). Activities can also be registered
 manually with the :meth:`~flowy.client.ActivityClient.register` method.
 
-Creating our first Activity
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Defining the activity
+~~~~~~~~~~~~~~~~~~~~~
 
 Defining our activity class is done in the following manner:
 
@@ -96,7 +97,67 @@ What this does, is start the main activity polling loop on the
 ``transcoding_list`` task list. Notice, the same task list was specified when
 creating our activity.
 
+In the diagram above, we identified 3 activities that we need to define and
+implement. The activities that process the metadata and generate thumbnails can
+be created in the same exact manner we created the ``Transcoding`` activity.
+
+.. note:: As of now, we will presume we have 3 activities implemented:
+   Transcoding, ThumnailGenerator and MetadataProcessing.
+
 Creating our first Workflow
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+---------------------------
+
+.. literalinclude:: workflow.py
+   :linenos:
+
+Let's put the script above in a file called ``video_processing_workflow.py``
+and examine it piece-by-piece.
+
+Imports
+~~~~~~~
+
+The workflow above uses the following set of import statements:
+
+.. literalinclude:: workflow.py
+   :language: python
+   :lines: 1-3
+
+The script imports the :class:`~flowy.workflow.Workflow` class from the
+:mod:`flowy.workflow` module. Our Workflow must inherit this class and
+implement the :meth:`~flowy.workflow.Workflow.run` method. We also import the
+:class:`~flowy.workflow.ActivityProxy` class which we will use to represent our
+previously implemented activities. Last but not least, we import
+``workflow_client``, an instance of :class:`~flowy.client.WorkflowClient`,
+which we will use to decorate our workflow, specifying the
+workflow's name, version, and task list.
+
+Defining the workflow
+~~~~~~~~~~~~~~~~~~~~~
+
+We define a workflow in the following way:
+
+.. literalinclude:: workflow.py
+   :language: python
+   :lines: 4-6
+
+When decorating the workflow class with ``workflow_client`` we must specify a
+name, version and a default task list to register the workflow with. The
+specified task list will be used in case one is not specified when starting the
+workflow. Our workflow class must also inherit
+:class:`~flowy.workflow.Workflow`.
+
+We define activities within our workflow as such:
+
+.. literalinclude:: workflow.py
+   :language: python
+   :lines: 8-10
+
+When initializing :class:`~flowy.workflow.ActivityProxy` classes, the names and
+versions provided must match the names and versions we set when defining our
+activities.
+
+.. literalinclude:: workflow.py
+   :language: python
+   :lines: 11-15
 
 
