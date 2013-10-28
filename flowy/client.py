@@ -157,115 +157,219 @@ def _poll_decision_response(poller):
     return _decision_response(decision_collapsed)
 
 
-class _InputBoundClient(object):
-    def __init__(self, client, context_or_input, first_run=True):
-        self._client = client
-        self.context = None
-        if first_run:
-            self.input = context_or_input
-        else:
-            self.input, self.context = json.loads(context_or_input)
+class JSONDecisionContext(object):
+    def __init__(self, context):
+        self._context = context
+        self._event_to_call_id, _, _ = json.loads(context)
+        self._activity_contexts = {}
 
-    def respond_decision_task_completed(self, task_token,
-                                        decisions=None,
-                                        execution_context=None):
+    def global_context(self, default=None):
+        if self._context is None:
+            return default
+        _, _, global_context = json.loads(self._context)
+        return global_context
+
+    def scheduled_activity_context(self, call_id, default=None):
+        if self._context is None:
+            return default
+        _, scheduled_activity_contexts, _ = json.loads(self._context)
+        return scheduled_activity_contexts.get(call_id, default)
+
+    def set_activity_context(self, call_id, context):
+        self._activity_contexts[call_id] = context
+
+    def map_event_to_call(self, event_id, call_id):
+        self._event_to_call_id[event_id] = call_id
+
+    def event_to_call(self, event_id):
+        return self._event_to_call_id[event_id]
+
+    def serialize(self, new_global_context=None):
+        _, activity_contexts, global_context = json.loads(self._context)
+        activity_contexts.update(self._activity_contexts)
+        g = global_context
+        if new_global_context is not None:
+            g = new_global_context
+        return json.dumps((self._event_to_call_id, activity_contexts, g))
+
+
+class DecisionData(object):
+    def __init__(self, context, input):
+        self._context = context
+        self._input = input
+        self._new_context = None
+
+    @classmethod
+    def for_first_run(cls, input):
+        return cls(None, input)
+
+    @classmethod
+    def from_context(cls, context):
+        return cls(context, None)
+
+    @property
+    def context(self):
+        if self._context is None:
+            return None
+        _, context = json.loads(self._context)
+        return context
+
+    @property
+    def input(self):
+        if self._input is not None:
+            return self._input
+        input, _ = json.loads(self._context)
+        return input
+
+    def override_context(self, new_context):
+        self._new_context = new_context
+
+    def serialize(self):
         context = self.context
-        if execution_context is not None:
-            context = execution_context
-        self._client.respond_decision_task_completed(
-            task_token=task_token,
-            decisions=decisions,
-            execution_context=json.dumps((self.input, context))
-        )
+        if self._new_context is not None:
+            context = self._new_context
+        return json.dumps((self.input, context))
 
-    def __getattr__(self, key):
-        return getattr(self._client, key)
+
+class DecisionClient(object):
+    def __init__(self, client, domain, token, decision_data):
+        self._client = client
+        self._domain = domain
+        self._token = token
+        self._decision_data = decision_data
+        self._scheduled_activities = []
+
+    def queue_activity(self, call_id, name, version, input,
+                       heartbeat=None,
+                       schedule_to_close=None,
+                       schedule_to_start=None,
+                       start_to_close=None,
+                       task_list=None,
+                       context=None):
+        self._scheduled_activities.append((
+            (str(call_id), name, str(version)),
+            {
+                'heartbeat_timeout': _str_or_none(heartbeat),
+                'schedule_to_close_timeout': _str_or_none(schedule_to_close),
+                'schedule_to_start_timeout': _str_or_none(schedule_to_start),
+                'start_to_close_timeout': _str_or_none(start_to_close),
+                'task_list': task_list,
+                'input': input
+            }
+        ))
+
+    def schedule_activities(self, context=None):
+        d = Layer1Decisions()
+        for args, kwargs in self._scheduled_activities:
+            d.schedule_activity_task(*args, **kwargs)
+            name, version = args[1:]
+            logging.info("Scheduled activity: %s %s", name, version)
+        data = d._data
+        if context is not None:
+            self._decision_data.override_context(context)
+        try:
+            self._client.respond_decision_task_completed(
+                task_token=self._token,
+                decisions=data,
+                execution_context=self._decision_data.serialize()
+            )
+        except SWFResponseError:
+            logging.warning("Could not send decisions: %s",
+                            self.token, exc_info=1)
+            return False
+        self._scheduled_activities = []
+        return True
+
+    def complete_workflow(self, result):
+        d = Layer1Decisions()
+        d.complete_workflow_execution(result=result)
+        data = d._data
+        try:
+            self._client.respond_decision_task_completed(
+                task_token=self._token, decisions=data
+            )
+            logging.info("Completed workflow: %s %s", self._token, result)
+        except SWFResponseError:
+            logging.warning("Could not complete workflow: %s",
+                            self._token, exc_info=1)
+            return False
+        return True
+
+    def terminate_workflow(self, workflow_id, reason):
+        try:
+            self._client.terminate_workflow_execution(domain=self._domain,
+                                                      workflow_id=workflow_id,
+                                                      reason=reason)
+            logging.info("Terminated workflow: %s %s", workflow_id, reason)
+        except SWFResponseError:
+            logging.warning("Could not terminate workflow: %s",
+                            workflow_id, exc_info=1)
+            return False
+        return True
 
 
 class Decision(object):
-    def __init__(self, client, token, context, new_events):
+    def __init__(self, client, context, new_events):
         self._client = client
-        self._token = token
         self._new_events = new_events
-        self._event_to_call_id = {}
-        self._activity_contexts = {}
-        if context is not None:
-            self._event_to_call_id, self._activity_contexts, self._g = context
+        self._context = context
+
+        de = self._dispatch_event = simplegeneric(self._dispatch_event)
+        de.register(_ActivityScheduled, self._dispatch_activity_scheduled)
+        de.register(_ActivityCompleted, self._dispatch_activity_completed)
+        de.register(_ActivityFailed, self._dispatch_activity_failed)
+        de.register(_ActivityTimedout, self._dispatch_activity_timedout)
+
+        iu = self._internal_update = simplegeneric(self._internal_update)
+        iu.register(_ActivityScheduled, self._internal_activity_scheduled)
         for event in new_events:
             self._internal_update(event)
 
-    def global_context(self, default=None):
-        if self._g is None:
-            return default
-        return self._g
-
-    def activity_context(self, call_id, default=None):
-        if call_id not in self._activity_contexts:
-            return default
-        return self._activity_contexts[call_id]
-
     def dispatch_new_events(self, obj):
+        """ Dispatch the new events to specific obj methods.
+
+        The dispatch is done to the following methods of which all are
+        optional::
+
+            obj.activity_scheduled(call_id)
+            obj.activity_completed(call_id, result)
+            obj.activity_failed(call_id, reason)
+            obj.activity_timedout(call_id)
+
+        """
         for event in self._new_events:
             self._dispatch_event(event, obj)
 
     def _dispatch_event(self, event, obj):
-        pass
+        """ Dispatch an event to the proper method of obj. """
 
     def _dispatch_activity_scheduled(self, event, obj):
-        pass
+        meth = 'activity_scheduled'
+        self._dispatch_if_exists(obj, meth, obj.event_id)
+
+    def _dispatch_activity_completed(self, event, obj):
+        meth = 'activity_completed'
+        call_id = self._event_to_call_id[event.event_id]
+        self._dispatch_if_exists(obj, meth, call_id, event.result)
+
+    def _dispatch_activity_failed(self, event, obj):
+        meth = 'activity_failed'
+        call_id = self._event_to_call_id[event.event_id]
+        self._dispatch_if_exists(obj, meth, call_id, event.reason)
+
+    def _dispatch_activity_timedout(self, event, obj):
+        meth = 'activity_timedout'
+        call_id = self._event_to_call_id[event.event_id]
+        self._dispatch_if_exists(obj, meth, call_id)
 
     def _dispatch_if_exists(self, obj, method_name, *args):
-        if hasattr(obj, method_name):
-            getattr(obj, method_name)(*args)
+        getattr(obj, method_name, lambda *args: None)(*args)
 
+    def _internal_update(self, event):
+        """ Dispatch an event for internal purposes. """
 
-class Decision(object):
-    """ A decision that must be taken every time the workflow state changes.
-
-    Initializing this class with a *client* will block until a decision task
-    will be successfully polled from the *task_list*. Every decision has access
-    to the entire workflow execution history. This class provides an API for
-    the interesting parts of the workflow execution history and for managing
-    the context. The context is a persistent customisable part of the workflow
-    execution history.
-
-    This class also wraps the workflow specific funtionality of
-    :class:`SWFClient` and automatically forwards some of the
-    information about the workflow for which a decision is needed like the
-    ``token`` value.
-
-    """
-    def __init__(self, name, version, token, client,
-                 input=None, context=None, new_events=[]):
-        self.name = name
-        self.version = version
-        self._token = token
-        self._client = client
-        self._scheduled_activities = []
-        self._event_to_call_id = {}
-        self._running = set()
-        self._results = {}
-        self._timed_out = set()
-        self._activity_ctx = {}
-        self._errors = {}
-        self.input = input
-
-        if context is not None:
-            self.input, history, self.context = json.loads(context)
-            self._event_to_call_id = history['id_mapping']
-            self._running = history['running']
-            self._results = history['results']
-            self._timed_out = history['timed_out']
-            self._errors = history['errors']
-            self._activity_ctx = history['activity_ctx']
-
-        reg = self._register = simplegeneric(self._register)
-        reg.register(SWFActivityScheduled, self._register_activity_scheduled)
-        reg.register(SWFActivityCompleted, self._register_activity_completed)
-        reg.register(SWFActivityFailed, self._register_activity_failed)
-        reg.register(SWFActivityTimedout, self._register_activity_timedout)
-        for event in new_events:
-            reg(event)
+    def _internal_activity_scheduled(self, event):
+        self.map_event_to_call(event.event_id, event.call_id)
 
     def queue_activity(self, call_id, name, version, input,
                        heartbeat=None,
@@ -294,19 +398,18 @@ class Decision(object):
 
         """
         call_id = str(call_id)
-        self._scheduled_activities.append((
-            (str(call_id), name, str(version)),
-            {
-                'heartbeat_timeout': _str_or_none(heartbeat),
-                'schedule_to_close_timeout': _str_or_none(schedule_to_close),
-                'schedule_to_start_timeout': _str_or_none(schedule_to_start),
-                'start_to_close_timeout': _str_or_none(start_to_close),
-                'task_list': task_list,
-                'input': input
-            }
-        ))
-        if context is not None:
-            self._activity_ctx[call_id] = context
+        self._client.queue_activity(
+            call_id=call_id,
+            name=name,
+            version=version,
+            input=input,
+            heartbeat=heartbeat,
+            schedule_to_close=schedule_to_close,
+            schedule_to_start=schedule_to_start,
+            start_to_close=start_to_close,
+            task_list=task_list
+        )
+        self.context.set_activity_context(call_id, context)
 
     def schedule_activities(self, context=None):
         """ Schedules all queued activities.
@@ -317,35 +420,8 @@ class Decision(object):
         Returns a boolean indicating the success of the operation. On success
         the internal collection of scheduled activities will be cleared.
         """
-        d = Layer1Decisions()
-        for args, kwargs in self._scheduled_activities:
-            d.schedule_activity_task(*args, **kwargs)
-            name, version = args[1:]
-            logging.info("Scheduled activity: %s %s", name, version)
-        data = d._data
-        c = self.context
-        if context is not None:
-            c = context
-        history = {
-            'id_mapping': self._event_to_call_id,
-            'running': self._running,
-            'results': self._results,
-            'timed_out': self._timed_out,
-            'errors': self._errors,
-            'activity_ctx': self._activity_ctx,
-        }
-        try:
-            self._client.respond_decision_task_completed(
-                task_token=self._token,
-                decisions=data,
-                execution_context=json.dumps((self.input, history, c))
-            )
-        except SWFResponseError:
-            logging.warning("Could not send decisions: %s",
-                            self.token, exc_info=1)
-            return False
-        self._scheduled_activities = []
-        return True
+        context = self._context.serialize(context)
+        return self._client.schedule_activity(context)
 
     def complete_workflow(self, result):
         """ Signals the successful completion of the workflow.
@@ -354,18 +430,7 @@ class Decision(object):
         the success of the operation.
 
         """
-        d = Layer1Decisions()
-        d.complete_workflow_execution(result=result)
-        data = d._data
-        try:
-            self._client.respond_decision_task_completed(task_token=self.token,
-                                                         decisions=data)
-            logging.info("Completed workflow: %s %s", self.token, result)
-        except SWFResponseError:
-            logging.warning("Could not complete workflow: %s",
-                            self.token, exc_info=1)
-            return False
-        return True
+        return self.complete_workflow(result)
 
     def terminate_workflow(self, workflow_id, reason):
         """ Signals the termination of the workflow.
@@ -378,83 +443,7 @@ class Decision(object):
         Returns a boolean indicating the success of the operation.
 
         """
-        try:
-            self._client.terminate_workflow_execution(domain=self.domain,
-                                                      workflow_id=workflow_id,
-                                                      reason=reason)
-            logging.info("Terminated workflow: %s %s", workflow_id, reason)
-        except SWFResponseError:
-            logging.warning("Could not terminate workflow: %s",
-                            workflow_id, exc_info=1)
-            return False
-        return True
-
-    def any_activity_running(self):
-        """ Checks the history for any activities running.
-
-        See :meth:`is_activity_running`.
-
-        """
-        return bool(self._running)
-
-    def is_activity_running(self, call_id):
-        """ Checks whether the activity with *call_id* is running.
-
-        Any activities that have been scheduled but not yet completed are
-        considered to be running.
-
-        """
-        return call_id in self._running
-
-    def activity_result(self, call_id, default=None):
-        """ Return the result for the activity identified by *call_id*
-        with an optional *default* value.
-
-        """
-        call_id = str(call_id)
-        return self._results.get(call_id, default)
-
-    def activity_error(self, call_id, default=None):
-        """ Return the reason why the activity identified by *call_id* failed
-        or a *default* one if no such reason is found.
-
-        """
-        call_id = str(call_id)
-        return self._errors.get(call_id, default)
-
-    def is_activity_timedout(self, call_id):
-        """ Check whether the activity identified by *call_id* timed out. """
-        call_id = str(call_id)
-        return call_id in self._timed_out
-
-    def _register(self, event):
-        pass
-
-    def _register_activity_scheduled(self, event):
-        event_id = str(event.event_id)
-        call_id = str(event.call_id)
-        self._event_to_call_id[event_id] = call_id
-        self._running.add(call_id)
-        if call_id in self._timed_out:
-            self._timed_out.remove(call_id)
-
-    def _register_activity_completed(self, event):
-        event_id = str(event.event_id)
-        call_id = self._event_to_call_id[event_id]
-        self._running.remove(call_id)
-        self._results[call_id] = event.result
-
-    def _register_activity_failed(self, event):
-        event_id = str(event.event_id)
-        call_id = self._event_to_call_id[event_id]
-        self._running.remove(call_id)
-        self._errors[call_id] = event.reason
-
-    def _register_activity_timedout(self, event):
-        event_id = str(event.event_id)
-        call_id = self._event_to_call_id[event_id]
-        self._running.remove(call_id)
-        self._timed_out.add(call_id)
+        return self._client.terminate_workflow(workflow_id, reason)
 
 
 class ActivityTask(object):
