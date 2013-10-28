@@ -325,8 +325,8 @@ class Decision(object):
     def dispatch_new_events(self, obj):
         """ Dispatch the new events to specific obj methods.
 
-        The dispatch is done to the following methods of which all are
-        optional::
+        The dispatch is done in the order the events happened to the following
+        methods of which all are optional::
 
             obj.activity_scheduled(call_id)
             obj.activity_completed(call_id, result)
