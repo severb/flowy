@@ -156,7 +156,7 @@ def _poll_decision_response(poller):
     return _decision_response(decision_collapsed)
 
 
-class DecisionData(object):
+class JSONDecisionData(object):
     def __init__(self, data, first_run=False):
         self._data = data
         self._first_run = first_run
