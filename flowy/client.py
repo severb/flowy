@@ -162,31 +162,22 @@ class JSONDecisionData(object):
         self._input = data
         if not _first_run:
             self._input, self._context = json.loads(data)
-            if not (
-                isinstance(self._input, basestring)
-                and isinstance(self._context, basestring)
-            ):
-                raise ValueError('Invalid data format after deserialization.')
 
     @classmethod
     def for_first_run(cls, data):
-        if not isinstance(data, basestring):
-            raise ValueError('Data must be a string.')
         return cls(data, _first_run=True)
 
     @property
     def context(self):
-        return self._context
+        return str(self._context)
 
     @property
     def input(self):
-        return self._input
+        return str(self._input)
 
     def serialize(self, new_context=None):
         context = self.context
         if new_context is not None:
-            if not isinstance(new_context, basestring):
-                raise ValueError('The new context must be a string.')
             context = str(new_context)
         return json.dumps((self.input, context))
 
@@ -268,17 +259,18 @@ class DecisionClient(object):
 
 class JSONDecisionContext(object):
     def __init__(self, context=None):
-        self._context = context
         self._event_to_call_id = {}
-        if context is not None:
-            self._event_to_call_id, _, _ = json.loads(context)
         self._activity_contexts = {}
+        self._global_context = None
+        if context is not None:
+            (self._event_to_call_id,
+             self._activity_contexts,
+             self._global_context) = json.loads(context)
 
     def global_context(self, default=None):
-        if self._context is None:
+        if self._global_context is None:
             return default
-        _, _, global_context = json.loads(self._context)
-        return global_context
+        return self._global_context
 
     def scheduled_activity_context(self, call_id, default=None):
         if self._context is None:
@@ -287,6 +279,8 @@ class JSONDecisionContext(object):
         return scheduled_activity_contexts.get(call_id, default)
 
     def set_activity_context(self, call_id, context):
+        if not isinstance(context, basestring):
+            raise TypeError('Context must be string.')
         self._activity_contexts[call_id] = context
 
     def map_event_to_call(self, event_id, call_id):
@@ -300,6 +294,8 @@ class JSONDecisionContext(object):
         activity_contexts.update(self._activity_contexts)
         g = global_context
         if new_global_context is not None:
+            if not isinstance(new_global_context, basestring):
+                raise TypeError('Context must be string.')
             g = new_global_context
         return json.dumps((self._event_to_call_id, activity_contexts, g))
 
