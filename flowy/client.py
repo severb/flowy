@@ -272,7 +272,7 @@ class JSONDecisionContext(object):
             return default
         return str(self._global_context)
 
-    def scheduled_activity_context(self, call_id, default=None):
+    def activity_context(self, call_id, default=None):
         if call_id not in self._activity_contexts:
             return default
         return str(self._activity_contexts[call_id])
@@ -287,14 +287,10 @@ class JSONDecisionContext(object):
         return self._event_to_call_id[event_id]
 
     def serialize(self, new_global_context=None):
-        _, activity_contexts, global_context = json.loads(self._context)
-        activity_contexts.update(self._activity_contexts)
-        g = global_context
+        g = self.global_context()
         if new_global_context is not None:
-            if not isinstance(new_global_context, basestring):
-                raise TypeError('Context must be string.')
-            g = new_global_context
-        return json.dumps((self._event_to_call_id, activity_contexts, g))
+            g = str(new_global_context)
+        return json.dumps((self._event_to_call_id, self._activity_contexts, g))
 
 
 class Decision(object):
