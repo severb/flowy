@@ -157,25 +157,22 @@ def _poll_decision_response(poller):
 
 
 class JSONDecisionData(object):
-    def __init__(self, data, first_run=False):
-        if not isinstance(data, basestring):
-            raise ValueError('Data must be a string.')
+    def __init__(self, data, _first_run=False):
         self._context = None
         self._input = data
-        if not first_run:
-            try:
-                self._input, self._context = json.loads(data)
-                if not (
-                    isinstance(self._input, basestring)
-                    and isinstance(self._context)
-                ):
-                    raise ValueError('Data must contain strings.')
-            except (ValueError, TypeError):
-                raise ValueError('Data is not well formatted.')
+        if not _first_run:
+            self._input, self._context = json.loads(data)
+            if not (
+                isinstance(self._input, basestring)
+                and isinstance(self._context, basestring)
+            ):
+                raise ValueError('Invalid data format after deserialization.')
 
     @classmethod
     def for_first_run(cls, data):
-        return cls(data, first_run=True)
+        if not isinstance(data, basestring):
+            raise ValueError('Data must be a string.')
+        return cls(data, _first_run=True)
 
     @property
     def context(self):
