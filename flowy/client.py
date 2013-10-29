@@ -270,18 +270,15 @@ class JSONDecisionContext(object):
     def global_context(self, default=None):
         if self._global_context is None:
             return default
-        return self._global_context
+        return str(self._global_context)
 
     def scheduled_activity_context(self, call_id, default=None):
-        if self._context is None:
+        if call_id not in self._activity_contexts:
             return default
-        _, scheduled_activity_contexts, _ = json.loads(self._context)
-        return scheduled_activity_contexts.get(call_id, default)
+        return str(self._activity_contexts[call_id])
 
     def set_activity_context(self, call_id, context):
-        if not isinstance(context, basestring):
-            raise TypeError('Context must be string.')
-        self._activity_contexts[call_id] = context
+        self._activity_contexts[call_id] = str(context)
 
     def map_event_to_call(self, event_id, call_id):
         self._event_to_call_id[event_id] = call_id
