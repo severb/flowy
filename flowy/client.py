@@ -180,13 +180,10 @@ class JSONDecisionData(object):
         input, _ = json.loads(self._context)
         return input
 
-    def override_context(self, new_context):
-        self._new_context = new_context
-
-    def serialize(self):
+    def serialize(self, new_context=None):
         context = self.context
-        if self._new_context is not None:
-            context = self._new_context
+        if new_context is not None:
+            context = new_context
         return json.dumps((self.input, context))
 
 
@@ -224,13 +221,11 @@ class DecisionClient(object):
             name, version = args[1:]
             logging.info("Scheduled activity: %s %s", name, version)
         data = d._data
-        if context is not None:
-            self._decision_data.override_context(context)
         try:
             self._client.respond_decision_task_completed(
                 task_token=self._token,
                 decisions=data,
-                execution_context=self._decision_data.serialize()
+                execution_context=self._decision_data.serialize(context)
             )
         except SWFResponseError:
             logging.warning("Could not send decisions: %s",
@@ -346,17 +341,17 @@ class Decision(object):
 
     def _dispatch_activity_completed(self, event, obj):
         meth = 'activity_completed'
-        call_id = self._event_to_call_id[event.event_id]
+        call_id = self._context.map_event_to_call(event.event_id)
         self._dispatch_if_exists(obj, meth, call_id, event.result)
 
     def _dispatch_activity_failed(self, event, obj):
         meth = 'activity_failed'
-        call_id = self._event_to_call_id[event.event_id]
+        call_id = self._context.map_event_to_call(event.event_id)
         self._dispatch_if_exists(obj, meth, call_id, event.reason)
 
     def _dispatch_activity_timedout(self, event, obj):
         meth = 'activity_timedout'
-        call_id = self._event_to_call_id[event.event_id]
+        call_id = self._context.map_event_to_call(event.event_id)
         self._dispatch_if_exists(obj, meth, call_id)
 
     def _dispatch_if_exists(self, obj, method_name, *args):
@@ -417,8 +412,7 @@ class Decision(object):
         Returns a boolean indicating the success of the operation. On success
         the internal collection of scheduled activities will be cleared.
         """
-        context = self._context.serialize(context)
-        return self._client.schedule_activity(context)
+        return self._client.schedule_activity(self._context.serialize(context))
 
     def complete_workflow(self, result):
         """ Signals the successful completion of the workflow.
@@ -427,7 +421,7 @@ class Decision(object):
         the success of the operation.
 
         """
-        return self.complete_workflow(result)
+        return self._client.complete_workflow(result)
 
     def terminate_workflow(self, workflow_id, reason):
         """ Signals the termination of the workflow.
