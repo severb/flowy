@@ -4,7 +4,6 @@ import uuid
 import logging
 from collections import namedtuple
 from functools import partial
-from itertools import chain
 from pkgutil import simplegeneric
 
 from boto.swf.layer1 import Layer1
@@ -17,169 +16,218 @@ from flowy.workflow import _UnhandledActivityError
 __all__ = ['ActivityClient', 'WorkflowClient']
 
 
-_DecisionPage = namedtuple(
-    '_DecisionPage',
-    ['name', 'version', 'events', 'next_page_token', 'last_event_id', 'token']
-)
-_DecisionCollapsed = namedtuple(
-    '_DecisionCollapsed',
-    ['name', 'version', 'all_events', 'last_event_id', 'token']
-)
-_DecisionResponse = namedtuple(
-    '_DecisionResponse',
-    ['name', 'version', 'new_events', 'token', 'data', 'first_run']
-)
+class WorkflowClient(object):
+    """ A simple wrapper around Boto's SWF Layer1 that provides a cleaner
+    interface and some convenience.
 
-_ActivityScheduled = namedtuple('_ActivityScheduled', ['event_id', 'call_id'])
-_ActivityCompleted = namedtuple('_ActivityCompleted', ['event_id', 'result'])
-_ActivityFailed = namedtuple('_ActivityFailed', ['event_id', 'reason'])
-_ActivityTimedout = namedtuple('_ActivityTimedout', ['event_id'])
-_WorkflowStarted = namedtuple('_WorkflowStarted', ['input'])
-_DecisionCompleted = namedtuple('_DecisionCompleted', ['event_id', 'context'])
+    Initialize and bind the client to a *domain*. A custom
+    :class:`boto.swf.layer1.Layer1` instance can be sent as the *client*
+    argument and it will be used instead of the default one.
 
+    """
+    def __init__(self, domain, client):
+        self._client = client if client is not None else Layer1()
+        self._domain = domain
 
-def _decision_event(event):
-    event_type = event['eventType']
-    if event_type == 'ActivityTaskScheduled':
-        ATSEA = 'activityTaskScheduledEventAttributes'
-        event_id = event['eventId']
-        call_id = event[ATSEA]['activityId']
-        return _ActivityScheduled(event_id, call_id)
-    elif event_type == 'ActivityTaskCompleted':
-        ATCEA = 'activityTaskCompletedEventAttributes'
-        event_id = event[ATCEA]['scheduledEventId']
-        result = event[ATCEA]['result']
-        return _ActivityCompleted(event_id, result)
-    elif event_type == 'ActivityTaskFailed':
-        ATFEA = 'activityTaskFailedEventAttributes'
-        event_id = event[ATFEA]['scheduledEventId']
-        reason = event[ATFEA]['reason']
-        return _ActivityFailed(event_id, reason)
-    elif event_type == 'ActivityTaskTimedOut':
-        ATTOEA = 'activityTaskTimedOutEventAttributes'
-        event_id = event[ATTOEA]['scheduledEventId']
-        return _ActivityTimedout(event_id)
-    elif event_type == 'WorkflowExecutionStarted':
-        WESEA = 'workflowExecutionStartedEventAttributes'
-        input = event[WESEA]['input']
-        return _WorkflowStarted(input)
-    elif event_type == 'DecisionTaskCompleted':
-        event_id = event['eventId']
-        context = event['executionContext']
-        return _DecisionCompleted(event_id, context)
+    def register_workflow(decision_maker, name, version, task_list,
+                          execution_start_to_close=3600,
+                          task_start_to_close=60,
+                          child_policy='TERMINATE',
+                          descr=None):
+
+        """ Register a workflow with the given configuration options.
+
+        If a workflow with the same *name* and *version* is already registered,
+        this method returns a boolean indicating whether the registered
+        workflow is compatible. A compatible workflow is a workflow that was
+        registered using the same default values. The default total workflow
+        running time can be specified in seconds using
+        *execution_start_to_close* and a specific decision task runtime can be
+        limited by setting *task_start_to_close*. The default task list the
+        workflows of this type will be scheduled on can be set with
+        *task_list*.
+
+        """
+        pass
+
+    def dispatch_next_decision(self, task_list):
+        pass
 
 
-def _decision_page(response, event_maker=_decision_event):
-    return _DecisionPage(
-        name=response['workflowType']['name'],
-        version=response['workflowType']['version'],
-        token=response['taskToken'],
-        next_page_token=response.get('nextPageToken'),
-        last_event_id=response.get('previousStartedEventId'),
-        events=[event_maker(e) for e in response['events']],
-    )
+class SWFClient(object):
+    def __init__(self, domain, client=None):
+        self._client = client if client is not None else Layer1()
+        self._domain = domain
 
-
-def _poll_decision_page(poller, page_token=None, decision_page=_decision_page):
-    response = {}
-    while 'taskToken' not in response or not response['taskToken']:
+    def register_workflow(self, name, version, task_list,
+                          execution_start_to_close=3600,
+                          task_start_to_close=60,
+                          child_policy='TERMINATE',
+                          descr=None):
+        v = str(version)
+        estc = str(execution_start_to_close)
+        tstc = str(task_start_to_close)
         try:
-            response = poller(next_page_token=page_token)
-        except (IOError, SWFResponseError):
-            logging.warning("Unknown error when pulling decision.", exc_info=1)
-    return decision_page(response)
+            self._client.register_workflow_type(
+                domain=self._domain,
+                name=name,
+                version=v,
+                task_list=task_list,
+                default_child_policy=child_policy,
+                default_execution_start_to_close_timeout=estc,
+                default_task_start_to_close_timeout=tstc,
+                description=descr
+            )
+            logging.info("Registered workflow: %s %s", name, version)
+        except SWFTypeAlreadyExistsError:
+            logging.warning("Workflow already registered: %s %s",
+                            name, version)
+            try:
+                reg_w = self._client.describe_workflow_type(
+                    domain=self._domain, workflow_name=name, workflow_version=v
+                )
+            except SWFResponseError:
+                logging.warning("Could not check workflow defaults: %s %s",
+                                name, version)
+                return False
+            conf = reg_w['configuration']
+            reg_estc = conf['defaultExecutionStartToCloseTimeout']
+            reg_tstc = conf['defaultTaskStartToCloseTimeout']
+            reg_tl = conf['defaultTaskList']['name']
+            reg_cp = conf['defaultChildPolicy']
 
+            if (reg_estc != estc
+                    or reg_tstc != tstc
+                    or reg_tl != task_list
+                    or reg_cp != child_policy):
+                logging.warning("Registered workflow "
+                                "has different defaults: %s %s",
+                                name, version)
+                return False
+        except SWFResponseError:
+            logging.warning("Could not register workflow: %s %s",
+                            name, version, exc_info=1)
+            return False
+        return True
 
-def _poll_decision_collapsed(poller):
+    def register_activity(self, name, version, task_list, heartbeat=60,
+                          schedule_to_close=420, schedule_to_start=120,
+                          start_to_close=300, descr=None):
+        """ Register an activity with the given configuration options.
 
-    first_page = poller()
+        If an activity with the same *name* and *version* is already
+        registered, this method returns a boolean indicating whether the
+        registered activity is compatible. A compatible activity is an
+        activity that was registered using the same default values.
+        The allowed running time can be specified in seconds using
+        *start_to_close*, the allowed time from the moment it was scheduled
+        to the moment it finished can be specified using *schedule_to_close*
+        and the time it can spend in the queue before the processing itself
+        starts can be specified using *schedule_to_start*. The default task
+        list the activities of this type will be scheduled on can be set with
+        *task_list*.
 
-    def all_events():
-        page = first_page
-        while 1:
-            for event in page.events:
-                yield event
-            if page.next_page_token is None:
-                break
-            p = poller(page_token=page.next_page_token)
-            assert (
-                p.name == page.name
-                and p.version == page.version
-                and p.token == page.token
-                and p.last_event_id == page.last_event_id
-            ), 'Inconsistent decision pages.'
+        """
+        version = str(version)
+        schedule_to_close = str(schedule_to_close)
+        schedule_to_start = str(schedule_to_start)
+        start_to_close = str(start_to_close)
+        heartbeat = str(heartbeat)
+        try:
+            self._client.register_activity_type(
+                domain=self._domain,
+                name=name,
+                version=version,
+                task_list=task_list,
+                default_task_heartbeat_timeout=heartbeat,
+                default_task_schedule_to_close_timeout=schedule_to_close,
+                default_task_schedule_to_start_timeout=schedule_to_start,
+                default_task_start_to_close_timeout=start_to_close,
+                description=descr
+            )
+            logging.info("Registered activity: %s %s", name, version)
+        except SWFTypeAlreadyExistsError:
+            logging.warning("Activity already registered: %s %s",
+                            name, version)
+            try:
+                reg_a = self._client.describe_activity_type(
+                    domain=self._domain, activity_name=name,
+                    activity_version=version
+                )
+            except SWFResponseError:
+                logging.warning("Could not check activity defaults: %s %s",
+                                name, version)
+                return False
+            conf = reg_a['configuration']
+            reg_tstc = conf['defaultTaskStartToCloseTimeout']
+            reg_tsts = conf['defaultTaskScheduleToStartTimeout']
+            reg_tschtc = conf['defaultTaskScheduleToCloseTimeout']
+            reg_hb = conf['defaultTaskHeartbeatTimeout']
+            reg_tl = conf['defaultTaskList']['name']
 
-    return _DecisionCollapsed(name=first_page.name, version=first_page.version,
-                              all_events=all_events(), token=first_page.token,
-                              last_event_id=first_page.last_event_id)
+            if (reg_tstc != start_to_close
+                    or reg_tsts != schedule_to_start
+                    or reg_tschtc != schedule_to_close
+                    or reg_hb != heartbeat
+                    or reg_tl != task_list):
+                logging.warning("Registered activity "
+                                "has different defaults: %s %s",
+                                name, version)
+                return False
+        except SWFResponseError:
+            logging.warning("Could not register activity: %s %s",
+                            name, version, exc_info=1)
+            return False
+        return True
 
+    def start_workflow(self, name, version, task_list, input):
+        """ Starts the workflow identified by *name* and *version* with the
+        given *input* on *task_list*.
 
-def _decision_response(decision_collapsed):
-    first_run = decision_collapsed.last_event_id is None
-    if first_run:
-        # The first decision is always just after a workflow started and at
-        # this point this should also be first event in the history but it may
-        # not be the only one - there may be also be previos decisions that
-        # have timed out.
-        new_events = tuple(decision_collapsed.events)
-        workflow_started = new_events[-1]
-        assert isinstance(workflow_started, _WorkflowStarted)
-        data = workflow_started.input
-    else:
-        # The workflow had previous decisions completed and we should search
-        # for the last one
-        new_events = []
-        for event in decision_collapsed.events:
-            if isinstance(event, _DecisionCompleted):
-                break
-            new_events.append(event)
-        else:
-            raise AssertionError('Last decision was not found.')
-        assert event.event_id == decision_collapsed.last_event_id
-        data = event.context
+        Returns the ``workflow_id`` that can be used to uniquely identify the
+        workflow execution within a domain. If starting the execution
+        encounters an error, ``None`` is returned. The returned
+        ``workflow_id`` can be used when calling :meth:`terminate_workflow`.
 
-    return _DecisionResponse(
-        name=decision_collapsed.name,
-        version=decision_collapsed.version,
-        token=decision_collapsed.token,
-        decision_collapsed=new_events,
-        data=data,
-        first_run=first_run,
-        # Preserve the order in which the events happend.
-        new_events=tuple(reversed(new_events))
-    )
+        """
+        try:
+            r = self._client.start_workflow_execution(self._domain,
+                                                      str(uuid.uuid4()),
+                                                      name, str(version),
+                                                      task_list=task_list,
+                                                      input=input)
+        except SWFResponseError:
+            logging.warning("Could not start workflow: %s %s",
+                            name, version, exc_info=1)
+            return None
+        return r['runId']
 
+    def poll_decision(self, task_list):
+        pass
 
-def _poll_decision_response(poller):
-    paged_poller = partial(_poll_decision_page, poller)
-    decision_collapsed = _poll_decision_collapsed(paged_poller)
-    return _decision_response(decision_collapsed)
+    def poll_activity(self, task_list, activity_factory=ActivityTask):
+        """ Poll for a new activity task.
 
+        Blocks until an activity is available in the *task_list* and returns
+        it.
 
-class JSONDecisionData(object):
-    def __init__(self, data, _first_run=False):
-        self._context = None
-        self._input = data
-        if not _first_run:
-            self._input, self._context = json.loads(data)
+        """
+        poll = self._client.poll_for_activity_task
+        response = {}
+        while 'taskToken' not in response or not response['taskToken']:
+            try:
+                response = poll(domain=self._domain, task_list=task_list)
+            except (IOError, SWFResponseError):
+                logging.warning("Unknown error when pulling activities: %s %s",
+                                self._domain, task_list, exc_info=1)
 
-    @classmethod
-    def for_first_run(cls, data):
-        return cls(data, _first_run=True)
+        name = response['activityType']['name']
+        version = response['activityType']['version']
+        input = response['input']
+        token = response['taskToken']
 
-    @property
-    def context(self):
-        return str(self._context)
-
-    @property
-    def input(self):
-        return str(self._input)
-
-    def serialize(self, new_context=None):
-        context = self.context
-        if new_context is not None:
-            context = str(new_context)
-        return json.dumps((self.input, context))
+        return activity_factory(name=name, version=version, input=input,
+                                token=token, client=self._client)
 
 
 class DecisionClient(object):
@@ -255,42 +303,6 @@ class DecisionClient(object):
                             workflow_id, exc_info=1)
             return False
         return True
-
-
-class JSONDecisionContext(object):
-    def __init__(self, context=None):
-        self._event_to_call_id = {}
-        self._activity_contexts = {}
-        self._global_context = None
-        if context is not None:
-            (self._event_to_call_id,
-             self._activity_contexts,
-             self._global_context) = json.loads(context)
-
-    def global_context(self, default=None):
-        if self._global_context is None:
-            return default
-        return str(self._global_context)
-
-    def activity_context(self, call_id, default=None):
-        if call_id not in self._activity_contexts:
-            return default
-        return str(self._activity_contexts[call_id])
-
-    def set_activity_context(self, call_id, context):
-        self._activity_contexts[call_id] = str(context)
-
-    def map_event_to_call(self, event_id, call_id):
-        self._event_to_call_id[event_id] = call_id
-
-    def event_to_call(self, event_id):
-        return self._event_to_call_id[event_id]
-
-    def serialize(self, new_global_context=None):
-        g = self.global_context()
-        if new_global_context is not None:
-            g = str(new_global_context)
-        return json.dumps((self._event_to_call_id, self._activity_contexts, g))
 
 
 class Decision(object):
@@ -436,6 +448,208 @@ class Decision(object):
         return self._context.scheduled_activity_context(call_id, default)
 
 
+class JSONDecisionContext(object):
+    def __init__(self, context=None):
+        self._event_to_call_id = {}
+        self._activity_contexts = {}
+        self._global_context = None
+        if context is not None:
+            (self._event_to_call_id,
+             self._activity_contexts,
+             self._global_context) = json.loads(context)
+
+    def global_context(self, default=None):
+        if self._global_context is None:
+            return default
+        return str(self._global_context)
+
+    def activity_context(self, call_id, default=None):
+        if call_id not in self._activity_contexts:
+            return default
+        return str(self._activity_contexts[call_id])
+
+    def set_activity_context(self, call_id, context):
+        self._activity_contexts[call_id] = str(context)
+
+    def map_event_to_call(self, event_id, call_id):
+        self._event_to_call_id[event_id] = call_id
+
+    def event_to_call(self, event_id):
+        return self._event_to_call_id[event_id]
+
+    def serialize(self, new_global_context=None):
+        g = self.global_context()
+        if new_global_context is not None:
+            g = str(new_global_context)
+        return json.dumps((self._event_to_call_id, self._activity_contexts, g))
+
+
+class JSONDecisionData(object):
+    def __init__(self, data, _first_run=False):
+        self._context = None
+        self._input = data
+        if not _first_run:
+            self._input, self._context = json.loads(data)
+
+    @classmethod
+    def for_first_run(cls, data):
+        return cls(data, _first_run=True)
+
+    @property
+    def context(self):
+        return str(self._context)
+
+    @property
+    def input(self):
+        return str(self._input)
+
+    def serialize(self, new_context=None):
+        context = self.context
+        if new_context is not None:
+            context = str(new_context)
+        return json.dumps((self.input, context))
+
+
+_DecisionPage = namedtuple(
+    '_DecisionPage',
+    ['name', 'version', 'events', 'next_page_token', 'last_event_id', 'token']
+)
+_DecisionCollapsed = namedtuple(
+    '_DecisionCollapsed',
+    ['name', 'version', 'all_events', 'last_event_id', 'token']
+)
+_DecisionResponse = namedtuple(
+    '_DecisionResponse',
+    ['name', 'version', 'new_events', 'token', 'data', 'first_run']
+)
+
+
+_ActivityScheduled = namedtuple('_ActivityScheduled', ['event_id', 'call_id'])
+_ActivityCompleted = namedtuple('_ActivityCompleted', ['event_id', 'result'])
+_ActivityFailed = namedtuple('_ActivityFailed', ['event_id', 'reason'])
+_ActivityTimedout = namedtuple('_ActivityTimedout', ['event_id'])
+_WorkflowStarted = namedtuple('_WorkflowStarted', ['input'])
+_DecisionCompleted = namedtuple('_DecisionCompleted', ['event_id', 'context'])
+
+
+def _decision_event(event):
+    event_type = event['eventType']
+    if event_type == 'ActivityTaskScheduled':
+        ATSEA = 'activityTaskScheduledEventAttributes'
+        event_id = event['eventId']
+        call_id = event[ATSEA]['activityId']
+        return _ActivityScheduled(event_id, call_id)
+    elif event_type == 'ActivityTaskCompleted':
+        ATCEA = 'activityTaskCompletedEventAttributes'
+        event_id = event[ATCEA]['scheduledEventId']
+        result = event[ATCEA]['result']
+        return _ActivityCompleted(event_id, result)
+    elif event_type == 'ActivityTaskFailed':
+        ATFEA = 'activityTaskFailedEventAttributes'
+        event_id = event[ATFEA]['scheduledEventId']
+        reason = event[ATFEA]['reason']
+        return _ActivityFailed(event_id, reason)
+    elif event_type == 'ActivityTaskTimedOut':
+        ATTOEA = 'activityTaskTimedOutEventAttributes'
+        event_id = event[ATTOEA]['scheduledEventId']
+        return _ActivityTimedout(event_id)
+    elif event_type == 'WorkflowExecutionStarted':
+        WESEA = 'workflowExecutionStartedEventAttributes'
+        input = event[WESEA]['input']
+        return _WorkflowStarted(input)
+    elif event_type == 'DecisionTaskCompleted':
+        event_id = event['eventId']
+        context = event['executionContext']
+        return _DecisionCompleted(event_id, context)
+
+
+def _decision_page(response, event_maker=_decision_event):
+    return _DecisionPage(
+        name=response['workflowType']['name'],
+        version=response['workflowType']['version'],
+        token=response['taskToken'],
+        next_page_token=response.get('nextPageToken'),
+        last_event_id=response.get('previousStartedEventId'),
+        events=[event_maker(e) for e in response['events']],
+    )
+
+
+def _poll_decision_page(poller, page_token=None, decision_page=_decision_page):
+    response = {}
+    while 'taskToken' not in response or not response['taskToken']:
+        try:
+            response = poller(next_page_token=page_token)
+        except (IOError, SWFResponseError):
+            logging.warning("Unknown error when pulling decision.", exc_info=1)
+    return decision_page(response)
+
+
+def _poll_decision_collapsed(poller):
+
+    first_page = poller()
+
+    def all_events():
+        page = first_page
+        while 1:
+            for event in page.events:
+                yield event
+            if page.next_page_token is None:
+                break
+            p = poller(page_token=page.next_page_token)
+            assert (
+                p.name == page.name
+                and p.version == page.version
+                and p.token == page.token
+                and p.last_event_id == page.last_event_id
+            ), 'Inconsistent decision pages.'
+
+    return _DecisionCollapsed(name=first_page.name, version=first_page.version,
+                              all_events=all_events(), token=first_page.token,
+                              last_event_id=first_page.last_event_id)
+
+
+def _decision_response(decision_collapsed):
+    first_run = decision_collapsed.last_event_id is None
+    if first_run:
+        # The first decision is always just after a workflow started and at
+        # this point this should also be first event in the history but it may
+        # not be the only one - there may be also be previos decisions that
+        # have timed out.
+        new_events = tuple(decision_collapsed.events)
+        workflow_started = new_events[-1]
+        assert isinstance(workflow_started, _WorkflowStarted)
+        data = workflow_started.input
+    else:
+        # The workflow had previous decisions completed and we should search
+        # for the last one
+        new_events = []
+        for event in decision_collapsed.events:
+            if isinstance(event, _DecisionCompleted):
+                break
+            new_events.append(event)
+        else:
+            raise AssertionError('Last decision was not found.')
+        assert event.event_id == decision_collapsed.last_event_id
+        data = event.context
+
+    return _DecisionResponse(
+        name=decision_collapsed.name,
+        version=decision_collapsed.version,
+        token=decision_collapsed.token,
+        decision_collapsed=new_events,
+        data=data,
+        first_run=first_run,
+        # Preserve the order in which the events happend.
+        new_events=tuple(reversed(new_events))
+    )
+
+
+def _poll_decision_response(poller):
+    paged_poller = partial(_poll_decision_page, poller)
+    decision_collapsed = _poll_decision_collapsed(paged_poller)
+    return _decision_response(decision_collapsed)
+
+
 class ActivityTask(object):
     """ An object that abstracts an activity and its functionality. """
     def __init__(self, name, version, input, token, client):
@@ -502,292 +716,6 @@ SWFActivityScheduled = namedtuple('SWFActivityScheduled', 'event_id call_id')
 SWFActivityCompleted = namedtuple('SWFActivityCompleted', 'event_id result')
 SWFActivityFailed = namedtuple('SWFActivityFailed', 'event_id reason')
 SWFActivityTimedout = namedtuple('SWFActivityTimedout', 'event_id')
-
-
-class SWFClient(object):
-    """ A simple wrapper around Boto's SWF Layer1 that provides a cleaner
-    interface and some convenience.
-
-    Initialize and bind the client to a *domain*. A custom
-    :class:`boto.swf.layer1.Layer1` instance can be sent as the *client*
-    argument and it will be used instead of the default one.
-
-    """
-    def __init__(self, domain, client=None):
-        self._client = client if client is not None else Layer1()
-        self.domain = domain
-        self._scheduled_activities = []
-
-    def register_workflow(self, name, version, task_list,
-                          execution_start_to_close=3600,
-                          task_start_to_close=60,
-                          child_policy='TERMINATE',
-                          descr=None):
-        """ Register a workflow with the given configuration options.
-
-        If a workflow with the same *name* and *version* is already registered,
-        this method returns a boolean indicating whether the registered
-        workflow is compatible. A compatible workflow is a workflow that was
-        registered using the same default values. The default total workflow
-        running time can be specified in seconds using
-        *execution_start_to_close* and a specific decision task runtime can be
-        limited by setting *task_start_to_close*. The default task list the
-        workflows of this type will be scheduled on can be set with
-        *task_list*.
-
-        """
-        v = str(version)
-        estc = str(execution_start_to_close)
-        tstc = str(task_start_to_close)
-        try:
-            self._client.register_workflow_type(
-                domain=self.domain,
-                name=name,
-                version=v,
-                task_list=task_list,
-                default_child_policy=child_policy,
-                default_execution_start_to_close_timeout=estc,
-                default_task_start_to_close_timeout=tstc,
-                description=descr
-            )
-            logging.info("Registered workflow: %s %s", name, version)
-        except SWFTypeAlreadyExistsError:
-            logging.warning("Workflow already registered: %s %s",
-                            name, version)
-            try:
-                reg_w = self._client.describe_workflow_type(
-                    domain=self.domain, workflow_name=name, workflow_version=v
-                )
-            except SWFResponseError:
-                logging.warning("Could not check workflow defaults: %s %s",
-                                name, version)
-                return False
-            conf = reg_w['configuration']
-            reg_estc = conf['defaultExecutionStartToCloseTimeout']
-            reg_tstc = conf['defaultTaskStartToCloseTimeout']
-            reg_tl = conf['defaultTaskList']['name']
-            reg_cp = conf['defaultChildPolicy']
-
-            if (reg_estc != estc
-                    or reg_tstc != tstc
-                    or reg_tl != task_list
-                    or reg_cp != child_policy):
-                logging.warning("Registered workflow "
-                                "has different defaults: %s %s",
-                                name, version)
-                return False
-        except SWFResponseError:
-            logging.warning("Could not register workflow: %s %s",
-                            name, version, exc_info=1)
-            return False
-        return True
-
-    def poll_decision(self, task_list, decision_factory=Decision):
-        """ Poll for a new decision task.
-
-        Blocks until a decision is available in the *task_list*. A decision is
-        a :class:`Decision` instance.
-
-        """
-        def poll_page(next_page_token=None):
-            poll = self._client.poll_for_decision_task
-            response = {}
-            while 'taskToken' not in response or not response['taskToken']:
-                try:
-                    response = poll(domain=self.domain, task_list=task_list,
-                                    reverse_order=True,
-                                    next_page_token=next_page_token)
-                except (IOError, SWFResponseError):
-                    logging.warning("Unknown error when pulling"
-                                    " decisions: %s %s",
-                                    self.domain, task_list, exc_info=1)
-            return response
-
-        def poll_all_pages():
-            page = poll_page()
-            yield page
-            while 'nextPageToken' in page:
-                page = poll_page(next_page_token=page['nextPageToken'])
-
-        def all_events(pages):
-            for page in pages:
-                for event in page['events']:
-                    yield event
-
-        def new_events(prev_id, events):
-            result = []
-            for event in events:
-                if event['eventType'] == 'DecisionTaskCompleted':
-                    assert event['eventId'] == prev_id
-                    break
-                result.append(event)
-            return reversed(result), event['executionContext']
-
-        def typed_events(events):
-            for event in events:
-                event_type = event['eventType']
-                if event_type == 'ActivityTaskScheduled':
-                    ATSEA = 'activityTaskScheduledEventAttributes'
-                    event_id = event['eventId']
-                    call_id = event[ATSEA]['activityId']
-                    yield SWFActivityScheduled(event_id, call_id)
-                elif event_type == 'ActivityTaskCompleted':
-                    ATCEA = 'activityTaskCompletedEventAttributes'
-                    event_id = event[ATCEA]['scheduledEventId']
-                    result = event[ATCEA]['result']
-                    yield SWFActivityCompleted(event_id, result)
-                elif event_type == 'ActivityTaskFailed':
-                    ATFEA = 'activityTaskFailedEventAttributes'
-                    event_id = event[ATFEA]['scheduledEventId']
-                    reason = event[ATFEA]['reason']
-                    yield SWFActivityFailed(event_id, reason)
-                elif event_type == 'ActivityTaskTimedOut':
-                    ATTOEA = 'activityTaskTimedOutEventAttributes'
-                    event_id = event[ATTOEA]['scheduledEventId']
-                    yield SWFActivityTimedout(event_id)
-
-        all_pages = poll_all_pages()
-        first_page = all_pages.next()
-        all_pages = chain([first_page], all_pages)
-
-        name = first_page['workflowType']['name']
-        version = first_page['workflowType']['version']
-        token = first_page['taskToken']
-        input = None
-        context = None
-
-        events = all_events(all_pages)
-
-        prev_id = first_page.get('previousStartedEventId')
-        if prev_id:
-            events, context = new_events(prev_id, events)
-        else:
-            first_event = events.next()
-            assert first_event['eventType'] == 'WorkflowExecutionStarted'
-            WESEA = 'workflowExecutionStartedEventAttributes'
-            input = first_event[WESEA]['input']
-
-        new_events = tuple(typed_events(events))  # cache the result
-
-        return decision_factory(name=name, version=version, token=token,
-                                client=self._client, context=context,
-                                input=input, new_events=new_events)
-
-    def register_activity(self, name, version, task_list, heartbeat=60,
-                          schedule_to_close=420, schedule_to_start=120,
-                          start_to_close=300, descr=None):
-        """ Register an activity with the given configuration options.
-
-        If an activity with the same *name* and *version* is already
-        registered, this method returns a boolean indicating whether the
-        registered activity is compatible. A compatible activity is an
-        activity that was registered using the same default values.
-        The allowed running time can be specified in seconds using
-        *start_to_close*, the allowed time from the moment it was scheduled
-        to the moment it finished can be specified using *schedule_to_close*
-        and the time it can spend in the queue before the processing itself
-        starts can be specified using *schedule_to_start*. The default task
-        list the activities of this type will be scheduled on can be set with
-        *task_list*.
-
-        """
-        version = str(version)
-        schedule_to_close = str(schedule_to_close)
-        schedule_to_start = str(schedule_to_start)
-        start_to_close = str(start_to_close)
-        heartbeat = str(heartbeat)
-        try:
-            self._client.register_activity_type(
-                domain=self.domain,
-                name=name,
-                version=version,
-                task_list=task_list,
-                default_task_heartbeat_timeout=heartbeat,
-                default_task_schedule_to_close_timeout=schedule_to_close,
-                default_task_schedule_to_start_timeout=schedule_to_start,
-                default_task_start_to_close_timeout=start_to_close,
-                description=descr
-            )
-            logging.info("Registered activity: %s %s", name, version)
-        except SWFTypeAlreadyExistsError:
-            logging.warning("Activity already registered: %s %s",
-                            name, version)
-            try:
-                reg_a = self._client.describe_activity_type(
-                    domain=self.domain, activity_name=name,
-                    activity_version=version
-                )
-            except SWFResponseError:
-                logging.warning("Could not check activity defaults: %s %s",
-                                name, version)
-                return False
-            conf = reg_a['configuration']
-            reg_tstc = conf['defaultTaskStartToCloseTimeout']
-            reg_tsts = conf['defaultTaskScheduleToStartTimeout']
-            reg_tschtc = conf['defaultTaskScheduleToCloseTimeout']
-            reg_hb = conf['defaultTaskHeartbeatTimeout']
-            reg_tl = conf['defaultTaskList']['name']
-
-            if (reg_tstc != start_to_close
-                    or reg_tsts != schedule_to_start
-                    or reg_tschtc != schedule_to_close
-                    or reg_hb != heartbeat
-                    or reg_tl != task_list):
-                logging.warning("Registered activity "
-                                "has different defaults: %s %s",
-                                name, version)
-                return False
-        except SWFResponseError:
-            logging.warning("Could not register activity: %s %s",
-                            name, version, exc_info=1)
-            return False
-        return True
-
-    def poll_activity(self, task_list, activity_factory=ActivityTask):
-        """ Poll for a new activity task.
-
-        Blocks until an activity is available in the *task_list* and returns
-        it.
-
-        """
-        poll = self._client.poll_for_activity_task
-        response = {}
-        while 'taskToken' not in response or not response['taskToken']:
-            try:
-                response = poll(domain=self.domain, task_list=task_list)
-            except (IOError, SWFResponseError):
-                logging.warning("Unknown error when pulling activities: %s %s",
-                                self.domain, task_list, exc_info=1)
-
-        name = response['activityType']['name']
-        version = response['activityType']['version']
-        input = response['input']
-        token = response['taskToken']
-
-        return activity_factory(name=name, version=version, input=input,
-                                token=token, client=self._client)
-
-    def start_workflow(self, name, version, task_list, input):
-        """ Starts the workflow identified by *name* and *version* with the
-        given *input* on *task_list*.
-
-        Returns the ``workflow_id`` that can be used to uniquely identify the
-        workflow execution within a domain. If starting the execution
-        encounters an error, ``None`` is returned. The returned
-        ``workflow_id`` can be used when calling :meth:`terminate_workflow`.
-
-        """
-        try:
-            r = self._client.start_workflow_execution(self.domain,
-                                                      str(uuid.uuid4()),
-                                                      name, str(version),
-                                                      task_list=task_list,
-                                                      input=input)
-        except SWFResponseError:
-            logging.warning("Could not start workflow: %s %s",
-                            name, version, exc_info=1)
-            return None
-        return r['runId']
 
 
 class WorkflowClient(object):
