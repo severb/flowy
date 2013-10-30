@@ -156,8 +156,20 @@ When initializing :class:`~flowy.workflow.ActivityProxy` classes, the names and
 versions provided must match the names and versions we set when defining our
 activities.
 
+Finally, we arrive to the workflow implementation:
+
 .. literalinclude:: workflow.py
    :language: python
-   :lines: 11-15
+   :lines: 11-17
+
+As you can see the actual workflow implementation is pretty straight-forward,
+with a few exceptions: the method :meth:`~flowy.workflow.MaybeResult.result`.
+Whenever we want to access the result of an activity, we must do so through the
+aforementioned method. This method is the only synchronization primitive
+available in :app:`Flowy`, and its usage will be explained later on.
+
+.. literalinclude:: workflow.py
+   :language: python
+   :lines: 19-20
 
 
