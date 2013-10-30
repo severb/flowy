@@ -58,6 +58,10 @@ activity, specifying the activity's name, version and task list (several other
 options can be specified here as well). Activities can also be registered
 manually with the :meth:`~flowy.client.ActivityClient.register` method.
 
+.. seealso:: For a full list of options that can be specified when registering
+   an activity using the decorator, or manually, please see
+   :meth:`flowy.client.ActivityClient.register`.
+
 Defining the activity
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -82,10 +86,6 @@ The :meth:`~flowy.activity.Activity.run` method is the heart of our activity.
 That is where we must implement the activity logic itself. The
 ``some_transcoding_method`` method is just a placeholder for some business
 logic however complex it might be.
-
-.. seealso:: See :meth:`~flowy.client.SWFClient.register_activity` for a full
-   list of options that can be specified via the decorator or the
-   :meth:`~flowy.client.SWFClient.register` method.
 
 Finally, we have:
 
@@ -142,9 +142,14 @@ We define a workflow in the following way:
 
 When decorating the workflow class with ``workflow_client`` we must specify a
 name, version and a default task list to register the workflow with. The
-specified task list will be used in case one is not specified when starting the
-workflow. Our workflow class must also inherit
-:class:`~flowy.workflow.Workflow`.
+workflow can also be manually registered using
+:meth:`~flowy.client.WorkflowClient.register`.  The specified task list will be used
+in case one is not specified when starting the workflow. Our workflow class
+must also inherit :class:`~flowy.workflow.Workflow`.
+
+.. seealso:: For a full list of options that can be specified when registering
+   a workflow using the decorator, or manually, please see
+   :meth:`flowy.client.WorkflowClient.register`.
 
 We define activities within our workflow as such:
 
@@ -156,8 +161,21 @@ When initializing :class:`~flowy.workflow.ActivityProxy` classes, the names and
 versions provided must match the names and versions we set when defining our
 activities.
 
+Finally, we arrive to the workflow implementation:
+
 .. literalinclude:: workflow.py
    :language: python
-   :lines: 11-15
+   :lines: 11-17
 
+As you can see the actual workflow implementation is pretty straight-forward,
+with a few exceptions: the method :meth:`~flowy.workflow.MaybeResult.result`.
+Whenever we want to access the result of an activity, we must do so through the
+aforementioned method. This method is the only synchronization primitive
+available in :app:`Flowy`, and its usage will be explained later on.
 
+.. literalinclude:: workflow.py
+   :language: python
+   :lines: 19-20
+
+The line above starts the main decision polling loop on the ``upload_list``
+task list.
