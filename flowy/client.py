@@ -394,7 +394,7 @@ class Decision(object):
             start_to_close=start_to_close,
             task_list=task_list
         )
-        self.context.set_activity_context(call_id, context)
+        self._context.set_activity_context(call_id, context)
 
     def schedule_activities(self, context=None):
         """ Schedules all queued activities.
