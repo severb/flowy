@@ -1,9 +1,8 @@
 import unittest
-from mock import create_autospec
+from mock import create_autospec, sentinel, Mock, call, ANY
 
 
-class SWFClientTest(unittest.TestCase):
-
+class TestCaseNoLogging(unittest.TestCase):
     def setUp(self):
         import logging
         logging.root.disabled = True
@@ -12,6 +11,182 @@ class SWFClientTest(unittest.TestCase):
         import logging
         logging.root.disabled = False
 
+
+class DecisionPollingTest(TestCaseNoLogging):
+    def assertTypedEquals(self, first, second, msg=None):
+        self.assertEquals(first, second)
+        self.assertEquals(type(first), type(second))
+
+    def test_decision_event_activity_scheduled(self):
+        from flowy.client import _decision_event, _ActivityScheduled
+        event = _decision_event({
+            'eventType': 'ActivityTaskScheduled',
+            'eventId': 'event_id',
+            'activityTaskScheduledEventAttributes': {
+                'activityId': 'call_id',
+            },
+        })
+        self.assertTypedEquals(event, _ActivityScheduled(event_id='event_id',
+                                                         call_id='call_id'))
+
+    def test_decision_event_acitivity_completed(self):
+        from flowy.client import _decision_event, _ActivityCompleted
+        event = _decision_event({
+            'eventType': 'ActivityTaskCompleted',
+            'activityTaskCompletedEventAttributes': {
+                'scheduledEventId': 'event_id',
+                'result': 'res',
+            },
+        })
+        self.assertTypedEquals(event, _ActivityCompleted(event_id='event_id',
+                                                         result='res'))
+
+    def test_decision_event_acitivity_failed(self):
+        from flowy.client import _decision_event, _ActivityFailed
+        event = _decision_event({
+            'eventType': 'ActivityTaskFailed',
+            'activityTaskFailedEventAttributes': {
+                'scheduledEventId': 'event_id',
+                'reason': 'reas',
+            },
+        })
+        self.assertTypedEquals(event, _ActivityFailed(event_id='event_id',
+                                                      reason='reas'))
+
+    def test_decision_event_acitivity_timedout(self):
+        from flowy.client import _decision_event, _ActivityTimedout
+        event = _decision_event({
+            'eventType': 'ActivityTaskTimedOut',
+            'activityTaskTimedOutEventAttributes': {
+                'scheduledEventId': 'event_id',
+            },
+        })
+        self.assertTypedEquals(event, _ActivityTimedout(event_id='event_id'))
+
+    def test_decision_event_workflow_started(self):
+        from flowy.client import _decision_event, _WorkflowStarted
+        event = _decision_event({
+            'eventType': 'WorkflowExecutionStarted',
+            'workflowExecutionStartedEventAttributes': {'input': 'in'},
+        })
+        self.assertTypedEquals(event, _WorkflowStarted(input='in'))
+
+    def test_decision_event_decision_completed(self):
+        from flowy.client import _decision_event, _DecisionCompleted
+        event = _decision_event({
+            'eventType': 'DecisionTaskCompleted',
+            'eventId': 'event_id',
+            'executionContext': 'ctx'
+        })
+        self.assertTypedEquals(event, _DecisionCompleted(event_id='event_id',
+                                                         context='ctx'))
+
+    def test_decision_page(self):
+        from flowy.client import _decision_page, _DecisionPage
+        response = {
+            'workflowType': {'name': 'wfname', 'version': 'wfversion'},
+            'taskToken': 'token',
+            'nextPageToken': 'page_token',
+            'previousStartedEventId': 'previous_id',
+            'events': [sentinel.e1, sentinel.e2, sentinel.e3],
+        }
+        event_maker = Mock()
+        event_maker.side_effect = sentinel.r1, sentinel.r2, sentinel.r3
+        self.assertTypedEquals(
+            _decision_page(response, event_maker=event_maker),
+            _DecisionPage(
+                name='wfname',
+                version='wfversion',
+                token='token',
+                next_page_token='page_token',
+                last_event_id='previous_id',
+                events=[sentinel.r1, sentinel.r2, sentinel.r3],
+            )
+        )
+        event_maker.assert_has_calls([call(sentinel.e1),
+                                      call(sentinel.e2),
+                                      call(sentinel.e3)])
+
+    def test_poll_decision_page(self):
+        from boto.swf.exceptions import SWFResponseError
+        from flowy.client import _poll_decision_page
+        valid = {'taskToken': 'token', 'other': 'fields'}
+        poller = Mock()
+        poller.side_effect = [SWFResponseError(0, 0), {}] * 2 + [valid]
+        decision_page = Mock()
+        _poll_decision_page(poller, page_token='token',
+                            decision_page=decision_page)
+        decision_page.assert_called_once_with(valid)
+
+    def test_poll_decision_collapsed(self):
+        from flowy.client import _poll_decision_collapsed
+        from flowy.client import _DecisionPage, _DecisionCollapsed
+        poller = Mock()
+        poller.side_effect = [
+            _DecisionPage(name='wfname', version='wfversion', token='token',
+                          last_event_id='previous_id',
+                          next_page_token='page_token1',
+                          events=[sentinel.e1, sentinel.e2]),
+            _DecisionPage(name='wfname', version='wfversion', token='token',
+                          last_event_id='previous_id',
+                          next_page_token='page_token2',
+                          events=[sentinel.e3, sentinel.e4]),
+            _DecisionPage(name='wfname', version='wfversion', token='token',
+                          last_event_id='previous_id',
+                          next_page_token=None,
+                          events=[sentinel.e5]),
+        ]
+        result = _poll_decision_collapsed(poller)
+        self.assertTypedEquals(
+            result,
+            _DecisionCollapsed(name='wfname', version='wfversion',
+                               token='token', last_event_id='previous_id',
+                               all_events=ANY)
+        )
+        self.assertEquals(
+            list(result.all_events),
+            [sentinel.e1, sentinel.e2, sentinel.e3, sentinel.e4, sentinel.e5]
+        )
+        poller.assert_has_calls([
+            call(),
+            call(page_token='page_token1'),
+            call(page_token='page_token2')
+        ])
+
+    def test_decision_response_first_run(self):
+        from flowy.client import _decision_response, _DecisionResponse
+        from flowy.client import _WorkflowStarted, _DecisionCollapsed
+        collapsed = _DecisionCollapsed(name='wfname', version='wfversion',
+                                       last_event_id=None, token='token',
+                                       all_events=[_WorkflowStarted('input')])
+        response = _decision_response(collapsed)
+        self.assertEquals(
+            response,
+            _DecisionResponse(name='wfname', version='wfversion',
+                              token='token', first_run=True, data='input',
+                              new_events=tuple())
+        )
+
+    def test_decision_response_nth_run(self):
+        from flowy.client import _decision_response, _DecisionResponse
+        from flowy.client import _DecisionCompleted, _DecisionCollapsed
+        all_events = [sentinel.e3, sentinel.e2, sentinel.e1,
+                      _DecisionCompleted('last_id', 'ctx')]
+        collapsed = _DecisionCollapsed(name='wfname', version='wfversion',
+                                       last_event_id='last_id', token='token',
+                                       all_events=all_events)
+        response = _decision_response(collapsed)
+        self.assertEquals(
+            response,
+            _DecisionResponse(name='wfname', version='wfversion',
+                              token='token', first_run=False, data='ctx',
+                              new_events=(sentinel.e1,
+                                          sentinel.e2,
+                                          sentinel.e3))
+        )
+
+
+class SWFClientTest(unittest.TestCase):
     def _get_uut(self, domain='domain'):
         from flowy.client import SWFClient
         from boto.swf.layer1 import Layer1
@@ -120,7 +295,6 @@ class SWFClientTest(unittest.TestCase):
                                 child_policy='TERMINATE',
                                 descr='description')
         self.assertFalse(r)
-
 
     def test_activity_registration(self):
         m, c = self._get_uut(domain='dom')

@@ -16,44 +16,6 @@ from flowy.workflow import _UnhandledActivityError
 __all__ = ['ActivityClient', 'WorkflowClient']
 
 
-class WorkflowClient(object):
-    """ A simple wrapper around Boto's SWF Layer1 that provides a cleaner
-    interface and some convenience.
-
-    Initialize and bind the client to a *domain*. A custom
-    :class:`boto.swf.layer1.Layer1` instance can be sent as the *client*
-    argument and it will be used instead of the default one.
-
-    """
-    def __init__(self, domain, client):
-        self._client = client if client is not None else Layer1()
-        self._domain = domain
-
-    def register_workflow(decision_maker, name, version, task_list,
-                          execution_start_to_close=3600,
-                          task_start_to_close=60,
-                          child_policy='TERMINATE',
-                          descr=None):
-
-        """ Register a workflow with the given configuration options.
-
-        If a workflow with the same *name* and *version* is already registered,
-        this method returns a boolean indicating whether the registered
-        workflow is compatible. A compatible workflow is a workflow that was
-        registered using the same default values. The default total workflow
-        running time can be specified in seconds using
-        *execution_start_to_close* and a specific decision task runtime can be
-        limited by setting *task_start_to_close*. The default task list the
-        workflows of this type will be scheduled on can be set with
-        *task_list*.
-
-        """
-        pass
-
-    def dispatch_next_decision(self, task_list):
-        pass
-
-
 class SWFClient(object):
     def __init__(self, domain, client=None):
         self._client = client if client is not None else Layer1()
@@ -203,31 +165,11 @@ class SWFClient(object):
         return r['runId']
 
     def poll_decision(self, task_list):
-        pass
-
-    def poll_activity(self, task_list, activity_factory=ActivityTask):
-        """ Poll for a new activity task.
-
-        Blocks until an activity is available in the *task_list* and returns
-        it.
-
-        """
-        poll = self._client.poll_for_activity_task
-        response = {}
-        while 'taskToken' not in response or not response['taskToken']:
-            try:
-                response = poll(domain=self._domain, task_list=task_list)
-            except (IOError, SWFResponseError):
-                logging.warning("Unknown error when pulling activities: %s %s",
-                                self._domain, task_list, exc_info=1)
-
-        name = response['activityType']['name']
-        version = response['activityType']['version']
-        input = response['input']
-        token = response['taskToken']
-
-        return activity_factory(name=name, version=version, input=input,
-                                token=token, client=self._client)
+        poller = partial(self._client, task_list=task_list, domain=self.domain,
+                         reverse_order=True)
+        paged_poller = partial(_poll_decision_page, poller)
+        decision_collapsed = _poll_decision_collapsed(paged_poller)
+        return _decision_response(decision_collapsed)
 
 
 class DecisionClient(object):
@@ -510,6 +452,75 @@ class JSONDecisionData(object):
         return json.dumps((self.input, context))
 
 
+class WorkflowClient(object):
+    """ A simple wrapper around Boto's SWF Layer1 that provides a cleaner
+    interface and some convenience.
+
+    Initialize and bind the client to a *domain*. A custom
+    :class:`boto.swf.layer1.Layer1` instance can be sent as the *client*
+    argument and it will be used instead of the default one.
+
+    """
+    _DecisionData = JSONDecisionData
+    _DecisionClient = DecisionClient
+    _DecisionContext = JSONDecisionContext
+    _Decision = Decision
+
+    def __init__(self, client):
+        self._client = client if client is not None else Layer1()
+        self._registry = {}
+
+    def register_workflow(self, decision_maker, name, version, task_list,
+                          execution_start_to_close=3600,
+                          task_start_to_close=60,
+                          child_policy='TERMINATE',
+                          descr=None):
+
+        """ Register a workflow with the given configuration options.
+
+        If a workflow with the same *name* and *version* is already registered,
+        this method returns a boolean indicating whether the registered
+        workflow is compatible. A compatible workflow is a workflow that was
+        registered using the same default values. The default total workflow
+        running time can be specified in seconds using
+        *execution_start_to_close* and a specific decision task runtime can be
+        limited by setting *task_start_to_close*. The default task list the
+        workflows of this type will be scheduled on can be set with
+        *task_list*.
+
+        """
+        version = str(version)
+        result = self._client.register_workflow(
+            name=name,
+            version=version,
+            task_list=task_list,
+            execution_start_to_close=execution_start_to_close,
+            task_start_to_close=task_start_to_close,
+            child_policy=child_policy,
+            descr=descr
+        )
+        if result:
+            self._registry[(name, version)] = decision_maker
+        return result
+
+    def dispatch_next_decision(self, task_list):
+        decision_response = self._client.poll_decision(task_list)
+        decision_maker_key = decision_response.name, decision_response.version
+        decision_maker = self._registry.get(decision_maker_key)
+        if decision_maker is not None:
+            if decision_response.first_run:
+                data = self._DecisionData.for_first_run(decision_response.data)
+            else:
+                data = self._DecisionData(decision_response.data)
+            decision_client = self._DecisionClient(
+                self._client, self._domain, decision_response.token, data
+            )
+            decision_context = self._DecisionContext(data.context)
+            decision = self._Decision(decision_client, decision_context,
+                                      decision_response.new_events)
+            return decision_maker(data.input, decision)
+
+
 _DecisionPage = namedtuple(
     '_DecisionPage',
     ['name', 'version', 'events', 'next_page_token', 'last_event_id', 'token']
@@ -535,8 +546,8 @@ _DecisionCompleted = namedtuple('_DecisionCompleted', ['event_id', 'context'])
 def _decision_event(event):
     event_type = event['eventType']
     if event_type == 'ActivityTaskScheduled':
-        ATSEA = 'activityTaskScheduledEventAttributes'
         event_id = event['eventId']
+        ATSEA = 'activityTaskScheduledEventAttributes'
         call_id = event[ATSEA]['activityId']
         return _ActivityScheduled(event_id, call_id)
     elif event_type == 'ActivityTaskCompleted':
@@ -595,6 +606,8 @@ def _poll_decision_collapsed(poller):
                 yield event
             if page.next_page_token is None:
                 break
+            # XXX: If a workflow is stopped and a decision page fetching fails
+            # forever we have an infinite loop here!
             p = poller(page_token=page.next_page_token)
             assert (
                 p.name == page.name
@@ -602,6 +615,7 @@ def _poll_decision_collapsed(poller):
                 and p.token == page.token
                 and p.last_event_id == page.last_event_id
             ), 'Inconsistent decision pages.'
+            page = p
 
     return _DecisionCollapsed(name=first_page.name, version=first_page.version,
                               all_events=all_events(), token=first_page.token,
@@ -615,15 +629,16 @@ def _decision_response(decision_collapsed):
         # this point this should also be first event in the history but it may
         # not be the only one - there may be also be previos decisions that
         # have timed out.
-        new_events = tuple(decision_collapsed.events)
-        workflow_started = new_events[-1]
+        all_events = tuple(decision_collapsed.all_events)
+        workflow_started = all_events[-1]
+        new_events = all_events[:-1]
         assert isinstance(workflow_started, _WorkflowStarted)
         data = workflow_started.input
     else:
         # The workflow had previous decisions completed and we should search
         # for the last one
         new_events = []
-        for event in decision_collapsed.events:
+        for event in decision_collapsed.all_events:
             if isinstance(event, _DecisionCompleted):
                 break
             new_events.append(event)
@@ -636,18 +651,11 @@ def _decision_response(decision_collapsed):
         name=decision_collapsed.name,
         version=decision_collapsed.version,
         token=decision_collapsed.token,
-        decision_collapsed=new_events,
         data=data,
         first_run=first_run,
         # Preserve the order in which the events happend.
         new_events=tuple(reversed(new_events))
     )
-
-
-def _poll_decision_response(poller):
-    paged_poller = partial(_poll_decision_page, poller)
-    decision_collapsed = _poll_decision_collapsed(paged_poller)
-    return _decision_response(decision_collapsed)
 
 
 class ActivityTask(object):
@@ -984,10 +992,6 @@ class ActivityClient(object):
 
     def _query(self, name, version):
         return self._activities.get((name, version))
-
-
-workflow_client = WorkflowClient()
-activity_client = ActivityClient()
 
 
 def _str_or_none(maybe_none):
