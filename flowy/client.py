@@ -153,11 +153,14 @@ class SWFClient(object):
 
         """
         try:
-            r = self._client.start_workflow_execution(self._domain,
-                                                      str(uuid.uuid4()),
-                                                      name, str(version),
-                                                      task_list=task_list,
-                                                      input=input)
+            r = self._client.start_workflow_execution(
+                domain=self._domain,
+                workflow_id=str(uuid.uuid4()),
+                workflow_name=name,
+                workflow_version=str(version),
+                task_list=task_list,
+                input=input
+            )
         except SWFResponseError:
             logging.warning("Could not start workflow: %s %s",
                             name, version, exc_info=1)
@@ -165,7 +168,8 @@ class SWFClient(object):
         return r['runId']
 
     def poll_decision(self, task_list):
-        poller = partial(self._client, task_list=task_list, domain=self.domain,
+        poller = partial(self._client.poll_for_decision_task,
+                         task_list=task_list, domain=self.domain,
                          reverse_order=True)
         paged_poller = partial(_poll_decision_page, poller)
         decision_collapsed = _poll_decision_collapsed(paged_poller)
@@ -214,7 +218,7 @@ class DecisionClient(object):
             )
         except SWFResponseError:
             logging.warning("Could not send decisions: %s",
-                            self.token, exc_info=1)
+                            self._token, exc_info=1)
             return False
         self._scheduled_activities = []
         return True

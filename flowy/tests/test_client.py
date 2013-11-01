@@ -186,7 +186,7 @@ class DecisionPollingTest(TestCaseNoLogging):
         )
 
 
-class SWFClientTest(unittest.TestCase):
+class SWFClientTest(TestCaseNoLogging):
     def _get_uut(self, domain='domain'):
         from flowy.client import SWFClient
         from boto.swf.layer1 import Layer1
@@ -400,254 +400,124 @@ class SWFClientTest(unittest.TestCase):
                                 descr='description')
         self.assertFalse(r)
 
-    def test_poll_activity(self):
-        m, c = self._get_uut('dom')
-
-        m.poll_for_activity_task.return_value = {
-            'activityType': {'name': 'activity_name', 'version': 'version1'},
-            'input': 'input_data',
-            'taskToken': 'token'
-        }
-
-        from flowy.client import ActivityTask
-        mock_ActivityTask = create_autospec(ActivityTask)
-
-        c.poll_activity('taskl', activity_factory=mock_ActivityTask)
-
-        m.poll_for_activity_task.assert_called_once_with(
-            domain='dom', task_list='taskl'
-        )
-        mock_ActivityTask.assert_called_once_with(
-            name='activity_name', version='version1', input='input_data',
-            token='token', client=m
+    def test_start_workflow(self):
+        m, c = self._get_uut(domain='dom')
+        m.start_workflow_execution.return_value = {'runId': 'run_id'}
+        r = c.start_workflow(name='name', version=3, task_list='taskl',
+                             input='data')
+        self.assertTrue(r)
+        m.start_workflow_execution.assert_called_once_with(
+            domain='dom', workflow_id=ANY, workflow_name='name',
+            workflow_version='3', task_list='taskl', input='data'
         )
 
-    def test_poll_activity_skip_bad_responses(self):
-        m, c = self._get_uut('dom')
-
-        valid_response = {
-            'activityType': {'name': '', 'version': ''},
-            'input': '',
-            'taskToken': 'token'
-        }
+    def test_start_workflow_error(self):
+        m, c = self._get_uut(domain='dom')
         from boto.swf.exceptions import SWFResponseError
-        error_response = SWFResponseError(0, 0)
-        empty_response = {}
-        m.poll_for_activity_task.side_effect = (
-            [error_response] * 5
-            + [empty_response] * 5
-            + [error_response] * 5
-            + [empty_response] * 5
-            + [valid_response]
+        m.start_workflow_execution.side_effect = SWFResponseError(0, 0)
+        r = c.start_workflow(name='name', version=3, task_list='taskl',
+                             input='data')
+        self.assertFalse(r)
+
+    def poll_decision_integration(self):
+        m, c = self._get_uut(domain='dom')
+
+
+class DecisionClientTest(TestCaseNoLogging):
+
+    def _get_uut(self, domain='domain', token='token'):
+        from flowy.client import DecisionClient, JSONDecisionData
+        from boto.swf.layer1 import Layer1
+        l1 = create_autospec(Layer1, instance=True)
+        dd = create_autospec(JSONDecisionData, instance=True)
+        return dd, l1, DecisionClient(client=l1, domain=domain,
+                                      token=token, decision_data=dd)
+
+    def test_schedule_empty(self):
+        dd, l1, dc = self._get_uut(domain='dom', token='tok')
+        dd.serialize.return_value = 'ctx'
+        dc.schedule_activities(context='newcontext')
+        l1.respond_decision_task_completed.assert_called_once_with(
+            task_token='tok', decisions=[], execution_context='ctx'
         )
-        from flowy.client import ActivityTask
-        mock_ActivityTask = create_autospec(ActivityTask)
+        dd.serialize.assert_called_once_with('newcontext')
 
-        c.poll_activity('taskl', activity_factory=mock_ActivityTask)
-        self.assertEquals(m.poll_for_activity_task.call_count, 21)
-        self.assertEquals(mock_ActivityTask.call_count, 1)
-
-    def test_poll_decision_first_run(self):
-        m, c = self._get_uut('dom')
-
-        m.poll_for_decision_task.return_value = {
-            'workflowType': {'name': 'workflow_name', 'version': 'version1'},
-            'taskToken': 'token',
-            'events': [{
-                'eventType': 'WorkflowExecutionStarted',
-                'workflowExecutionStartedEventAttributes': {
-                    'input': 'input_data'
+    def test_schedule_activities(self):
+        dd, l1, dc = self._get_uut(domain='dom', token='tok')
+        from boto.swf.exceptions import SWFResponseError
+        err = SWFResponseError(0, 0)
+        l1.respond_decision_task_completed.side_effect = [err, None]
+        dd.serialize.return_value = 'ctx'
+        dc.queue_activity(call_id='call1', name='name', version=3, input='i')
+        dc.queue_activity(call_id='call2', name='name', version=3, input='i',
+                          heartbeat=10, schedule_to_close=11, task_list='tl',
+                          schedule_to_start=12, start_to_close=13)
+        r = dc.schedule_activities(context='newcontext')
+        self.assertFalse(r)
+        r = dc.schedule_activities(context='newcontext')
+        self.assertTrue(r)
+        l1.respond_decision_task_completed.assert_called_with(
+            task_token='tok', decisions=[
+                {
+                    'scheduleActivityTaskDecisionAttributes': {
+                        'input': 'i',
+                        'activityId': 'call1',
+                        'activityType': {
+                            'version': '3',
+                            'name': 'name'
+                        }
+                    },
+                    'decisionType': 'ScheduleActivityTask'
                 },
+                {
+                    'scheduleActivityTaskDecisionAttributes': {
+                        'taskList': {
+                            'name': 'tl'
+                        },
+                        'scheduleToCloseTimeout': '11',
+                        'activityType': {
+                            'version': '3',
+                            'name': 'name'
+                        },
+                        'heartbeatTimeout': '10',
+                        'activityId': 'call2',
+                        'scheduleToStartTimeout': '12',
+                        'input': 'i',
+                        'startToCloseTimeout': '13'
+                    },
+                    'decisionType': 'ScheduleActivityTask'
+                }
+            ], execution_context='ctx'
+        )
+        dd.serialize.assert_called_with('newcontext')
+
+    def test_complete_workflow(self):
+        _, l1, dc = self._get_uut(domain='dom', token='tok')
+        self.assertTrue(dc.complete_workflow(result='r'))
+        l1.respond_decision_task_completed.assert_called_once_with(
+            task_token='tok', decisions=[{
+                'completeWorkflowExecutionDecisionAttributes': {
+                    'result': 'r'
+                },
+                'decisionType': 'CompleteWorkflowExecution'
             }]
-        }
-        from flowy.client import Decision
-        mock_Decision = create_autospec(Decision)
-
-        c.poll_decision('taskl', decision_factory=mock_Decision)
-
-        m.poll_for_decision_task.assert_called_once_with(
-            domain='dom', task_list='taskl',
-            next_page_token=None, reverse_order=True
-        )
-        mock_Decision.assert_called_once_with(
-            name='workflow_name', version='version1', token='token',
-            client=m, context=None, input='input_data', new_events=tuple()
         )
 
-    def test_poll_decision_first_run_errors(self):
-        m, c = self._get_uut('dom')
-
-        valid_response = {
-            'workflowType': {'name': '', 'version': ''},
-            'taskToken': 'token',
-            'events': [{
-                'eventType': 'WorkflowExecutionStarted',
-                'workflowExecutionStartedEventAttributes': {
-                    'input': ''
-                },
-            }]
-        }
+    def test_complete_workflow_err(self):
+        _, l1, dc = self._get_uut(domain='dom', token='tok')
         from boto.swf.exceptions import SWFResponseError
-        error_response = SWFResponseError(0, 0)
-        empty_response = {}
-        m.poll_for_decision_task.side_effect = (
-            [error_response] * 5
-            + [empty_response] * 5
-            + [error_response] * 5
-            + [empty_response] * 5
-            + [valid_response]
-        )
-        from flowy.client import Decision
-        mock_Decision = create_autospec(Decision)
+        l1.respond_decision_task_completed.side_effect = SWFResponseError(0, 0)
+        self.assertFalse(dc.complete_workflow(result='r'))
 
-        c.poll_decision('taskl', decision_factory=mock_Decision)
-        self.assertEquals(m.poll_for_decision_task.call_count, 21)
-        self.assertEquals(mock_Decision.call_count, 1)
-
-    def test_poll_decision_n_run(self):
-        m, c = self._get_uut('dom')
-
-        m.poll_for_decision_task.return_value = {
-            'workflowType': {'name': '', 'version': ''},
-            'taskToken': 'token',
-            'previousStartedEventId': 50,
-            'events': [
-                {
-                    'eventType': 'ActivityTaskScheduled',
-                    'eventId': 100,
-                    'activityTaskScheduledEventAttributes': {'activityId': 10},
-                },
-                {
-                    'eventType': 'ActivityTaskCompleted',
-                    'activityTaskCompletedEventAttributes': {
-                        'scheduledEventId': 30, 'result': '30result',
-                    },
-                },
-                {
-                    'eventType': 'ActivityTaskFailed',
-                    'activityTaskFailedEventAttributes': {
-                        'scheduledEventId': 29, 'reason': '29reason',
-                    },
-                },
-                {
-                    'eventType': 'ActivityTaskTimedOut',
-                    'activityTaskTimedOutEventAttributes': {
-                        'scheduledEventId': 28,
-                    },
-                },
-                {
-                    'eventType': 'DecisionTaskCompleted',
-                    'eventId': 50, 'executionContext': 'context',
-                },
-                {
-                    'eventType': 'ActivityTaskTimedOut',
-                    'activityTaskTimedOutEventAttributes': {
-                        'scheduledEventId': 27,
-                    },
-                },
-            ]
-        }
-        from flowy.client import Decision
-        mock_Decision = create_autospec(Decision)
-        c.poll_decision('taskl', decision_factory=mock_Decision)
-
-        m.poll_for_decision_task.assert_called_once_with(
-            domain='dom', task_list='taskl',
-            next_page_token=None, reverse_order=True
-        )
-        mock_Decision.assert_called_once_with(
-            name='', version='', token='token',
-            client=m, context='context', input=None, new_events=(
-                (28,), (29, '29reason'), (30, '30result'), (100, 10)
-            )
+    def test_terminate_workflow(self):
+        _, l1, dc = self._get_uut(domain='dom', token='tok')
+        self.assertTrue(dc.terminate_workflow(workflow_id='wid', reason='r'))
+        l1.terminate_workflow_execution.assert_called_once_with(
+            domain='dom', workflow_id='wid', reason='r'
         )
 
-    def test_poll_decision_pagination(self):
-        m, c = self._get_uut('dom')
+    def test_terminate_workflow_err(self):
+        _, l1, dc = self._get_uut(domain='dom', token='tok')
         from boto.swf.exceptions import SWFResponseError
-        error_response = SWFResponseError(0, 0)
-        empty_response = {}
-        m.poll_for_decision_task.side_effect = [
-            empty_response,
-            error_response,
-            {
-                'workflowType': {'name': '', 'version': ''},
-                'taskToken': 'token',
-                'previousStartedEventId': 50,
-                'nextPageToken': 'page1',
-                'events': [
-                    {
-                        'eventType': 'ActivityTaskScheduled',
-                        'eventId': 100,
-                        'activityTaskScheduledEventAttributes': {
-                            'activityId': 10
-                        },
-                    },
-                    {
-                        'eventType': 'ActivityTaskCompleted',
-                        'activityTaskCompletedEventAttributes': {
-                            'scheduledEventId': 30, 'result': '30result',
-                        },
-                    },
-                ]
-            },
-            empty_response,
-            error_response,
-            {
-                'workflowType': {'name': '', 'version': ''},
-                'taskToken': 'token',
-                'nextPageToken': 'page2',
-                'previousStartedEventId': 50,
-                'events': [
-                    {
-                        'eventType': 'ActivityTaskCompleted',
-                        'activityTaskCompletedEventAttributes': {
-                            'scheduledEventId': 29, 'result': '29result',
-                        },
-                    },
-                    {
-                        'eventType': 'ActivityTaskCompleted',
-                        'activityTaskCompletedEventAttributes': {
-                            'scheduledEventId': 28, 'result': '28result',
-                        },
-                    },
-                ]
-            },
-            empty_response,
-            error_response,
-            {
-                'workflowType': {'name': '', 'version': ''},
-                'taskToken': 'token',
-                'previousStartedEventId': 50,
-                'events': [
-                    {
-                        'eventType': 'ActivityTaskCompleted',
-                        'activityTaskCompletedEventAttributes': {
-                            'scheduledEventId': 27, 'result': '27result',
-                        },
-                    },
-                    {
-                        'eventType': 'DecisionTaskCompleted',
-                        'eventId': 50, 'executionContext': 'context',
-                    },
-                    {
-                        'eventType': 'ActivityTaskTimedOut',
-                        'activityTaskTimedOutEventAttributes': {
-                            'scheduledEventId': 27,
-                        },
-                    },
-                ]
-            },
-        ]
-        from flowy.client import Decision
-        mock_Decision = create_autospec(Decision)
-
-        c.poll_decision('taskl', decision_factory=mock_Decision)
-
-        mock_Decision.assert_called_once_with(
-            name='', version='', token='token',
-            client=m, context='context', input=None, new_events=(
-                (27, '27result'), (28, '28result'), (29, '29result'),
-                (30, '30result'), (100, 10)
-            )
-        )
+        l1.terminate_workflow_execution.side_effect = SWFResponseError(0, 0)
+        self.assertFalse(dc.terminate_workflow(workflow_id='wid', reason='r'))
