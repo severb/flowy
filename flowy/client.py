@@ -443,7 +443,7 @@ class JSONDecisionData(object):
 
     @property
     def context(self):
-        return str(self._context)
+        return str(self._context) if self._context is not None else None
 
     @property
     def input(self):

@@ -424,7 +424,6 @@ class SWFClientTest(TestCaseNoLogging):
 
 
 class DecisionClientTest(TestCaseNoLogging):
-
     def _get_uut(self, domain='domain', token='token'):
         from flowy.client import DecisionClient, JSONDecisionData
         from boto.swf.layer1 import Layer1
@@ -521,3 +520,68 @@ class DecisionClientTest(TestCaseNoLogging):
         from boto.swf.exceptions import SWFResponseError
         l1.terminate_workflow_execution.side_effect = SWFResponseError(0, 0)
         self.assertFalse(dc.terminate_workflow(workflow_id='wid', reason='r'))
+
+
+class JSONDecisionContext(unittest.TestCase):
+    def _get_uut(self, context=None):
+        from flowy.client import JSONDecisionContext
+        return JSONDecisionContext(context)
+
+    def test_empty(self):
+        dc = self._get_uut()
+        self.assertEquals(dc.global_context(), None)
+        self.assertEquals(dc.activity_context('a1'), None)
+        self.assertEquals(dc.global_context(default=sentinel.gc), sentinel.gc)
+        a1 = sentinel.a1
+        self.assertEquals(dc.activity_context('a1', default=a1), a1)
+        dc = self._get_uut(context=dc.serialize())
+        self.assertEquals(dc.global_context(), None)
+        self.assertEquals(dc.activity_context('a1'), None)
+        self.assertEquals(dc.global_context(default=sentinel.gc), sentinel.gc)
+        a1 = sentinel.a1
+        self.assertEquals(dc.activity_context('a1', default=a1), a1)
+
+    def test_global_context(self):
+        dc = self._get_uut(self._get_uut().serialize('global_context'))
+        self.assertEquals(dc.global_context(), 'global_context')
+
+    def test_activity_context(self):
+        dc = self._get_uut()
+        dc.set_activity_context('a1', 'a1context')
+        self.assertEquals(dc.activity_context('a1'), 'a1context')
+        dc = self._get_uut(dc.serialize())
+        self.assertEquals(dc.activity_context('a1'), 'a1context')
+
+    def test_mapping(self):
+        dc = self._get_uut()
+        dc.map_event_to_call('e1', 'c1')
+        self.assertEquals(dc.event_to_call('e1'), 'c1')
+        dc = self._get_uut(dc.serialize())
+        self.assertEquals(dc.event_to_call('e1'), 'c1')
+
+
+class JSONDecisoinData(unittest.TestCase):
+    def _get_uut(self, data, first_run=True):
+        from flowy.client import JSONDecisionData
+        if first_run:
+            return JSONDecisionData.for_first_run(data)
+        return JSONDecisionData(data)
+
+    def test_empty_context(self):
+        input = 'input'
+        dd = self._get_uut(input)
+        self.assertEquals(dd.input, 'input')
+        self.assertEquals(dd.context, None)
+        dd = self._get_uut(dd.serialize(), first_run=False)
+        self.assertEquals(dd.input, 'input')
+        self.assertEquals(dd.context, None)
+
+    def test_context(self):
+        input = 'input'
+        dd = self._get_uut(input)
+        dd = self._get_uut(dd.serialize('new_context'), first_run=False)
+        self.assertEquals(dd.input, 'input')
+        self.assertEquals(dd.context, 'new_context')
+        dd = self._get_uut(dd.serialize('new_context2'), first_run=False)
+        self.assertEquals(dd.input, 'input')
+        self.assertEquals(dd.context, 'new_context2')
