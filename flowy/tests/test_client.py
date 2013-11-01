@@ -585,3 +585,76 @@ class JSONDecisoinData(unittest.TestCase):
         dd = self._get_uut(dd.serialize('new_context2'), first_run=False)
         self.assertEquals(dd.input, 'input')
         self.assertEquals(dd.context, 'new_context2')
+
+
+class DecisionTest(unittest.TestCase):
+    def _get_uut(self, events=[]):
+        from flowy.client import Decision
+        from flowy.client import JSONDecisionContext, DecisionClient
+        cli = create_autospec(DecisionClient, instance=True)
+        ctx = create_autospec(JSONDecisionContext, instance=True)
+        return cli, ctx, Decision(cli, ctx, events)
+
+    def test_event_to_call(self):
+        from flowy.client import _ActivityScheduled
+        cli, ctx, d = self._get_uut([
+            _ActivityScheduled('e1', 'c1'),
+            _ActivityScheduled('e2', 'c2'),
+            _ActivityScheduled('e3', 'c3'),
+        ])
+        ctx.map_event_to_call.assert_has_calls([
+            call('e1', 'c1'),
+            call('e2', 'c2'),
+            call('e3', 'c3'),
+        ])
+
+    def test_events_dispatch(self):
+        from flowy.client import _ActivityScheduled, _ActivityTimedout
+        from flowy.client import _ActivityCompleted, _ActivityFailed
+        cli, ctx, d = self._get_uut([
+            _ActivityScheduled('xx', 'yy'),
+            _ActivityTimedout('e1'),
+            _ActivityCompleted('e2', 'result'),
+            _ActivityFailed('e3', 'reason'),
+        ])
+        ctx.event_to_call.side_effect = ['c10', 'c11', 'c12']
+        m = Mock()
+        d.dispatch_new_events(m)
+        ctx.event_to_call.assert_has_calls([
+            call('e1'), call('e2'), call('e3')
+        ])
+        m.activity_scheduled.assert_called_once_with('xx')
+        m.activity_timedout.assert_called_once_with('c10')
+        m.activity_completed.assert_called_once_with('c11', 'result')
+        m.activity_failed.assert_called_once_with('c12', 'reason')
+
+    def test_events_dispatch_to_empty(self):
+        from flowy.client import _ActivityScheduled, _ActivityTimedout
+        from flowy.client import _ActivityCompleted, _ActivityFailed
+        cli, ctx, d = self._get_uut([
+            _ActivityScheduled('xx', 'yy'),
+            _ActivityTimedout('e1'),
+            _ActivityCompleted('e2', 'result'),
+            _ActivityFailed('e3', 'reason'),
+        ])
+        try:
+            d.dispatch_new_events, object()
+        except AttributeError:
+            self.fail('Dispatch to empty object not working.')
+
+    def test_queue_activity(self):
+        cli, ctx, d = self._get_uut()
+        d.queue_activity('call_id', 'name', 'version', 'input', context='ctx')
+        ctx.set_activity_context.assert_called_once_with('call_id', 'ctx')
+        cli.queue_activity.assert_called_once_with(
+            call_id='call_id', name='name', version='version', input='input',
+            heartbeat=None, schedule_to_close=None, schedule_to_start=None,
+            start_to_close=None, task_list=None
+        )
+
+    def test_queue_activities(self):
+        cli, ctx, d = self._get_uut()
+        ctx.serialize.return_value = 'ctx'
+        d.schedule_activities('context')
+        ctx.serialize.assert_called_once_with('context')
+        cli.schedule_activities.assert_called_with('ctx')

@@ -288,21 +288,21 @@ class Decision(object):
 
     def _dispatch_activity_scheduled(self, event, obj):
         meth = 'activity_scheduled'
-        self._dispatch_if_exists(obj, meth, obj.event_id)
+        self._dispatch_if_exists(obj, meth, event.event_id)
 
     def _dispatch_activity_completed(self, event, obj):
         meth = 'activity_completed'
-        call_id = self._context.map_event_to_call(event.event_id)
+        call_id = self._context.event_to_call(event.event_id)
         self._dispatch_if_exists(obj, meth, call_id, event.result)
 
     def _dispatch_activity_failed(self, event, obj):
         meth = 'activity_failed'
-        call_id = self._context.map_event_to_call(event.event_id)
+        call_id = self._context.event_to_call(event.event_id)
         self._dispatch_if_exists(obj, meth, call_id, event.reason)
 
     def _dispatch_activity_timedout(self, event, obj):
         meth = 'activity_timedout'
-        call_id = self._context.map_event_to_call(event.event_id)
+        call_id = self._context.event_to_call(event.event_id)
         self._dispatch_if_exists(obj, meth, call_id)
 
     def _dispatch_if_exists(self, obj, method_name, *args):
@@ -363,7 +363,9 @@ class Decision(object):
         Returns a boolean indicating the success of the operation. On success
         the internal collection of scheduled activities will be cleared.
         """
-        return self._client.schedule_activity(self._context.serialize(context))
+        return self._client.schedule_activities(
+            self._context.serialize(context)
+        )
 
     def complete_workflow(self, result):
         """ Signals the successful completion of the workflow.
