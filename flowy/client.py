@@ -143,14 +143,6 @@ class SWFClient(object):
         return True
 
     def start_workflow(self, name, version, task_list, input):
-        """ Starts the workflow identified by *name* and *version* with the
-        given *input* on *task_list*.
-
-        Returns the ``workflow_id`` that can be used to cancel this workflow
-        later. If starting the execution encounters an error, ``None`` is
-        returned.
-
-        """
         try:
             r = self._client.start_workflow_execution(
                 domain=self._domain,
@@ -173,6 +165,9 @@ class SWFClient(object):
         paged_poller = partial(_poll_decision_page, poller)
         decision_collapsed = _poll_decision_collapsed(paged_poller)
         return _decision_response(decision_collapsed)
+
+    def poll_activity(self, task_list):
+        pass
 
 
 class DecisionClient(object):
@@ -249,6 +244,20 @@ class DecisionClient(object):
             logging.warning("Could not terminate workflow.", exc_info=1)
             return False
         return True
+
+
+class ActivityClient(object):
+    def __init__(self, client, token):
+        pass
+
+    def complete(self, result):
+        pass
+
+    def fail(self, reason):
+        pass
+
+    def heartbeat(self):
+        pass
 
 
 class Decision(object):
@@ -337,7 +346,7 @@ class Decision(object):
             self._context.serialize(context)
         )
 
-    def complete_workflow(self, result):
+    def complete(self, result):
         """ Signals the successful completion of the workflow.
 
         Completes the workflow the *result* value. Returns a boolean indicating
@@ -346,7 +355,7 @@ class Decision(object):
         """
         return self._client.complete_workflow(result)
 
-    def fail_workflow(self, workflow_id, reason):
+    def fail(self, reason):
         """ Signals the termination of the workflow.
 
         Terminate the workflow identified by *workflow_id* for the specified
@@ -357,7 +366,7 @@ class Decision(object):
         Returns a boolean indicating the success of the operation.
 
         """
-        return self._client.fail_workflow(workflow_id, reason)
+        return self._client.fail_workflow(reason)
 
     def global_context(self, default=None):
         """ Access the global context that was set by
@@ -366,12 +375,12 @@ class Decision(object):
         """
         return self._context.global_context(default)
 
-    def scheduled_activity_context(self, call_id, default=None):
+    def activity_context(self, call_id, default=None):
         """ Access an activity specific context that was set by
         :meth:`queue_activity`.
 
         """
-        return self._context.scheduled_activity_context(call_id, default)
+        return self._context.activity_context(call_id, default)
 
     def _dispatch_event(self, event, obj):
         """ Dispatch an event to the proper method of obj. """
@@ -545,26 +554,15 @@ class WorkflowClient(object):
             return decision_maker(data.input, decision)
 
 
-_DecisionPage = namedtuple(
-    '_DecisionPage',
-    ['name', 'version', 'events', 'next_page_token', 'last_event_id', 'token']
-)
-_DecisionCollapsed = namedtuple(
-    '_DecisionCollapsed',
-    ['name', 'version', 'all_events', 'last_event_id', 'token']
-)
-_DecisionResponse = namedtuple(
-    '_DecisionResponse',
-    ['name', 'version', 'new_events', 'token', 'data', 'first_run']
-)
+class ActivityClient(object):
+    def __init__(self):
+        pass
 
+    def register_activity(self):
+        pass
 
-_ActivityScheduled = namedtuple('_ActivityScheduled', ['event_id', 'call_id'])
-_ActivityCompleted = namedtuple('_ActivityCompleted', ['event_id', 'result'])
-_ActivityFailed = namedtuple('_ActivityFailed', ['event_id', 'reason'])
-_ActivityTimedout = namedtuple('_ActivityTimedout', ['event_id'])
-_WorkflowStarted = namedtuple('_WorkflowStarted', ['input'])
-_DecisionCompleted = namedtuple('_DecisionCompleted', ['event_id', 'context'])
+    def dispatch_next_activity(self):
+        pass
 
 
 def _decision_event(event):
@@ -682,340 +680,26 @@ def _decision_response(decision_collapsed):
     )
 
 
-class ActivityTask(object):
-    """ An object that abstracts an activity and its functionality. """
-    def __init__(self, name, version, input, token, client):
-        self.name = name
-        self.version = version
-        self.input = input
-        self._token = token
-        self._client = client
-
-    def complete(self, result):
-        """ Signals the successful completion of an activity.
-
-        Completes the activity with the *result* value. Returns a boolean
-        indicating the success of the operation.
-
-        """
-        try:
-            self._client.respond_activity_task_completed(
-                task_token=self._token, result=result
-            )
-            logging.info("Completed activity: %s %s", self._token, result)
-        except SWFResponseError:
-            logging.warning("Could not complete activity: %s",
-                            self._token, exc_info=1)
-            return False
-        return True
-
-    def terminate_activity(self, reason):
-        """ Signals the termination of the activity.
-
-        Terminate the activity for the specified *reason*. Returns a boolean
-        indicating the success of the operation.
-
-        """
-        try:
-            self._client.respond_activity_task_failed(task_token=self._token,
-                                                      reason=reason)
-            logging.info("Terminated activity: %s %s", self._token, reason)
-        except SWFResponseError:
-            logging.warning("Could not terminate activity: %s",
-                            self._token, exc_info=1)
-            return False
-        return True
-
-    def heartbeat(self):
-        """ Report that the activity is still making progress.
-
-        Returns a boolean indicating the success of the operation or whether
-        the heartbeat exceeded the time it should have taken to report activity
-        progress. In the latter case the activity execution should be stopped.
-
-        """
-        try:
-            self._client.record_activity_task_heartbeat(task_token=self._token)
-            logging.info("Sent activity heartbeat: %s", self._token)
-        except SWFResponseError:
-            logging.warning("Error when sending activity heartbeat: %s",
-                            self._token, exc_info=1)
-            return False
-        return True
+_DecisionPage = namedtuple(
+    '_DecisionPage',
+    ['name', 'version', 'events', 'next_page_token', 'last_event_id', 'token']
+)
+_DecisionCollapsed = namedtuple(
+    '_DecisionCollapsed',
+    ['name', 'version', 'all_events', 'last_event_id', 'token']
+)
+_DecisionResponse = namedtuple(
+    '_DecisionResponse',
+    ['name', 'version', 'new_events', 'token', 'data', 'first_run']
+)
 
 
-SWFActivityScheduled = namedtuple('SWFActivityScheduled', 'event_id call_id')
-SWFActivityCompleted = namedtuple('SWFActivityCompleted', 'event_id result')
-SWFActivityFailed = namedtuple('SWFActivityFailed', 'event_id reason')
-SWFActivityTimedout = namedtuple('SWFActivityTimedout', 'event_id')
-
-
-class WorkflowClient2(object):
-    """ The object responsible for managing workflows.
-
-    A workflow is registered either manually with the :meth:`register` method
-    or using an instance of this class as a decorator. In addition any
-    arguments used for registration can be passed to the decorator as keyword
-    arguments - additional arguments that aren't used for registration will be
-    used to instantiate the ``Workflow`` implementation::
-
-    >>> client = WorkflowClient()
-    >>> 
-    >>> @client(name="MyWorkflow", version=1, task_list='mylist', x=2)
-    >>> class MyWorkflow(Workflow):
-    >>> 
-    >>>     def __init__(self, x, y=3):
-    >>>         pass
-    >>> 
-    >>>     def run(self):
-    >>>         pass
-
-    When the client is started using the :meth:`start` method, it starts the
-    main loop polling for decisions that need to be handled, matching them
-    based on their name and version.
-
-    """
-    def __init__(self):
-        self._workflows = {}
-        self._register_queue = []
-
-    def register(self, name, version, task_list, workflow_runner,
-                 execution_start_to_close=3600, task_start_to_close=60,
-                 child_policy='TERMINATE', doc=None):
-        """ Register a workflow with the given *name*, *value* and defaults.
-
-        """
-        self._workflows[(name, str(version))] = workflow_runner
-        self._register_queue.append((name, version, task_list,
-                                     execution_start_to_close,
-                                     task_start_to_close, child_policy, doc))
-
-    def start_on(self, domain, task_list, client=None):
-        """ A shortcut for :meth:`start`.
-
-        Start the main loop in the given *domain*, *task_list* and an optional
-        :class:`boto.swf.layer1.Layer1` *client*.
-
-        """
-        client = SWFClient(domain, client=client)
-        return self.start(client, task_list)
-
-    def start(self, client, task_list):
-        """ Starts the main loop polling on *task_list* and using a specific
-        :class:`SWFClient` *client*.
-
-        Calling this method will start the loop responsible for polling
-        decisions, matching a runner on the names and versions used with
-        :meth:`register`, scheduling any activities that should be scheduled,
-        and completing or terminating the workflow if needed.
-        The loop runs until there are no more activity tasks that need to be
-        scheduled, or an exception is encountered.
-
-        """
-        for args in self._register_queue:
-            if not client.register_workflow(*args):
-                sys.exit(1)
-        while 1:
-            decision = client.next_decision(task_list)
-            logging.info("Processing workflow: %s %s",
-                         decision.name, decision.version)
-            workflow_runner = self._query(decision.name, decision.version)
-            if workflow_runner is None:
-                logging.warning("No workflow registered for: %s %s",
-                                decision.name, decision.version)
-                continue
-            try:
-                result, activities = workflow_runner.resume(
-                    decision.input, decision
-                )
-            except _UnhandledActivityError as e:
-                logging.warning("Stopped workflow because of an exception"
-                                " inside an activity: %s", e.message)
-                decision.fail_workflow(e.message)
-            except Exception as e:
-                logging.warning("Stopped workflow because of an unhandled"
-                                " exception: %s", e.message)
-                decision.fail_workflow(e.message)
-            else:
-                activities_running = decision.any_activity_running()
-                activities_scheduled = bool(activities)
-                if activities_running or activities_scheduled:
-                    for a in activities:
-                        decision.queue_activity(
-                            a.call_id, a.name, a.version, a.input,
-                            heartbeat=a.options.heartbeat,
-                            schedule_to_close=a.options.schedule_to_close,
-                            schedule_to_start=a.options.schedule_to_start,
-                            start_to_close=a.options.start_to_close,
-                            task_list=a.options.task_list,
-                            retries=a.options.retry
-                        )
-                    decision.schedule_activities()
-                else:
-                    decision.complete_workflow(result)
-
-    def __call__(self, name, version, task_list, *args, **kwargs):
-        optional_args = [
-            'execution_start_to_close',
-            'task_start_to_close',
-            'child_policy',
-        ]
-        r_kwargs = {}
-        for arg_name in optional_args:
-            arg_value = kwargs.pop(arg_name, None)
-            if arg_value is not None:
-                r_kwargs[arg_name] = arg_value
-
-        def wrapper(workflow):
-            r_kwargs['doc'] = workflow.__doc__.strip()
-            self.register(name, version, task_list, workflow(*args, **kwargs),
-                          **r_kwargs)
-            return workflow
-
-        return wrapper
-
-    def scheduler_on(self, domain, name, version, task_list, client=None):
-        """ A shortcut for :meth:`scheduler`.
-
-        An optional :class:`boto.swf.layer1.Layer1` can be set as *client*.
-
-        """
-        c = SWFClient(domain, client=client)
-        return self.scheduler(name, version, task_list, c)
-
-    def scheduler(self, name, version, task_list, client):
-        """ Create a scheduler for the workflow with the *name* and *version*
-        on the specific *task_list* using an instance of :class:`SWFClient` as
-        *client*.
-
-        This method returns a function that can be used to trigger the
-        scheduling of a workflow with the previously defined attributes::
-
-        >>> my_wf = wclient.scheduler('MyWorkflow', 1, 'mylist', swfclient)
-        >>> my_wf(1, x=0)
-        >>> my_wf(2, x=0) # Note: schedules two executions of this workflow
-
-        """
-        def wrapper(*args, **kwargs):
-            input = self.serialize_workflow_arguments(*args, **kwargs)
-            return client.start_workflow(name, version, task_list, input)
-
-        return wrapper
-
-    @staticmethod
-    def serialize_workflow_arguments(*args, **kwargs):
-        """ Serialize the given arguments. """
-        return json.dumps({"args": args, "kwargs": kwargs})
-
-    def _query(self, name, version):
-        return self._workflows.get((name, version))
-
-
-class ActivityClient(object):
-    """ The object responsible for managing the activity runs.
-
-    Activities are registered either manually with the :meth:`register` method
-    or using an instance of this class as a decorator. In addition any
-    arguments used for registration can be passed to the decorator as keyword
-    arguments - additional arguments not used for registration will be used to
-    instantiate the ``Activity`` implementation::
-
-    >>> client = ActivityClient()
-    >>> 
-    >>> @client(name='MyActivity', version=1, heartbeat=120, x=1, y=2)
-    >>> class MyActivity(Activity):
-    >>> 
-    >>>     def __init__(self, x, y=1):
-    >>>         pass
-    >>> 
-    >>>     def run(self):
-    >>>         pass
-
-    When the client is started using the :meth:`start` method, it starts the
-    main loop polling for activities that need to be ran, matching them based
-    on their name and version and executing them.
-
-    """
-    def __init__(self):
-        self._activities = {}
-        self._register_queue = []
-
-    def register(self, name, version, task_list, activity_runner,
-                 heartbeat=60, schedule_to_close=420, schedule_to_start=120,
-                 start_to_close=300, doc=None):
-        """ Register an activity with the given *name*, *value* and defaults.
-
-        """
-        # All versions are converted to string in SWF and that's how we should
-        # store them too in order to be able to query for them
-        self._activities[(name, str(version))] = activity_runner
-        self._register_queue.append((name, version, task_list, heartbeat,
-                                     schedule_to_close, schedule_to_start,
-                                     start_to_close, doc))
-
-    def start_on(self, domain, task_list, client=None):
-        """ A shortcut for :meth:`start`.
-
-        Start the main loop in the given *domain*, *task_list* and an optional
-        :class:`boto.swf.layer1.Layer1` *client*.
-
-        """
-        client = SWFClient(domain, client=client)
-        return self.start(client, task_list)
-
-    def start(self, client, task_list):
-        """ Starts the main loop polling on *task_list* using a specific
-        :class:`SWFClient` *client*.
-
-        Calling this method will start the loop responsible for polling
-        activities, matching them on the names and versions used
-        with :meth:`register` and running them.
-
-        """
-        for args in self._register_queue:
-            if not client.register_activity(*args):
-                sys.exit(1)
-        while 1:
-            response = client.next_activity(task_list)
-            logging.info("Processing activity: %s %s",
-                         response.name, response.version)
-            activity_runner = self._query(response.name, response.version)
-            if activity_runner is None:
-                logging.warning("No activity registered for: %s %s",
-                                response.name, response.version)
-                continue
-            try:
-                result = activity_runner.call(response.input, response)
-            except Exception as e:
-                response.terminate(e.message)
-            else:
-                response.complete(result)
-
-    def __call__(self, name, version, task_list, *args, **kwargs):
-        version = str(version)
-        optional_args = [
-            'heartbeat',
-            'schedule_to_close',
-            'schedule_to_start',
-            'start_to_close',
-        ]
-        r_kwargs = {}
-        for arg_name in optional_args:
-            arg_value = kwargs.pop(arg_name, None)
-            if arg_value is not None:
-                r_kwargs[arg_name] = arg_value
-
-        def wrapper(activity):
-            r_kwargs['doc'] = activity.__doc__.strip()
-            self.register(
-                name, version, task_list, activity(*args, **kwargs), **r_kwargs
-            )
-            return activity
-
-        return wrapper
-
-    def _query(self, name, version):
-        return self._activities.get((name, version))
+_ActivityScheduled = namedtuple('_ActivityScheduled', ['event_id', 'call_id'])
+_ActivityCompleted = namedtuple('_ActivityCompleted', ['event_id', 'result'])
+_ActivityFailed = namedtuple('_ActivityFailed', ['event_id', 'reason'])
+_ActivityTimedout = namedtuple('_ActivityTimedout', ['event_id'])
+_WorkflowStarted = namedtuple('_WorkflowStarted', ['input'])
+_DecisionCompleted = namedtuple('_DecisionCompleted', ['event_id', 'context'])
 
 
 def _str_or_none(maybe_none):
