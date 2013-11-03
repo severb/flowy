@@ -283,37 +283,6 @@ class Decision(object):
         for event in self._new_events:
             self._dispatch_event(event, obj)
 
-    def _dispatch_event(self, event, obj):
-        """ Dispatch an event to the proper method of obj. """
-
-    def _dispatch_activity_scheduled(self, event, obj):
-        meth = 'activity_scheduled'
-        self._dispatch_if_exists(obj, meth, event.event_id)
-
-    def _dispatch_activity_completed(self, event, obj):
-        meth = 'activity_completed'
-        call_id = self._context.event_to_call(event.event_id)
-        self._dispatch_if_exists(obj, meth, call_id, event.result)
-
-    def _dispatch_activity_failed(self, event, obj):
-        meth = 'activity_failed'
-        call_id = self._context.event_to_call(event.event_id)
-        self._dispatch_if_exists(obj, meth, call_id, event.reason)
-
-    def _dispatch_activity_timedout(self, event, obj):
-        meth = 'activity_timedout'
-        call_id = self._context.event_to_call(event.event_id)
-        self._dispatch_if_exists(obj, meth, call_id)
-
-    def _dispatch_if_exists(self, obj, method_name, *args):
-        getattr(obj, method_name, lambda *args: None)(*args)
-
-    def _internal_update(self, event):
-        """ Dispatch an event for internal purposes. """
-
-    def _internal_activity_scheduled(self, event):
-        self._context.map_event_to_call(event.event_id, event.call_id)
-
     def queue_activity(self, call_id, name, version, input,
                        heartbeat=None,
                        schedule_to_close=None,
@@ -403,6 +372,37 @@ class Decision(object):
 
         """
         return self._context.scheduled_activity_context(call_id, default)
+
+    def _dispatch_event(self, event, obj):
+        """ Dispatch an event to the proper method of obj. """
+
+    def _dispatch_activity_scheduled(self, event, obj):
+        meth = 'activity_scheduled'
+        self._dispatch_if_exists(obj, meth, event.event_id)
+
+    def _dispatch_activity_completed(self, event, obj):
+        meth = 'activity_completed'
+        call_id = self._context.event_to_call(event.event_id)
+        self._dispatch_if_exists(obj, meth, call_id, event.result)
+
+    def _dispatch_activity_failed(self, event, obj):
+        meth = 'activity_failed'
+        call_id = self._context.event_to_call(event.event_id)
+        self._dispatch_if_exists(obj, meth, call_id, event.reason)
+
+    def _dispatch_activity_timedout(self, event, obj):
+        meth = 'activity_timedout'
+        call_id = self._context.event_to_call(event.event_id)
+        self._dispatch_if_exists(obj, meth, call_id)
+
+    def _dispatch_if_exists(self, obj, method_name, *args):
+        getattr(obj, method_name, lambda *args: None)(*args)
+
+    def _internal_update(self, event):
+        """ Dispatch an event for internal purposes. """
+
+    def _internal_activity_scheduled(self, event):
+        self._context.map_event_to_call(event.event_id, event.call_id)
 
 
 class JSONDecisionContext(object):
