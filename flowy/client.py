@@ -269,7 +269,7 @@ class Decision(object):
             self._internal_update(event)
 
     def dispatch_new_events(self, obj):
-        """ Dispatch the new events to specific obj methods.
+        """ Dispatch the new events to specific *obj* methods.
 
         The dispatch is done in the order the events happened to the following
         methods of which all are optional::
@@ -337,7 +337,7 @@ class Decision(object):
         information about the various arguments see :meth:`register_activity`.
 
         When queueing an acctivity a custom *context* can be set. It can be
-        retrieved later uisg :meth:`activity_context`.
+        retrieved later by :meth:`activity_context`.
 
         """
         call_id = str(call_id)
@@ -358,10 +358,11 @@ class Decision(object):
         """ Schedules all queued activities.
 
         All activities previously queued by :meth:`queue_activity` will be
-        scheduled within the workflow. An optional textual *context* can be
-        set and will be available in subsequent decisions as :attr:`context`.
-        Returns a boolean indicating the success of the operation. On success
-        the internal collection of scheduled activities will be cleared.
+        scheduled within the workflow. An optional textual *context* can be set
+        and will be available in subsequent decisions using
+        :meth:`global_context`.  Returns a boolean indicating the success of
+        the operation. On success the internal collection of scheduled
+        activities will be cleared.
         """
         return self._client.schedule_activities(
             self._context.serialize(context)
@@ -390,9 +391,17 @@ class Decision(object):
         return self._client.terminate_workflow(workflow_id, reason)
 
     def global_context(self, default=None):
+        """ Access the global context that was set by
+        :meth:`schedule_activities`.
+
+        """
         return self._context.global_context(default)
 
     def scheduled_activity_context(self, call_id, default=None):
+        """ Access an activity specific context that was set by
+        :meth:`queue_activity`.
+
+        """
         return self._context.scheduled_activity_context(call_id, default)
 
 
@@ -510,6 +519,15 @@ class WorkflowClient(object):
         return result
 
     def dispatch_next_decision(self, task_list):
+        """ Poll for the next decision and call the matching runner registered.
+
+        If any runner previsouly registered with :meth:`register_workflow`
+        matches the polled decision it will be called with two arguments in
+        this order: the input that was used when the workflow was scheduled and
+        a :class:`Decision` instance. It returns the matched runner if any or
+       ``None``.
+
+        """
         decision_response = self._client.poll_decision(task_list)
         decision_maker_key = decision_response.name, decision_response.version
         decision_maker = self._registry.get(decision_maker_key)
