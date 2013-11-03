@@ -508,18 +508,21 @@ class DecisionClientTest(TestCaseNoLogging):
         l1.respond_decision_task_completed.side_effect = SWFResponseError(0, 0)
         self.assertFalse(dc.complete_workflow(result='r'))
 
-    def test_terminate_workflow(self):
+    def test_fail_workflow(self):
         _, l1, dc = self._get_uut(domain='dom', token='tok')
-        self.assertTrue(dc.terminate_workflow(workflow_id='wid', reason='r'))
-        l1.terminate_workflow_execution.assert_called_once_with(
-            domain='dom', workflow_id='wid', reason='r'
+        self.assertTrue(dc.fail_workflow(reason='r'))
+        l1.respond_decision_task_completed.assert_called_once_with(
+            task_token='tok', decisions=[{
+                'failWorkflowExecutionDecisionAttributes': {'reason': 'r'},
+                'decisionType': 'FailWorkflowExecution'
+            }]
         )
 
-    def test_terminate_workflow_err(self):
+    def test_fail_workflow_err(self):
         _, l1, dc = self._get_uut(domain='dom', token='tok')
         from boto.swf.exceptions import SWFResponseError
-        l1.terminate_workflow_execution.side_effect = SWFResponseError(0, 0)
-        self.assertFalse(dc.terminate_workflow(workflow_id='wid', reason='r'))
+        l1.respond_decision_task_completed.side_effect = SWFResponseError(0, 0)
+        self.assertFalse(dc.fail_workflow(reason='r'))
 
 
 class JSONDecisionContext(unittest.TestCase):

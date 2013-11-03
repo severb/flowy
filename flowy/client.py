@@ -146,10 +146,9 @@ class SWFClient(object):
         """ Starts the workflow identified by *name* and *version* with the
         given *input* on *task_list*.
 
-        Returns the ``workflow_id`` that can be used to uniquely identify the
-        workflow execution within a domain. If starting the execution
-        encounters an error, ``None`` is returned. The returned
-        ``workflow_id`` can be used when calling :meth:`terminate_workflow`.
+        Returns the ``workflow_id`` that can be used to cancel this workflow
+        later. If starting the execution encounters an error, ``None`` is
+        returned.
 
         """
         try:
@@ -179,7 +178,6 @@ class SWFClient(object):
 class DecisionClient(object):
     def __init__(self, client, domain, token, decision_data):
         self._client = client
-        self._domain = domain
         self._token = token
         self._decision_data = decision_data
         self._scheduled_activities = []
@@ -238,15 +236,17 @@ class DecisionClient(object):
             return False
         return True
 
-    def terminate_workflow(self, workflow_id, reason):
+    def fail_workflow(self, reason):
+        d = Layer1Decisions()
+        d.fail_workflow_execution(reason=reason)
+        data = d._data
         try:
-            self._client.terminate_workflow_execution(domain=self._domain,
-                                                      workflow_id=workflow_id,
-                                                      reason=reason)
-            logging.info("Terminated workflow: %s %s", workflow_id, reason)
+            self._client.respond_decision_task_completed(
+                task_token=self._token, decisions=data
+            )
+            logging.info("Terminated workflow: %s", reason)
         except SWFResponseError:
-            logging.warning("Could not terminate workflow: %s",
-                            workflow_id, exc_info=1)
+            logging.warning("Could not terminate workflow.", exc_info=1)
             return False
         return True
 
@@ -346,7 +346,7 @@ class Decision(object):
         """
         return self._client.complete_workflow(result)
 
-    def terminate_workflow(self, workflow_id, reason):
+    def fail_workflow(self, workflow_id, reason):
         """ Signals the termination of the workflow.
 
         Terminate the workflow identified by *workflow_id* for the specified
@@ -357,7 +357,7 @@ class Decision(object):
         Returns a boolean indicating the success of the operation.
 
         """
-        return self._client.terminate_workflow(workflow_id, reason)
+        return self._client.fail_workflow(workflow_id, reason)
 
     def global_context(self, default=None):
         """ Access the global context that was set by
@@ -537,7 +537,7 @@ class WorkflowClient(object):
             else:
                 data = self._DecisionData(decision_response.data)
             decision_client = self._DecisionClient(
-                self._client, self._domain, decision_response.token, data
+                self._client, decision_response.token, data
             )
             decision_context = self._DecisionContext(data.context)
             decision = self._Decision(decision_client, decision_context,
@@ -831,11 +831,11 @@ class WorkflowClient2(object):
             except _UnhandledActivityError as e:
                 logging.warning("Stopped workflow because of an exception"
                                 " inside an activity: %s", e.message)
-                decision.terminate_workflow(e.message)
+                decision.fail_workflow(e.message)
             except Exception as e:
                 logging.warning("Stopped workflow because of an unhandled"
                                 " exception: %s", e.message)
-                decision.terminate_workflow(e.message)
+                decision.fail_workflow(e.message)
             else:
                 activities_running = decision.any_activity_running()
                 activities_scheduled = bool(activities)
