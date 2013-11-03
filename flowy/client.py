@@ -732,7 +732,7 @@ SWFActivityFailed = namedtuple('SWFActivityFailed', 'event_id reason')
 SWFActivityTimedout = namedtuple('SWFActivityTimedout', 'event_id')
 
 
-class WorkflowClient(object):
+class WorkflowClient2(object):
     """ The object responsible for managing workflows.
 
     A workflow is registered either manually with the :meth:`register` method

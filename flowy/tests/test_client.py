@@ -658,3 +658,33 @@ class DecisionTest(unittest.TestCase):
         d.schedule_activities('context')
         ctx.serialize.assert_called_once_with('context')
         cli.schedule_activities.assert_called_with('ctx')
+
+
+class WorkflowClientTest(unittest.TestCase):
+    def _get_uut(self):
+        from flowy.client import WorkflowClient, SWFClient
+        client = create_autospec(SWFClient, instance=True)
+        return client, WorkflowClient(client)
+
+    def test_registration(self):
+        c, wc = self._get_uut()
+        wc.register_workflow(Mock(), 'name', 'version', 'task_list', 120, 30)
+        c.register_workflow.assert_called_once_with(
+            name='name', version='version', task_list='task_list',
+            execution_start_to_close=120, task_start_to_close=30,
+            child_policy='TERMINATE', descr=None
+        )
+
+    def test_empty(self):
+        from flowy.client import _DecisionResponse
+        c, wc = self._get_uut()
+        c.poll_decision.return_value = _DecisionResponse(
+            name='name',
+            version='v1',
+            new_events=[],
+            token='tok',
+            data='data',
+            first_run=False
+        )
+        self.assertEquals(wc.dispatch_next_decision('task_list'), None)
+        c.poll_decision.assert_called_once_with('task_list')
