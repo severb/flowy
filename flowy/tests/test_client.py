@@ -109,13 +109,13 @@ class DecisionPollingTest(TestCaseNoLogging):
 
     def test_poll_decision_page(self):
         from boto.swf.exceptions import SWFResponseError
-        from flowy.client import _poll_decision_page
+        from flowy.client import _repeated_poller
         valid = {'taskToken': 'token', 'other': 'fields'}
         poller = Mock()
         poller.side_effect = [SWFResponseError(0, 0), {}] * 2 + [valid]
         decision_page = Mock()
-        _poll_decision_page(poller, page_token='token',
-                            decision_page=decision_page)
+        _repeated_poller(poller, page_token='token',
+                         decision_page=decision_page)
         decision_page.assert_called_once_with(valid)
 
     def test_poll_decision_collapsed(self):
@@ -419,43 +419,15 @@ class SWFClientTest(TestCaseNoLogging):
                              input='data')
         self.assertFalse(r)
 
-    def poll_decision_integration(self):
-        m, c = self._get_uut(domain='dom')
-
-
-class DecisionClientTest(TestCaseNoLogging):
-    def _get_uut(self, domain='domain', token='token'):
-        from flowy.client import DecisionClient, JSONDecisionData
-        from boto.swf.layer1 import Layer1
-        l1 = create_autospec(Layer1, instance=True)
-        dd = create_autospec(JSONDecisionData, instance=True)
-        return dd, l1, DecisionClient(client=l1, domain=domain,
-                                      token=token, decision_data=dd)
-
-    def test_schedule_empty(self):
-        dd, l1, dc = self._get_uut(domain='dom', token='tok')
-        dd.serialize.return_value = 'ctx'
-        dc.schedule_activities(context='newcontext')
-        l1.respond_decision_task_completed.assert_called_once_with(
-            task_token='tok', decisions=[], execution_context='ctx'
-        )
-        dd.serialize.assert_called_once_with('newcontext')
-
     def test_schedule_activities(self):
-        dd, l1, dc = self._get_uut(domain='dom', token='tok')
-        from boto.swf.exceptions import SWFResponseError
-        err = SWFResponseError(0, 0)
-        l1.respond_decision_task_completed.side_effect = [err, None]
-        dd.serialize.return_value = 'ctx'
-        dc.queue_activity(call_id='call1', name='name', version=3, input='i')
-        dc.queue_activity(call_id='call2', name='name', version=3, input='i',
-                          heartbeat=10, schedule_to_close=11, task_list='tl',
-                          schedule_to_start=12, start_to_close=13)
-        r = dc.schedule_activities(context='newcontext')
-        self.assertFalse(r)
-        r = dc.schedule_activities(context='newcontext')
+        m, c = self._get_uut()
+        c.queue_activity(call_id='call1', name='name', version=3, input='i')
+        c.queue_activity(call_id='call2', name='name', version=3, input='i',
+                         heartbeat=10, schedule_to_close=11, task_list='tl',
+                         schedule_to_start=12, start_to_close=13)
+        r = c.schedule_activities(token='tok', context='ctx')
         self.assertTrue(r)
-        l1.respond_decision_task_completed.assert_called_with(
+        m.respond_decision_task_completed.assert_called_with(
             task_token='tok', decisions=[
                 {
                     'scheduleActivityTaskDecisionAttributes': {
@@ -488,12 +460,23 @@ class DecisionClientTest(TestCaseNoLogging):
                 }
             ], execution_context='ctx'
         )
-        dd.serialize.assert_called_with('newcontext')
+
+    def test_schedule_activities_error(self):
+        m, c = self._get_uut()
+        from boto.swf.exceptions import SWFResponseError
+        err = SWFResponseError(0, 0)
+        m.respond_decision_task_completed.side_effect = err
+        c.queue_activity(call_id='call1', name='name', version=3, input='i')
+        c.queue_activity(call_id='call2', name='name', version=3, input='i',
+                         heartbeat=10, schedule_to_close=11, task_list='tl',
+                         schedule_to_start=12, start_to_close=13)
+        r = c.schedule_activities(token='tok', context='ctx')
+        self.assertFalse(r)
 
     def test_complete_workflow(self):
-        _, l1, dc = self._get_uut(domain='dom', token='tok')
-        self.assertTrue(dc.complete_workflow(result='r'))
-        l1.respond_decision_task_completed.assert_called_once_with(
+        m, c = self._get_uut()
+        self.assertTrue(c.complete_workflow(token='tok', result='r'))
+        m.respond_decision_task_completed.assert_called_once_with(
             task_token='tok', decisions=[{
                 'completeWorkflowExecutionDecisionAttributes': {
                     'result': 'r'
@@ -503,15 +486,15 @@ class DecisionClientTest(TestCaseNoLogging):
         )
 
     def test_complete_workflow_err(self):
-        _, l1, dc = self._get_uut(domain='dom', token='tok')
+        m, c = self._get_uut()
         from boto.swf.exceptions import SWFResponseError
-        l1.respond_decision_task_completed.side_effect = SWFResponseError(0, 0)
-        self.assertFalse(dc.complete_workflow(result='r'))
+        m.respond_decision_task_completed.side_effect = SWFResponseError(0, 0)
+        self.assertFalse(c.complete_workflow(token='tok', result='r'))
 
     def test_fail_workflow(self):
-        _, l1, dc = self._get_uut(domain='dom', token='tok')
-        self.assertTrue(dc.fail_workflow(reason='r'))
-        l1.respond_decision_task_completed.assert_called_once_with(
+        m, c = self._get_uut()
+        self.assertTrue(c.fail_workflow(token='tok', reason='r'))
+        m.respond_decision_task_completed.assert_called_once_with(
             task_token='tok', decisions=[{
                 'failWorkflowExecutionDecisionAttributes': {'reason': 'r'},
                 'decisionType': 'FailWorkflowExecution'
@@ -519,10 +502,93 @@ class DecisionClientTest(TestCaseNoLogging):
         )
 
     def test_fail_workflow_err(self):
-        _, l1, dc = self._get_uut(domain='dom', token='tok')
+        m, c = self._get_uut()
         from boto.swf.exceptions import SWFResponseError
-        l1.respond_decision_task_completed.side_effect = SWFResponseError(0, 0)
-        self.assertFalse(dc.fail_workflow(reason='r'))
+        m.respond_decision_task_completed.side_effect = SWFResponseError(0, 0)
+        self.assertFalse(c.fail_workflow(token='tok', reason='r'))
+
+    def test_complete_activity(self):
+        m, c = self._get_uut()
+        self.assertTrue(c.complete_activity(token='tok', result='r'))
+        m.respond_activity_task_completed.assert_called_once_with(
+            task_token='tok', result='r'
+        )
+
+    def test_complete_activity_error(self):
+        m, c = self._get_uut()
+        from boto.swf.exceptions import SWFResponseError
+        m.respond_activity_task_completed.side_effect = SWFResponseError(0, 0)
+        self.assertFalse(c.complete_activity(token='tok', result='r'))
+
+    def test_fail_activity(self):
+        m, c = self._get_uut()
+        self.assertTrue(c.fail_activity(token='tok', reason='reason'))
+        m.respond_activity_task_failed.assert_called_once_with(
+            task_token='tok', reason='reason'
+        )
+
+    def test_fail_activity_error(self):
+        m, c = self._get_uut()
+        from boto.swf.exceptions import SWFResponseError
+        m.respond_activity_task_failed.side_effect = SWFResponseError(0, 0)
+        self.assertFalse(c.fail_activity(token='tok', reason='reason'))
+
+    def test_heartbeat(self):
+        m, c = self._get_uut()
+        self.assertTrue(c.heartbeat(token='tok'))
+        m.record_activity_task_heartbeat.assert_called_once_with(
+            task_token='tok'
+        )
+
+    def test_heartbeat_error(self):
+        m, c = self._get_uut()
+        from boto.swf.exceptions import SWFResponseError
+        m.record_activity_task_heartbeat.side_effect = SWFResponseError(0, 0)
+        self.assertFalse(c.heartbeat(token='tok'))
+
+
+class DecisionClientTest(TestCaseNoLogging):
+    def _get_uut(self, token='token'):
+        from flowy.client import DecisionClient, JSONDecisionData, SWFClient
+        swf = create_autospec(SWFClient, instance=True)
+        dd = create_autospec(JSONDecisionData, instance=True)
+        return dd, swf, DecisionClient(client=swf, token=token,
+                                       decision_data=dd)
+
+    def test_schedule_activities(self):
+        dd, swf, dc = self._get_uut(token='tok')
+        dd.serialize.return_value = 'ctx'
+        swf.schedule_activities.return_value = sentinel.r
+        result = dc.schedule_activities(context='newcontext')
+        self.assertEquals(result, sentinel.r)
+        swf.schedule_activities.assert_called_once_with(token='tok',
+                                                        context='ctx')
+        dd.serialize.assert_called_once_with('newcontext')
+
+    def test_queue_activity(self):
+        dd, swf, dc = self._get_uut(token='tok')
+        dc.queue_activity('call_id', 'name', 'version', 'input')
+        swf.queue_activity.assert_called_once_with(
+            name='name', schedule_to_start=None, start_to_close=None,
+            schedule_to_close=None, version='version', context=None,
+            task_list=None, heartbeat=None, call_id='call_id', input='input'
+        )
+
+    def test_complete(self):
+        dd, swf, dc = self._get_uut(token='tok')
+        swf.complete_workflow.return_value = sentinel.r
+        self.assertEquals(dc.complete('result'), sentinel.r)
+        swf.complete_workflow.assert_called_once_with(
+            token='tok', result='result'
+        )
+
+    def test_fail(self):
+        dd, swf, dc = self._get_uut(token='tok')
+        swf.fail_workflow.return_value = sentinel.r
+        self.assertEquals(dc.fail('reason'), sentinel.r)
+        swf.fail_workflow.assert_called_once_with(
+            token='tok', reason='reason'
+        )
 
 
 class JSONDecisionContext(unittest.TestCase):
@@ -663,11 +729,36 @@ class DecisionTest(unittest.TestCase):
         cli.schedule_activities.assert_called_with('ctx')
 
 
-class WorkflowClientTest(unittest.TestCase):
-    def _get_uut(self):
-        from flowy.client import WorkflowClient, SWFClient
+class ActivityTaskTest(unittest.TestCase):
+    def _get_uut(self, token='token'):
+        from flowy.client import ActivityTask, SWFClient
         client = create_autospec(SWFClient, instance=True)
-        return client, WorkflowClient(client)
+        return client, ActivityTask(client, token=token)
+
+    def test_complete(self):
+        c, at = self._get_uut(token='tok')
+        c.complete_activity.return_value = sentinel.r
+        self.assertEquals(at.complete(result='r'), sentinel.r)
+        c.complete_activity.assert_called_once_with(token='tok', result='r')
+
+    def test_fail(self):
+        c, at = self._get_uut(token='tok')
+        c.fail_activity.return_value = sentinel.r
+        self.assertEquals(at.fail(reason='r'), sentinel.r)
+        c.fail_activity.assert_called_once_with(token='tok', reason='r')
+
+    def test_heartbeat(self):
+        c, at = self._get_uut(token='tok')
+        c.heartbeat.return_value = sentinel.r
+        self.assertEquals(at.heartbeat(), sentinel.r)
+        c.heartbeat.assert_called_once_with(token='tok')
+
+
+class ClientTest(unittest.TestCase):
+    def _get_uut(self):
+        from flowy.client import Client, SWFClient
+        client = create_autospec(SWFClient, instance=True)
+        return client, Client(client)
 
     def test_registration(self):
         c, wc = self._get_uut()

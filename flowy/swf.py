@@ -1,4 +1,3 @@
-import sys
 import json
 import uuid
 import logging
@@ -10,16 +9,15 @@ from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
 from boto.swf.exceptions import SWFTypeAlreadyExistsError, SWFResponseError
 
-from flowy.workflow import _UnhandledActivityError
 
-
-__all__ = ['ActivityClient', 'WorkflowClient']
+__all__ = ['Client']
 
 
 class SWFClient(object):
     def __init__(self, domain, client=None):
         self._client = client if client is not None else Layer1()
         self._domain = domain
+        self._scheduled_activities = []
 
     def register_workflow(self, name, version, task_list,
                           execution_start_to_close=3600,
@@ -75,21 +73,6 @@ class SWFClient(object):
     def register_activity(self, name, version, task_list, heartbeat=60,
                           schedule_to_close=420, schedule_to_start=120,
                           start_to_close=300, descr=None):
-        """ Register an activity with the given configuration options.
-
-        If an activity with the same *name* and *version* is already
-        registered, this method returns a boolean indicating whether the
-        registered activity is compatible. A compatible activity is an
-        activity that was registered using the same default values.
-        The allowed running time can be specified in seconds using
-        *start_to_close*, the allowed time from the moment it was scheduled
-        to the moment it finished can be specified using *schedule_to_close*
-        and the time it can spend in the queue before the processing itself
-        starts can be specified using *schedule_to_start*. The default task
-        list the activities of this type will be scheduled on can be set with
-        *task_list*.
-
-        """
         version = str(version)
         schedule_to_close = str(schedule_to_close)
         schedule_to_start = str(schedule_to_start)
@@ -162,20 +145,15 @@ class SWFClient(object):
         poller = partial(self._client.poll_for_decision_task,
                          task_list=task_list, domain=self.domain,
                          reverse_order=True)
-        paged_poller = partial(_poll_decision_page, poller)
+        paged_poller = partial(_repeated_poller, poller)
         decision_collapsed = _poll_decision_collapsed(paged_poller)
         return _decision_response(decision_collapsed)
 
     def poll_activity(self, task_list):
-        pass
-
-
-class DecisionClient(object):
-    def __init__(self, client, domain, token, decision_data):
-        self._client = client
-        self._token = token
-        self._decision_data = decision_data
-        self._scheduled_activities = []
+        poller = partial(self._client.poll_for_activity_task,
+                         task_list=task_list, domain=self.domain)
+        activity_poller = _repeated_poller(poller)
+        return _activity_response(activity_poller())
 
     def queue_activity(self, call_id, name, version, input,
                        heartbeat=None,
@@ -196,7 +174,7 @@ class DecisionClient(object):
             }
         ))
 
-    def schedule_activities(self, context=None):
+    def schedule_activities(self, token, context=None):
         d = Layer1Decisions()
         for args, kwargs in self._scheduled_activities:
             d.schedule_activity_task(*args, **kwargs)
@@ -205,59 +183,147 @@ class DecisionClient(object):
         data = d._data
         try:
             self._client.respond_decision_task_completed(
-                task_token=self._token,
-                decisions=data,
-                execution_context=self._decision_data.serialize(context)
+                task_token=token, decisions=data, execution_context=context
             )
         except SWFResponseError:
-            logging.warning("Could not send decisions: %s",
-                            self._token, exc_info=1)
+            logging.warning("Could not send decisions: %s", token, exc_info=1)
             return False
-        self._scheduled_activities = []
+        finally:
+            self._scheduled_activities = []
         return True
 
-    def complete_workflow(self, result):
+    def complete_workflow(self, token, result=None):
         d = Layer1Decisions()
         d.complete_workflow_execution(result=result)
         data = d._data
         try:
             self._client.respond_decision_task_completed(
-                task_token=self._token, decisions=data
+                task_token=token, decisions=data
             )
-            logging.info("Completed workflow: %s %s", self._token, result)
+            logging.info("Completed workflow: %s %s", token, result)
         except SWFResponseError:
-            logging.warning("Could not complete workflow: %s",
-                            self._token, exc_info=1)
+            logging.warning("Could not complete the workflow: %s",
+                            token, exc_info=1)
             return False
         return True
 
-    def fail_workflow(self, reason):
+    def fail_workflow(self, token, reason):
         d = Layer1Decisions()
         d.fail_workflow_execution(reason=reason)
         data = d._data
         try:
             self._client.respond_decision_task_completed(
-                task_token=self._token, decisions=data
+                task_token=token, decisions=data
             )
             logging.info("Terminated workflow: %s", reason)
         except SWFResponseError:
-            logging.warning("Could not terminate workflow.", exc_info=1)
+            logging.warning("Could not fail the workflow: %s",
+                            token, exc_info=1)
+            return False
+        return True
+
+    def complete_activity(self, token, result):
+        try:
+            self._client.respond_activity_task_completed(
+                task_token=token, result=result
+            )
+            logging.info("Completed activity: %s %r", token, result)
+        except SWFResponseError:
+            logging.warning("Could not complete activity: %s",
+                            token, exc_info=1)
+            return False
+        return True
+
+    def fail_activity(self, token, reason):
+        try:
+            self._client.respond_activity_task_failed(task_token=token,
+                                                      reason=reason)
+            logging.info("Failed activity: %s %s", token, reason)
+        except SWFResponseError:
+            logging.warning("Could not terminate activity: %s",
+                            token, exc_info=1)
+            return False
+        return True
+
+    def heartbeat(self, token):
+        try:
+            self._client.record_activity_task_heartbeat(task_token=token)
+            logging.info("Sent activity heartbeat: %s", token)
+        except SWFResponseError:
+            logging.warning("Error when sending activity heartbeat: %s",
+                            token, exc_info=1)
             return False
         return True
 
 
-class ActivityClient(object):
-    def __init__(self, client, token):
-        pass
+class DecisionClient(object):
+    def __init__(self, client, token, decision_data):
+        self._client = client
+        self._token = token
+        self._decision_data = decision_data
+
+    def queue_activity(self, call_id, name, version, input,
+                       heartbeat=None,
+                       schedule_to_close=None,
+                       schedule_to_start=None,
+                       start_to_close=None,
+                       task_list=None,
+                       context=None):
+        self._client.queue_activity(
+            call_id=call_id,
+            name=name,
+            version=version,
+            input=input,
+            heartbeat=heartbeat,
+            schedule_to_close=schedule_to_close,
+            schedule_to_start=schedule_to_start,
+            start_to_close=start_to_close,
+            task_list=task_list,
+            context=context
+        )
+
+    def schedule_activities(self, context=None):
+        return self._client.schedule_activities(
+            token=self._token, context=self._decision_data.serialize(context)
+        )
 
     def complete(self, result):
-        pass
+        return self._client.complete_workflow(token=self._token, result=result)
 
     def fail(self, reason):
-        pass
+        return self._client.fail_workflow(token=self._token, reason=reason)
+
+
+class ActivityTask(object):
+    def __init__(self, client, token):
+        self._client = client
+        self._token = token
+
+    def complete(self, result):
+        """ Signal the successful completion of the activity with *result*.
+
+        Returns a boolean indicating the success of the operation.
+
+        """
+        return self._client.complete_activity(token=self._token, result=result)
+
+    def fail(self, reason):
+        """ Signal the failure of the activity for the specified reason.
+
+        Returns a boolean indicating the success of the operation.
+
+        """
+        return self._client.fail_activity(token=self._token, reason=reason)
 
     def heartbeat(self):
-        pass
+        """ Report that the activity is still making progress.
+
+        Returns a boolean indicating the success of the operation or whether
+        the heartbeat exceeded the time it should have taken to report activity
+        progress. In the latter case the activity execution should be stopped.
+
+        """
+        return self._client.heartbeat(token=self._token)
 
 
 class Decision(object):
@@ -338,9 +404,9 @@ class Decision(object):
         All activities previously queued by :meth:`queue_activity` will be
         scheduled within the workflow. An optional textual *context* can be set
         and will be available in subsequent decisions using
-        :meth:`global_context`.  Returns a boolean indicating the success of
-        the operation. On success the internal collection of scheduled
-        activities will be cleared.
+        :meth:`global_context`. Returns a boolean indicating the success of
+        the operation. The internal collection of scheduled
+        activities will always be cleared when calling this method.
         """
         return self._client.schedule_activities(
             self._context.serialize(context)
@@ -353,7 +419,7 @@ class Decision(object):
         the success of the operation.
 
         """
-        return self._client.complete_workflow(result)
+        return self._client.complete(result)
 
     def fail(self, reason):
         """ Signals the termination of the workflow.
@@ -366,7 +432,7 @@ class Decision(object):
         Returns a boolean indicating the success of the operation.
 
         """
-        return self._client.fail_workflow(reason)
+        return self._client.fail(reason)
 
     def global_context(self, default=None):
         """ Access the global context that was set by
@@ -476,7 +542,7 @@ class JSONDecisionData(object):
         return json.dumps((self.input, context))
 
 
-class WorkflowClient(object):
+class Client(object):
     """ A simple wrapper around Boto's SWF Layer1 that provides a cleaner
     interface and some convenience.
 
@@ -489,10 +555,12 @@ class WorkflowClient(object):
     _DecisionClient = DecisionClient
     _DecisionContext = JSONDecisionContext
     _Decision = Decision
+    _ActivityTask = ActivityTask
 
     def __init__(self, client):
-        self._client = client if client is not None else Layer1()
-        self._registry = {}
+        self._client = client
+        self._workflow_registry = {}
+        self._activity_registry = {}
 
     def register_workflow(self, decision_maker, name, version, task_list,
                           execution_start_to_close=3600,
@@ -514,7 +582,7 @@ class WorkflowClient(object):
 
         """
         version = str(version)
-        result = self._client.register_workflow(
+        reg_successful = self._client.register_workflow(
             name=name,
             version=version,
             task_list=task_list,
@@ -523,9 +591,43 @@ class WorkflowClient(object):
             child_policy=child_policy,
             descr=descr
         )
-        if result:
-            self._registry[(name, version)] = decision_maker
-        return result
+        if reg_successful:
+            self._workflow_registry[(name, version)] = decision_maker
+        return reg_successful
+
+    def register_activity(self, activity_runner, name, version, task_list,
+                          heartbeat=60, schedule_to_close=420,
+                          schedule_to_start=120, start_to_close=300,
+                          descr=None):
+        """ Register an activity with the given configuration options.
+
+        If an activity with the same *name* and *version* is already
+        registered, this method returns a boolean indicating whether the
+        registered activity is compatible. A compatible activity is an
+        activity that was registered using the same default values.
+        The allowed running time can be specified in seconds using
+        *start_to_close*, the allowed time from the moment it was scheduled
+        to the moment it finished can be specified using *schedule_to_close*
+        and the time it can spend in the queue before the processing itself
+        starts can be specified using *schedule_to_start*. The default task
+        list the activities of this type will be scheduled on can be set with
+        *task_list*.
+
+        """
+        version = str(version)
+        reg_successful = self._client.register_workflow(
+            name=name,
+            version=version,
+            task_list=task_list,
+            heartbeat=heartbeat,
+            schedule_to_close=schedule_to_close,
+            schedule_to_start=schedule_to_start,
+            start_to_close=start_to_close,
+            descr=descr
+        )
+        if reg_successful:
+            self._activity_registry[(name, version)] = activity_runner
+        return reg_successful
 
     def dispatch_next_decision(self, task_list):
         """ Poll for the next decision and call the matching runner registered.
@@ -539,7 +641,7 @@ class WorkflowClient(object):
         """
         decision_response = self._client.poll_decision(task_list)
         decision_maker_key = decision_response.name, decision_response.version
-        decision_maker = self._registry.get(decision_maker_key)
+        decision_maker = self._workflow_registry.get(decision_maker_key)
         if decision_maker is not None:
             if decision_response.first_run:
                 data = self._DecisionData.for_first_run(decision_response.data)
@@ -551,18 +653,28 @@ class WorkflowClient(object):
             decision_context = self._DecisionContext(data.context)
             decision = self._Decision(decision_client, decision_context,
                                       decision_response.new_events)
-            return decision_maker(data.input, decision)
+            decision_maker(data.input, decision)
+            return decision_maker
 
+    def dispatch_next_activity(self, task_list):
+        """ Poll for the next activity and call the matching runner registered.
 
-class ActivityClient(object):
-    def __init__(self):
-        pass
+        If any runner previsouly registered with :meth:`register_activity`
+        matches the polled activity it will be called with two arguments in
+        this order: the input that was used when the activity was scheduled and
+        a :class:`ActivityTask` instance. It returns the matched runner if any
+        or ``None``.
 
-    def register_activity(self):
-        pass
-
-    def dispatch_next_activity(self):
-        pass
+        """
+        activity_response = self._client.poll_activity(task_list)
+        activity_runner_key = activity_response.name, activity_response.version
+        activity_runner = self._activity_registry.get(activity_runner_key)
+        if activity_runner is not None:
+            activity_task = self._ActivityTask(
+                self._client, activity_response.token
+            )
+            activity_runner(activity_response.input, activity_task)
+            return activity_runner
 
 
 def _decision_event(event):
@@ -607,11 +719,14 @@ def _decision_page(response, event_maker=_decision_event):
     )
 
 
-def _poll_decision_page(poller, page_token=None, decision_page=_decision_page):
+def _repeated_poller(poller, page_token=None, decision_page=_decision_page):
     response = {}
     while 'taskToken' not in response or not response['taskToken']:
         try:
-            response = poller(next_page_token=page_token)
+            if page_token:
+                response = poller(next_page_token=page_token)
+            else:
+                response = poller()
         except (IOError, SWFResponseError):
             logging.warning("Unknown error when pulling decision.", exc_info=1)
     return decision_page(response)
@@ -680,6 +795,17 @@ def _decision_response(decision_collapsed):
     )
 
 
+def _activity_response(response):
+    return _ActivityResponse(
+        name=response['activityType']['name'],
+        version=response['activityType']['version'],
+        input=response['input'],
+        token=response['taskToken']
+    )
+
+
+_ActivityResponse = namedtuple('_ActivityResponse', 'name version input token')
+
 _DecisionPage = namedtuple(
     '_DecisionPage',
     ['name', 'version', 'events', 'next_page_token', 'last_event_id', 'token']
@@ -692,7 +818,6 @@ _DecisionResponse = namedtuple(
     '_DecisionResponse',
     ['name', 'version', 'new_events', 'token', 'data', 'first_run']
 )
-
 
 _ActivityScheduled = namedtuple('_ActivityScheduled', ['event_id', 'call_id'])
 _ActivityCompleted = namedtuple('_ActivityCompleted', ['event_id', 'result'])
