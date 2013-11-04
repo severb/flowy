@@ -2,6 +2,9 @@ import json
 from contextlib import contextmanager
 
 
+__all__ = ['Activity']
+
+
 class Activity(object):
     """ A simple baseclass for activities that removes some boilerplate.
 
