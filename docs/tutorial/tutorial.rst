@@ -179,3 +179,55 @@ available in :app:`Flowy`, and its usage will be explained later on.
 
 The line above starts the main decision polling loop on the ``upload_list``
 task list.
+
+Concurrency
+-----------
+
+Let's take another look at our workflow implementation:
+
+.. literalinclude:: workflow.py
+   :language: python
+   :lines: 11-17
+
+The script is written in plain, sequential Python. First, the ``Transcoding``
+activity is executed, then the ``ThumbnailGenerator`` activity, and after that
+their results are used by the ``MetadataProcessing`` activity. No
+parallelization indications are given whatsoever. However, :app:`Flowy`
+automatically detects that the first two activities can be run in parallel, so
+it schedules them at the same time, thus revealing one of the most interesting
+features of the framework. Since the ``MetadataProcessing`` activity requires
+that both previous activities be finished for it to start, the workflow
+execution halts until both the ``Transcoding`` and the ``ThumnailGenerator``
+activities are finished, only then starting ``MetadataProcessing``.
+This is achieved using the :meth:`~flowy.workflow.MaybeResult.result` method,
+:app:`Flowy`'s only syncronization primitive.
+
+.. note:: When we need the actual result returned by an activity we must use the
+   :meth:`~flowy.workflow.MaybeResult.result` method. As mentioned before, this will
+   block the workflow execution until a result is available.
+
+So what happens if we add a new activity called ``AddSubstitles`` after the
+``MetadataProcessing`` activity?
+
+.. literalinclude:: concurrency_bad_example.py
+   :language: python
+   :emphasize-lines: 7, 14
+
+Notice the ``AddSubtitles`` activity does not depend on any other activities,
+so one might expect it to start at the same time the ``Transcoding`` and
+``ThumnailGenerator`` activities are started. However, by calling
+:meth:`~flowy.workflow.MaybeResult.result` in the arguments given to the
+``MetadataProcessing`` activity, :app:`Flowy` will synchronize the
+``Transcoding`` and ``ThumbnailGenerator`` activities, scheduling any other
+activities only after these are finished. The ``AddSubtitles`` activity will
+therefore be scheduled together with the ``MetadataProcessing`` activity.
+
+.. note:: When activities depend on other activities' results, the person
+   implementing the workflow is responsable for calling activities in a way it
+   makes most sense, so :app:`Flowy` can paralellize as many activities as
+   possible.
+
+Returning to our example above, if the ``AddSubtitles`` activity would have
+been called before ``MetadataProcessing``, :app:`Flowy` would have had no
+problems scheduling it together with the ``Transcoding`` and
+``ThumbnailGenerator`` activities.
