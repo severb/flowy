@@ -1,5 +1,4 @@
 import json
-from contextlib import contextmanager
 
 
 __all__ = ['Activity']
@@ -21,8 +20,12 @@ class Activity(object):
 
     """
 
-    def run(self, *args, **kwargs):
-        """ The actual unit of work must be implemented here. """
+    def run(self, heartbeat, *args, **kwargs):
+        """ The actual unit of work must be implemented here.
+
+        Gets a *heartbeat* callable as the first argument.
+
+        """
         raise NotImplemented()
 
     def __call__(self, input, activity_task):
@@ -35,7 +38,7 @@ class Activity(object):
         args, kwargs = self.deserialize_activity_input(input)
         try:
             with self._bind_to(activity_task):
-                result = self.run(*args, **kwargs)
+                result = self.run(activity_task.heartbeat, *args, **kwargs)
         except Exception as e:
             activity_task.fail(e.message)
         else:
@@ -61,10 +64,3 @@ class Activity(object):
 
         """
         raise RuntimeError('The heartbeat is unbound.')
-
-    @contextmanager
-    def _bind_to(self, activity_task):
-        old_heartbeat = self.heartbeat
-        self.heartbeat = activity_task.heartbeat
-        yield
-        self.heartbeat = old_heartbeat

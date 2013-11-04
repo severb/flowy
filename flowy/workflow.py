@@ -1,4 +1,5 @@
 import json
+from functools import partial
 from collections import namedtuple
 from contextlib import contextmanager
 
@@ -6,106 +7,49 @@ from contextlib import contextmanager
 __all__ = ['Workflow', 'ActivityProxy', 'ActivityError', 'ActivityTimedout']
 
 
-class MaybeResult(object):
-    """ This object is an abstraction on the result of an activity.
+class Placeholder(object):
+    def result(self):
+        raise _SyncNeeded()
 
-    The object has 3 possible states: with result, placeholder or with error.
-    If no *result* is set, the result is considered a placeholder, hence the
-    name. If the *is_result* parameter is set to True and :meth:`result` is
-    called, the exception that must be passed with *result* will be raised.
-    Whenever :meth:`result` is called and the object is a placeholder, an
-    exception indicating that is raised.
 
-    """
-
-    _sentinel = object()
-
-    def __init__(self, result=_sentinel, is_error=False):
-        self._r = result
-        self._is_error = is_error
+class Error(object):
+    def __init__(self, reason):
+        self._reason = reason
 
     def result(self):
-        """
-        Return the result or raise an exception if no result is set.
-
-        If the :class:`MaybeResult` object is a placeholder, an exception that
-        signals that the result is not yet ready is raised. If the result is an
-        error, the exception passed as the result will be raised.
-
-        """
-        if self._is_placeholder():
-            raise _SyncNeeded()
-        if self._is_error:
-            raise self._r
-        return self._r
-
-    def _is_placeholder(self):
-        # Never use this method in your workflow as it will make the execution
-        # of your code nondeterministic
-        return self._r is self._sentinel
+        raise ActivityError('Failed inside activity: %s', self._reason)
 
 
-class Workflow(object):
-    """ The class that is inherited and needs to implement the activity task
-    coordination logic using the :meth:`run` method.
+class Timeout(object):
+    def result(self):
+        raise ActivityTimedout('An activity timedout.')
 
-    """
-    def __init__(self):
-        self._current_call_id = 0
-        self._proxy_cache = dict()
-        self._options_stack = [_ActivityOptions(*(None,) * 6)]
-        self._error_handling_stack = [False]
 
-    def resume(self, input, context):
-        """ Resumes the execution of the workflow.
+class Result(object):
+    def __init__(self, result):
+        self._result = result
 
-        Upon resume, the *input* is deserialized with
-        :meth:`deserialize_workflow_input`, the :meth:`run` method is executed,
-        result is serialized with :meth:`serialize_workflow_result` and
-        returned.
-        Whenever the workflow is resumed, the call id counter is reset.
+    def result(self):
+        return self._result
 
-        """
-        result = None
-        self._context = context
-        self._current_call_id = 0
-        self._scheduled = []
-        args, kwargs = self.deserialize_workflow_input(input)
-        try:
-            result = self.run(*args, **kwargs)
-        except _SyncNeeded:
-            pass
-        return self.serialize_workflow_result(result), self._scheduled
 
-    def run(self, *args, **kwargs):
-        """ The inheriting class must implement the activity task coordination
-        logic here.
-
-        """
-        raise NotImplemented()
-
-    @staticmethod
-    def deserialize_workflow_input(data):
-        """ Deserialize the given workflow input *data*. """
-        args_dict = json.loads(data)
-        return args_dict['args'], args_dict['kwargs']
-
-    @staticmethod
-    def serialize_workflow_result(result):
-        """ Serialize the given workflow *result*. """
-        return json.dumps(result)
+class WorkflowExecution(object):
+    def __init__(self, decision):
+        self._decision = decision
+        default = _ActivityOptions(
+            heartbeat=None,
+            schedule_to_close=None,
+            schedule_to_start=None,
+            start_to_close=None,
+            task_list=None,
+            retry=3
+        )
+        self._options_stack = [default]
 
     @contextmanager
-    def options(
-        self,
-        heartbeat=None,
-        schedule_to_close=None,
-        schedule_to_start=None,
-        start_to_close=None,
-        error_handling=None,
-        task_list=None,
-        retry=None,
-    ):
+    def options(self, heartbeat=None, schedule_to_close=None,
+                schedule_to_start=None, start_to_close=None,
+                error_handling=None, task_list=None, retry=None):
         if error_handling is not None:
             self._error_handling_stack.append(error_handling)
         options = _ActivityOptions(
@@ -127,24 +71,10 @@ class Workflow(object):
     def _current_options(self):
         return self._options_stack[-1]
 
-    @property
-    def _manual_exception_handling(self):
-        return bool(self._error_handling_stack[-1])
-
-    def _next_call_id(self):
-        result = self._current_call_id
-        self._current_call_id += 1
-        return result
-
-    def _queue_activity(
-        self, call_id, name, version, input,
-        heartbeat=None,
-        schedule_to_close=None,
-        schedule_to_start=None,
-        start_to_close=None,
-        task_list=None,
-        retry=3
-    ):
+    def queue_activity(self, call_id, name, version, input,
+                       heartbeat=None, schedule_to_close=None,
+                       schedule_to_start=None, start_to_close=None,
+                       task_list=None, retry=3):
         activity_options = _ActivityOptions(
             heartbeat,
             schedule_to_close,
@@ -153,9 +83,82 @@ class Workflow(object):
             task_list,
             retry
         )
+        # Context settings have the highest priority,
+        # even higher than the ones sent as arguments in this method!
         options = activity_options.update_with(self._current_options)
-        activity_call = _ActivityCall(call_id, name, version, input, options)
-        self._scheduled.append(activity_call)
+        self._decision.queue_activity(
+            call_id=call_id,
+            name=name,
+            version=version,
+            input=input,
+            heartbeat=options.heartbeat,
+            schedule_to_close=options.schedule_to_close,
+            schedule_to_start=options.schedule_to_start,
+            start_to_close=options.start_to_close,
+            task_list=options.task_list,
+            context=str(options.retry)
+        )
+
+
+class BoundInstance(object):
+    def __init__(self, workflow, workflow_execution):
+        self._workflow = workflow
+        self._workflow_execution = workflow_execution
+        self.options = self._workflow_execution.options
+
+    def __getattr__(self, activity_name):
+        activity_proxy = getattr(self._workflow, activity_name)
+        if not isinstance(activity_proxy, ActivityProxy):
+            raise AttributeError('%s is not an ActivityProxy instance')
+        return partial(activity_proxy, self._workflow_execution)
+
+
+class Workflow(object):
+    """ The class that is inherited and needs to implement the activity task
+    coordination logic using the :meth:`run` method.
+
+    """
+    def run(self, remote, *args, **kwargs):
+        """ A subclass must implement the activity task coordination here. """
+        raise NotImplemented()
+
+    def __call__(self, input, decision):
+        """ Resumes the execution of the workflow.
+
+        Upon resume, the *input* is deserialized with
+        :meth:`deserialize_workflow_input`, the :meth:`run` method is executed,
+        result is serialized with :meth:`serialize_workflow_result` and
+        returned.
+        Whenever the workflow is resumed, the call id counter is reset.
+
+        """
+
+        wc = WorkflowExecution(decision)
+        decision.dispatch_new_events(wc)
+
+        remote = BoundInstance(self, wc)
+
+        args, kwargs = self.deserialize_workflow_input(input)
+        try:
+            result = self.run(remote, *args, **kwargs)
+        except _SyncNeeded:
+            result = None
+        except Exception as e:
+            decision.fail(e.message)
+        else:
+            if wc.nothing_running() and wc.nothing_scheduled():
+                decision.complete(self.serialize_workflow_result(result))
+
+    @staticmethod
+    def deserialize_workflow_input(data):
+        """ Deserialize the given workflow input *data*. """
+        args_dict = json.loads(data)
+        return args_dict['args'], args_dict['kwargs']
+
+    @staticmethod
+    def serialize_workflow_result(result):
+        """ Serialize the given workflow *result*. """
+        return json.dumps(result)
 
 
 class ActivityProxy(object):
@@ -289,18 +292,6 @@ class ActivityProxy(object):
         return proxy
 
 
-_ActivityCall = namedtuple(
-    typename='_ActivityCall',
-    field_names=[
-        'call_id',
-        'name',
-        'version',
-        'input',
-        'options'
-    ]
-)
-
-
 _AOBase = namedtuple(
     typename='_ActivityOptions',
     field_names=[
@@ -323,10 +314,6 @@ class _ActivityOptions(_AOBase):
 
 class _SyncNeeded(Exception):
     """Stops the workflow execution when an activity result is unavailable."""
-
-
-class _UnhandledActivityError(Exception):
-    """Terminates the workflow because of an unhandled activity exception."""
 
 
 class ActivityError(RuntimeError):
