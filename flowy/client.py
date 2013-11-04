@@ -515,6 +515,7 @@ class Client(object):
     _DecisionClient = DecisionClient
     _DecisionContext = JSONDecisionContext
     _Decision = Decision
+    _ActivityTask = ActivityTask
 
     def __init__(self, client):
         self._client = client
@@ -612,10 +613,28 @@ class Client(object):
             decision_context = self._DecisionContext(data.context)
             decision = self._Decision(decision_client, decision_context,
                                       decision_response.new_events)
-            return decision_maker(data.input, decision)
+            decision_maker(data.input, decision)
+            return decision_maker
 
-    def dispatch_next_activity(self):
-        pass
+    def dispatch_next_activity(self, task_list):
+        """ Poll for the next activity and call the matching runner registered.
+
+        If any runner previsouly registered with :meth:`register_activity`
+        matches the polled activity it will be called with two arguments in
+        this order: the input that was used when the activity was scheduled and
+        a :class:`ActivityTask` instance. It returns the matched runner if any
+        or ``None``.
+
+        """
+        activity_response = self._client.poll_activity(task_list)
+        activity_runner_key = activity_response.name, activity_response.version
+        activity_runner = self._activity_registry.get(activity_runner_key)
+        if activity_runner is not None:
+            activity_task = self._ActivityTask(
+                self._client, activity_response.token
+            )
+            activity_runner(activity_response.input, activity_task)
+            return activity_runner
 
 
 def _decision_event(event):
