@@ -1,4 +1,5 @@
 import json
+from contextlib import contextmanager
 
 
 class Activity(object):
@@ -10,17 +11,21 @@ class Activity(object):
         """ The actual unit of work must be implemented here. """
         raise NotImplemented()
 
-    def call(self, input, client):
-        """ Call the activity with the given *input* and bind the
-        :class:`flowy.client.SWFClient` *client* to this instance for the
-        duration of the call so that heartbeats can be sent from the activity.
+    def __call__(self, input, activity_task):
+        """ The actual entrypoint for the activity.
+
+        Here we deserialize the input call the activity implementation and
+        serialize the result.
 
         """
-        self._client = client
         args, kwargs = self.deserialize_activity_input(input)
-        result = self.serialize_activity_result(self.run(*args, **kwargs))
-        self._client = None
-        return result
+        try:
+            with self._bind_to(activity_task):
+                result = self.run(*args, **kwargs)
+        except Exception as e:
+            activity_task.fail(e.message)
+        else:
+            activity_task.complete(self.serialize_activity_result(result))
 
     @staticmethod
     def deserialize_activity_input(input):
@@ -34,5 +39,17 @@ class Activity(object):
         return json.dumps(result)
 
     def heartbeat(self):
-        """ Signal that the activity is making progress. """
-        return self._client.heartbeat()
+        """ Use the heartbeat to send regular updates from activities.
+
+        If the heartbeat returns a false value the activity should be aborted
+        since one of its time out values was exceeded.
+
+        """
+        raise RuntimeError('The heartbeat is unbound.')
+
+    @contextmanager
+    def _bind_to(self, activity_task):
+        old_heartbeat = self.heartbeat
+        self.heartbeat = activity_task.heartbeat
+        yield
+        self.heartbeat = old_heartbeat
