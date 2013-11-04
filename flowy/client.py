@@ -1,4 +1,3 @@
-import sys
 import json
 import uuid
 import logging
@@ -10,10 +9,8 @@ from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
 from boto.swf.exceptions import SWFTypeAlreadyExistsError, SWFResponseError
 
-from flowy.workflow import _UnhandledActivityError
 
-
-__all__ = ['ActivityClient', 'WorkflowClient']
+__all__ = ['Client']
 
 
 class SWFClient(object):
@@ -75,21 +72,6 @@ class SWFClient(object):
     def register_activity(self, name, version, task_list, heartbeat=60,
                           schedule_to_close=420, schedule_to_start=120,
                           start_to_close=300, descr=None):
-        """ Register an activity with the given configuration options.
-
-        If an activity with the same *name* and *version* is already
-        registered, this method returns a boolean indicating whether the
-        registered activity is compatible. A compatible activity is an
-        activity that was registered using the same default values.
-        The allowed running time can be specified in seconds using
-        *start_to_close*, the allowed time from the moment it was scheduled
-        to the moment it finished can be specified using *schedule_to_close*
-        and the time it can spend in the queue before the processing itself
-        starts can be specified using *schedule_to_start*. The default task
-        list the activities of this type will be scheduled on can be set with
-        *task_list*.
-
-        """
         version = str(version)
         schedule_to_close = str(schedule_to_close)
         schedule_to_start = str(schedule_to_start)
@@ -162,12 +144,15 @@ class SWFClient(object):
         poller = partial(self._client.poll_for_decision_task,
                          task_list=task_list, domain=self.domain,
                          reverse_order=True)
-        paged_poller = partial(_poll_decision_page, poller)
+        paged_poller = partial(_repeated_poller, poller)
         decision_collapsed = _poll_decision_collapsed(paged_poller)
         return _decision_response(decision_collapsed)
 
     def poll_activity(self, task_list):
-        pass
+        poller = partial(self._client.poll_for_activity_task,
+                         task_list=task_list, domain=self.domain)
+        activity_poller = _repeated_poller(poller)
+        return _activity_response(activity_poller())
 
 
 class DecisionClient(object):
@@ -246,18 +231,59 @@ class DecisionClient(object):
         return True
 
 
-class ActivityClient(object):
+class ActivityTask(object):
     def __init__(self, client, token):
-        pass
+        self._client = client
+        self._token = token
 
     def complete(self, result):
-        pass
+        """ Signal the successful completion of the activity with *result*.
+
+        Returns a boolean indicating the success of the operation.
+
+        """
+        try:
+            self.client.respond_activity_task_completed(task_token=self._token,
+                                                        result=result)
+            logging.info("Completed activity: %s %r", self._token, result)
+        except SWFResponseError:
+            logging.warning("Could not complete activity: %s",
+                            self._token, exc_info=1)
+            return False
+        return True
 
     def fail(self, reason):
-        pass
+        """ Signal the failure of the activity for the specified reason.
+
+        Returns a boolean indicating the success of the operation.
+
+        """
+        try:
+            self.client.respond_activity_task_failed(task_token=self._token,
+                                                     reason=reason)
+            logging.info("Terminated activity: %s %s", self._token, reason)
+        except SWFResponseError:
+            logging.warning("Could not terminate activity: %s",
+                            self._token, exc_info=1)
+            return False
+        return True
 
     def heartbeat(self):
-        pass
+        """ Report that the activity is still making progress.
+
+        Returns a boolean indicating the success of the operation or whether
+        the heartbeat exceeded the time it should have taken to report activity
+        progress. In the latter case the activity execution should be stopped.
+
+        """
+        try:
+            self._client.record_activity_task_heartbeat(task_token=self._token)
+            logging.info("Sent activity heartbeat: %s", self._token)
+        except SWFResponseError:
+            logging.warning("Error when sending activity heartbeat: %s",
+                            self._token, exc_info=1)
+            return False
+        return True
 
 
 class Decision(object):
@@ -476,7 +502,7 @@ class JSONDecisionData(object):
         return json.dumps((self.input, context))
 
 
-class WorkflowClient(object):
+class Client(object):
     """ A simple wrapper around Boto's SWF Layer1 that provides a cleaner
     interface and some convenience.
 
@@ -491,8 +517,9 @@ class WorkflowClient(object):
     _Decision = Decision
 
     def __init__(self, client):
-        self._client = client if client is not None else Layer1()
-        self._registry = {}
+        self._client = client
+        self._workflow_registry = {}
+        self._activity_registry = {}
 
     def register_workflow(self, decision_maker, name, version, task_list,
                           execution_start_to_close=3600,
@@ -514,7 +541,7 @@ class WorkflowClient(object):
 
         """
         version = str(version)
-        result = self._client.register_workflow(
+        reg_successful = self._client.register_workflow(
             name=name,
             version=version,
             task_list=task_list,
@@ -523,9 +550,43 @@ class WorkflowClient(object):
             child_policy=child_policy,
             descr=descr
         )
-        if result:
-            self._registry[(name, version)] = decision_maker
-        return result
+        if reg_successful:
+            self._workflow_registry[(name, version)] = decision_maker
+        return reg_successful
+
+    def register_activity(self, activity_runner, name, version, task_list,
+                          heartbeat=60, schedule_to_close=420,
+                          schedule_to_start=120, start_to_close=300,
+                          descr=None):
+        """ Register an activity with the given configuration options.
+
+        If an activity with the same *name* and *version* is already
+        registered, this method returns a boolean indicating whether the
+        registered activity is compatible. A compatible activity is an
+        activity that was registered using the same default values.
+        The allowed running time can be specified in seconds using
+        *start_to_close*, the allowed time from the moment it was scheduled
+        to the moment it finished can be specified using *schedule_to_close*
+        and the time it can spend in the queue before the processing itself
+        starts can be specified using *schedule_to_start*. The default task
+        list the activities of this type will be scheduled on can be set with
+        *task_list*.
+
+        """
+        version = str(version)
+        reg_successful = self._client.register_workflow(
+            name=name,
+            version=version,
+            task_list=task_list,
+            heartbeat=heartbeat,
+            schedule_to_close=schedule_to_close,
+            schedule_to_start=schedule_to_start,
+            start_to_close=start_to_close,
+            descr=descr
+        )
+        if reg_successful:
+            self._activity_registry[(name, version)] = activity_runner
+        return reg_successful
 
     def dispatch_next_decision(self, task_list):
         """ Poll for the next decision and call the matching runner registered.
@@ -539,7 +600,7 @@ class WorkflowClient(object):
         """
         decision_response = self._client.poll_decision(task_list)
         decision_maker_key = decision_response.name, decision_response.version
-        decision_maker = self._registry.get(decision_maker_key)
+        decision_maker = self._workflow_registry.get(decision_maker_key)
         if decision_maker is not None:
             if decision_response.first_run:
                 data = self._DecisionData.for_first_run(decision_response.data)
@@ -552,14 +613,6 @@ class WorkflowClient(object):
             decision = self._Decision(decision_client, decision_context,
                                       decision_response.new_events)
             return decision_maker(data.input, decision)
-
-
-class ActivityClient(object):
-    def __init__(self):
-        pass
-
-    def register_activity(self):
-        pass
 
     def dispatch_next_activity(self):
         pass
@@ -607,11 +660,14 @@ def _decision_page(response, event_maker=_decision_event):
     )
 
 
-def _poll_decision_page(poller, page_token=None, decision_page=_decision_page):
+def _repeated_poller(poller, page_token=None, decision_page=_decision_page):
     response = {}
     while 'taskToken' not in response or not response['taskToken']:
         try:
-            response = poller(next_page_token=page_token)
+            if page_token:
+                response = poller(next_page_token=page_token)
+            else:
+                response = poller()
         except (IOError, SWFResponseError):
             logging.warning("Unknown error when pulling decision.", exc_info=1)
     return decision_page(response)
@@ -680,6 +736,17 @@ def _decision_response(decision_collapsed):
     )
 
 
+def _activity_response(response):
+    return _ActivityResponse(
+        name=response['activityType']['name'],
+        version=response['activityType']['version'],
+        input=response['input'],
+        token=response['taskToken']
+    )
+
+
+_ActivityResponse = namedtuple('_ActivityResponse', 'name version input token')
+
 _DecisionPage = namedtuple(
     '_DecisionPage',
     ['name', 'version', 'events', 'next_page_token', 'last_event_id', 'token']
@@ -692,7 +759,6 @@ _DecisionResponse = namedtuple(
     '_DecisionResponse',
     ['name', 'version', 'new_events', 'token', 'data', 'first_run']
 )
-
 
 _ActivityScheduled = namedtuple('_ActivityScheduled', ['event_id', 'call_id'])
 _ActivityCompleted = namedtuple('_ActivityCompleted', ['event_id', 'result'])

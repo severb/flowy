@@ -109,13 +109,13 @@ class DecisionPollingTest(TestCaseNoLogging):
 
     def test_poll_decision_page(self):
         from boto.swf.exceptions import SWFResponseError
-        from flowy.client import _poll_decision_page
+        from flowy.client import _repeated_poller
         valid = {'taskToken': 'token', 'other': 'fields'}
         poller = Mock()
         poller.side_effect = [SWFResponseError(0, 0), {}] * 2 + [valid]
         decision_page = Mock()
-        _poll_decision_page(poller, page_token='token',
-                            decision_page=decision_page)
+        _repeated_poller(poller, page_token='token',
+                         decision_page=decision_page)
         decision_page.assert_called_once_with(valid)
 
     def test_poll_decision_collapsed(self):
@@ -663,11 +663,11 @@ class DecisionTest(unittest.TestCase):
         cli.schedule_activities.assert_called_with('ctx')
 
 
-class WorkflowClientTest(unittest.TestCase):
+class ClientTest(unittest.TestCase):
     def _get_uut(self):
-        from flowy.client import WorkflowClient, SWFClient
+        from flowy.client import Client, SWFClient
         client = create_autospec(SWFClient, instance=True)
-        return client, WorkflowClient(client)
+        return client, Client(client)
 
     def test_registration(self):
         c, wc = self._get_uut()
