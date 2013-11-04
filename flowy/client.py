@@ -17,6 +17,7 @@ class SWFClient(object):
     def __init__(self, domain, client=None):
         self._client = client if client is not None else Layer1()
         self._domain = domain
+        self._scheduled_activities = []
 
     def register_workflow(self, name, version, task_list,
                           execution_start_to_close=3600,
@@ -154,14 +155,6 @@ class SWFClient(object):
         activity_poller = _repeated_poller(poller)
         return _activity_response(activity_poller())
 
-
-class DecisionClient(object):
-    def __init__(self, client, domain, token, decision_data):
-        self._client = client
-        self._token = token
-        self._decision_data = decision_data
-        self._scheduled_activities = []
-
     def queue_activity(self, call_id, name, version, input,
                        heartbeat=None,
                        schedule_to_close=None,
@@ -181,7 +174,7 @@ class DecisionClient(object):
             }
         ))
 
-    def schedule_activities(self, context=None):
+    def schedule_activities(self, token, context=None):
         d = Layer1Decisions()
         for args, kwargs in self._scheduled_activities:
             d.schedule_activity_task(*args, **kwargs)
@@ -190,45 +183,115 @@ class DecisionClient(object):
         data = d._data
         try:
             self._client.respond_decision_task_completed(
-                task_token=self._token,
-                decisions=data,
-                execution_context=self._decision_data.serialize(context)
+                task_token=token, decisions=data, execution_context=context
             )
         except SWFResponseError:
-            logging.warning("Could not send decisions: %s",
-                            self._token, exc_info=1)
+            logging.warning("Could not send decisions: %s", token, exc_info=1)
             return False
-        self._scheduled_activities = []
+        finally:
+            self._scheduled_activities = []
         return True
 
-    def complete_workflow(self, result):
+    def complete_workflow(self, token, result=None):
         d = Layer1Decisions()
         d.complete_workflow_execution(result=result)
         data = d._data
         try:
             self._client.respond_decision_task_completed(
-                task_token=self._token, decisions=data
+                task_token=token, decisions=data
             )
-            logging.info("Completed workflow: %s %s", self._token, result)
+            logging.info("Completed workflow: %s %s", token, result)
         except SWFResponseError:
-            logging.warning("Could not complete workflow: %s",
-                            self._token, exc_info=1)
+            logging.warning("Could not complete the workflow: %s",
+                            token, exc_info=1)
             return False
         return True
 
-    def fail_workflow(self, reason):
+    def fail_workflow(self, token, reason):
         d = Layer1Decisions()
         d.fail_workflow_execution(reason=reason)
         data = d._data
         try:
             self._client.respond_decision_task_completed(
-                task_token=self._token, decisions=data
+                task_token=token, decisions=data
             )
             logging.info("Terminated workflow: %s", reason)
         except SWFResponseError:
-            logging.warning("Could not terminate workflow.", exc_info=1)
+            logging.warning("Could not fail the workflow: %s",
+                            token, exc_info=1)
             return False
         return True
+
+    def complete_activity(self, token, result):
+        try:
+            self._client.respond_activity_task_completed(
+                task_token=token, result=result
+            )
+            logging.info("Completed activity: %s %r", token, result)
+        except SWFResponseError:
+            logging.warning("Could not complete activity: %s",
+                            token, exc_info=1)
+            return False
+        return True
+
+    def fail_activity(self, token, reason):
+        try:
+            self._client.respond_activity_task_failed(task_token=token,
+                                                      reason=reason)
+            logging.info("Failed activity: %s %s", token, reason)
+        except SWFResponseError:
+            logging.warning("Could not terminate activity: %s",
+                            token, exc_info=1)
+            return False
+        return True
+
+    def heartbeat(self, token):
+        try:
+            self._client.record_activity_task_heartbeat(task_token=token)
+            logging.info("Sent activity heartbeat: %s", token)
+        except SWFResponseError:
+            logging.warning("Error when sending activity heartbeat: %s",
+                            token, exc_info=1)
+            return False
+        return True
+
+
+class DecisionClient(object):
+    def __init__(self, client, token, decision_data):
+        self._client = client
+        self._token = token
+        self._decision_data = decision_data
+
+    def queue_activity(self, call_id, name, version, input,
+                       heartbeat=None,
+                       schedule_to_close=None,
+                       schedule_to_start=None,
+                       start_to_close=None,
+                       task_list=None,
+                       context=None):
+        self._client.queue_activity(
+            call_id=call_id,
+            name=name,
+            version=version,
+            input=input,
+            heartbeat=heartbeat,
+            schedule_to_close=schedule_to_close,
+            schedule_to_start=schedule_to_start,
+            start_to_close=start_to_close,
+            task_list=task_list,
+            context=context
+        )
+
+    def schedule_activities(self, context=None):
+        return self._client.schedule_activities(
+            token=self._token, context=self._decision_data.serialize(context)
+        )
+
+    def complete(self, result):
+        return self._client.complete_workflow(token=self._token, result=result)
+
+    def fail(self, reason):
+        return self._client.fail_workflow(token=self._token, reason=reason)
 
 
 class ActivityTask(object):
@@ -242,15 +305,7 @@ class ActivityTask(object):
         Returns a boolean indicating the success of the operation.
 
         """
-        try:
-            self.client.respond_activity_task_completed(task_token=self._token,
-                                                        result=result)
-            logging.info("Completed activity: %s %r", self._token, result)
-        except SWFResponseError:
-            logging.warning("Could not complete activity: %s",
-                            self._token, exc_info=1)
-            return False
-        return True
+        return self._client.complete_activity(token=self._token, result=result)
 
     def fail(self, reason):
         """ Signal the failure of the activity for the specified reason.
@@ -258,15 +313,7 @@ class ActivityTask(object):
         Returns a boolean indicating the success of the operation.
 
         """
-        try:
-            self.client.respond_activity_task_failed(task_token=self._token,
-                                                     reason=reason)
-            logging.info("Terminated activity: %s %s", self._token, reason)
-        except SWFResponseError:
-            logging.warning("Could not terminate activity: %s",
-                            self._token, exc_info=1)
-            return False
-        return True
+        return self._client.fail_activity(token=self._token, reason=reason)
 
     def heartbeat(self):
         """ Report that the activity is still making progress.
@@ -276,14 +323,7 @@ class ActivityTask(object):
         progress. In the latter case the activity execution should be stopped.
 
         """
-        try:
-            self._client.record_activity_task_heartbeat(task_token=self._token)
-            logging.info("Sent activity heartbeat: %s", self._token)
-        except SWFResponseError:
-            logging.warning("Error when sending activity heartbeat: %s",
-                            self._token, exc_info=1)
-            return False
-        return True
+        return self._client.heartbeat(token=self._token)
 
 
 class Decision(object):
@@ -364,9 +404,9 @@ class Decision(object):
         All activities previously queued by :meth:`queue_activity` will be
         scheduled within the workflow. An optional textual *context* can be set
         and will be available in subsequent decisions using
-        :meth:`global_context`.  Returns a boolean indicating the success of
-        the operation. On success the internal collection of scheduled
-        activities will be cleared.
+        :meth:`global_context`. Returns a boolean indicating the success of
+        the operation. The internal collection of scheduled
+        activities will always be cleared when calling this method.
         """
         return self._client.schedule_activities(
             self._context.serialize(context)
@@ -379,7 +419,7 @@ class Decision(object):
         the success of the operation.
 
         """
-        return self._client.complete_workflow(result)
+        return self._client.complete(result)
 
     def fail(self, reason):
         """ Signals the termination of the workflow.
@@ -392,7 +432,7 @@ class Decision(object):
         Returns a boolean indicating the success of the operation.
 
         """
-        return self._client.fail_workflow(reason)
+        return self._client.fail(reason)
 
     def global_context(self, default=None):
         """ Access the global context that was set by
