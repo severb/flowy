@@ -25,6 +25,10 @@ class Activity(object):
 
         Gets a *heartbeat* callable as the first argument.
 
+        Use the heartbeat to send regular updates from the activity. If the
+        heartbeat returns a false value the activity should be aborted after an
+        optional cleanup since one of its timeout counters was exceeded.
+
         """
         raise NotImplemented()
 
@@ -54,13 +58,3 @@ class Activity(object):
     def serialize_activity_result(result):
         """ Serialize the given *result*. """
         return json.dumps(result)
-
-    def heartbeat(self):
-        """ Use the heartbeat to send regular updates from activities.
-
-        If the heartbeat returns a false value the activity should be aborted
-        after an optional cleanup since one of its timeout counters was
-        exceeded.
-
-        """
-        raise RuntimeError('The heartbeat is unbound.')

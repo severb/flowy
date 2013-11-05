@@ -33,9 +33,64 @@ class Result(object):
         return self._result
 
 
+class JSONExecutionHistory(object):
+    def __init__(self, context=None):
+        self._running = set()
+        self._timedout = set()
+        self._results = {}
+        self._errors = {}
+        if context is not None:
+            json_ctx = json.loads(context)
+            running, timedout, self._results, self._errors = json_ctx
+            self._running = set(running)
+            self._timedout = set(timedout)
+
+    def activity_scheduled(self, call_id):
+        if call_id in self._timedout:
+            self._timedout.remove(call_id)
+        self._running.add(call_id)
+
+    def activity_completed(self, call_id, result):
+        self._running.remove(call_id)
+        self._results[call_id] = result
+
+    def activity_failed(self, call_id, reason):
+        self._running.remove(call_id)
+        self._errors[call_id] = reason
+
+    def activity_timedout(self, call_id):
+        self._running.remove(call_id)
+        self._timedout.add(call_id)
+
+    def call_running(self, call_id):
+        return call_id in self._running
+
+    def call_timedout(self, call_id):
+        return call_id in self._timedout
+
+    def call_error(self, call_id, default=None):
+        return self._errors.get(call_id, default)
+
+    def call_result(self, call_id, default=None):
+        return self._results.get(call_id, default)
+
+    def serialize(self):
+        data = (
+            list(self._running),
+            list(self._timedout),
+            self._results,
+            self._errors
+        )
+        return json.dumps(data)
+
+
 class WorkflowExecution(object):
-    def __init__(self, decision):
+    def __init__(self, decision, execution_history):
+        self.fail = decision.fail
+
         self._decision = decision
+        self._exec_history = execution_history
+
         default = _ActivityOptions(
             heartbeat=None,
             schedule_to_close=None,
@@ -45,6 +100,8 @@ class WorkflowExecution(object):
             retry=3
         )
         self._options_stack = [default]
+        self._error_handling_stack = [False]
+        self._call_id = '0'
 
     @contextmanager
     def options(self, heartbeat=None, schedule_to_close=None,
@@ -67,11 +124,7 @@ class WorkflowExecution(object):
         if error_handling is not None:
             self._error_handling_stack.pop()
 
-    @property
-    def _current_options(self):
-        return self._options_stack[-1]
-
-    def queue_activity(self, call_id, name, version, input,
+    def queue_activity(self, name, version, input,
                        heartbeat=None, schedule_to_close=None,
                        schedule_to_start=None, start_to_close=None,
                        task_list=None, retry=3):
@@ -86,8 +139,12 @@ class WorkflowExecution(object):
         # Context settings have the highest priority,
         # even higher than the ones sent as arguments in this method!
         options = activity_options.update_with(self._current_options)
-        self._decision.queue_activity(
-            call_id=call_id,
+        retry = options.retry
+        prev_retry = self._decision.activity_context(self._call_id)
+        if prev_retry is not None:
+            retry = int(prev_retry) - 1
+        return self._decision.queue_activity(
+            call_id=self._call_id,
             name=name,
             version=version,
             input=input,
@@ -96,8 +153,33 @@ class WorkflowExecution(object):
             schedule_to_start=options.schedule_to_start,
             start_to_close=options.start_to_close,
             task_list=options.task_list,
-            context=str(options.retry)
+            context=str(retry)
         )
+
+    def next_call(self):
+        self._call_id = str(int(self._call_id) + 1)
+
+    def current_call_running(self):
+        return self._exec_history.call_running(self._call_id)
+
+    def current_call_timedout(self):
+        return self._exec_history.call_timedout(self._call_id)
+
+    def current_call_error(self):
+        return self._exec_history.call_error(self._call_id)
+
+    def current_call_result(self):
+        return self._exec_history.call_result(self._call_id)
+
+    def should_retry(self):
+        return int(self._decision.activity_context(self._call_id, 0)) > 0
+
+    def error_handling(self):
+        return self._error_handling_stack[-1]
+
+    @property
+    def _current_options(self):
+        return self._options_stack[-1]
 
 
 class BoundInstance(object):
@@ -129,12 +211,12 @@ class Workflow(object):
         :meth:`deserialize_workflow_input`, the :meth:`run` method is executed,
         result is serialized with :meth:`serialize_workflow_result` and
         returned.
-        Whenever the workflow is resumed, the call id counter is reset.
 
         """
 
-        wc = WorkflowExecution(decision)
-        decision.dispatch_new_events(wc)
+        execution_history = JSONExecutionHistory(decision.global_context())
+        decision.dispatch_new_events(execution_history)
+        wc = WorkflowExecution(decision, execution_history)
 
         remote = BoundInstance(self, wc)
 
@@ -142,12 +224,14 @@ class Workflow(object):
         try:
             result = self.run(remote, *args, **kwargs)
         except _SyncNeeded:
-            result = None
+            decision.schedule_activities(wc.serialize())
         except Exception as e:
             decision.fail(e.message)
         else:
             if wc.nothing_running() and wc.nothing_scheduled():
                 decision.complete(self.serialize_workflow_result(result))
+            else:
+                decision.schedule_activities(wc.serialize())
 
     @staticmethod
     def deserialize_workflow_input(data):
@@ -173,15 +257,10 @@ class ActivityProxy(object):
     manner.
 
     """
-    def __init__(
-        self, name, version,
-        heartbeat=None,
-        schedule_to_close=None,
-        schedule_to_start=None,
-        start_to_close=None,
-        task_list=None,
-        retry=3
-    ):
+    def __init__(self, name, version,
+                 heartbeat=None, schedule_to_close=None,
+                 schedule_to_start=None, start_to_close=None,
+                 task_list=None, retry=3):
         self.name = name
         self.version = version
         self.heartbeat = heartbeat
@@ -190,16 +269,6 @@ class ActivityProxy(object):
         self.start_to_close = start_to_close
         self.task_list = task_list
         self.retry = retry
-
-    def __get__(self, obj, objtype=None):
-        if obj is None:
-            return self
-        # Cache the returned proxy for this.f1 is this.f1 to hold.
-        proxy_key = (self.name, self.version)
-        if proxy_key not in obj._proxy_cache:
-            proxy = self._make_proxy(obj)
-            obj._proxy_cache[proxy_key] = proxy
-        return obj._proxy_cache[proxy_key]
 
     @staticmethod
     def serialize_activity_input(*args, **kwargs):
@@ -212,84 +281,69 @@ class ActivityProxy(object):
         return json.loads(result)
 
     @staticmethod
-    def _has_placeholders(args, kwargs):
+    def _any_placeholders(args, kwargs):
         a = list(args) + list(kwargs.items())
-        return any(
-            r._is_placeholder() for r in a if isinstance(r, MaybeResult)
-        )
+        return any(isinstance(r, Placeholder) for r in a)
 
     @staticmethod
-    def _get_args_error(args, kwargs):
+    def _args_error(args, kwargs):
         a = list(args) + list(kwargs.items())
-        for r in filter(lambda x: isinstance(x, MaybeResult), a):
+        errs = list(filter(lambda x: isinstance(x, Error), a))[0]
+        if errs:
+            return errs[0]
+
+    def _queue(self, workflow_execution, input):
+        return workflow_execution.queue_activity(
+            name=self.name,
+            version=self.version,
+            input=input,
+            heartbeat=self.heartbeat,
+            schedule_to_close=self.schedule_to_close,
+            schedule_to_start=self.schedule_to_start,
+            start_to_close=self.start_to_close,
+            task_list=self.task_list,
+            retry=self.retry
+        )
+
+    def __call__(self, wf_exec, *args, **kwargs):
+        wf_exec.next_call()
+
+        err = self._args_error(args, kwargs)
+        if err is not None:
             try:
-                r.result()
+                err.result()
             except ActivityError as e:
-                return e.message
+                wf_exec.fail(
+                    'ActivityProxy called with error result: %s' % e.message
+                )
+                return Placeholder()
 
-    def _make_proxy(self, workflow):
+        if self._any_placeholders(args, kwargs):
+            return Placeholder()
 
-        def proxy(*args, **kwargs):
-            call_id = workflow._next_call_id()
-            context = workflow._context
+        if wf_exec.current_call_running():
+            return Placeholder()
 
-            if context.is_activity_timedout(call_id):
-                if context.should_retry(call_id):
-                    input = self.serialize_activity_input(*args, **kwargs)
-                    workflow._queue_activity(
-                        call_id,
-                        self.name,
-                        self.version,
-                        input,
-                        self.heartbeat,
-                        self.schedule_to_close,
-                        self.schedule_to_start,
-                        self.start_to_close,
-                        self.task_list,
-                        self.retry
-                    )
-                    return MaybeResult()
-                else:
-                    if workflow._manual_exception_handling:
-                        return MaybeResult(ActivityTimedout(), is_error=True)
-                    else:
-                        raise _UnhandledActivityError("Activity timed out.")
+        if wf_exec.current_call_timedout():
+            if wf_exec.should_retry():
+                input = self.serialize_activity_input(*args, **kwargs)
+                self._queue(wf_exec, input)
+                return Placeholder()
+            else:
+                if wf_exec.error_handling():
+                    return Timeout()
+                wf_exec.fail('An activity timed out.')
+                return Placeholder()
 
-            sentinel = object()
-            result = context.activity_result(call_id, sentinel)
-            error_msg = context.activity_error(call_id, sentinel)
+        error_message = wf_exec.current_call_error()
+        if error_message is not None:
+            if wf_exec.error_handling():
+                return Error(error_message)
+            wf_exec.fail('Error in activity: %s' % error_message)
+            return Placeholder()
 
-            if result is sentinel and error_msg is sentinel:
-                args_error = self._get_args_error(args, kwargs)
-                if args_error:
-                    raise _UnhandledActivityError(
-                        'Error when calling activity: %s' % args_error
-                    )
-                placeholders = self._has_placeholders(args, kwargs)
-                scheduled = context.is_activity_running(call_id)
-                if not placeholders and not scheduled:
-                    input = self.serialize_activity_input(*args, **kwargs)
-                    workflow._queue_activity(
-                        call_id,
-                        self.name,
-                        self.version,
-                        input,
-                        self.heartbeat,
-                        self.schedule_to_close,
-                        self.schedule_to_start,
-                        self.start_to_close,
-                        self.task_list,
-                        self.retry
-                    )
-                return MaybeResult()
-            if error_msg is not sentinel:
-                if workflow._manual_exception_handling:
-                    return MaybeResult(ActivityError(error_msg), is_error=True)
-                else:
-                    raise _UnhandledActivityError(error_msg)
-            return MaybeResult(self.deserialize_activity_result(result))
-
-        return proxy
+        result = wf_exec.current_call_result()
+        return Result(result)
 
 
 _AOBase = namedtuple(
