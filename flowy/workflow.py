@@ -251,8 +251,6 @@ class Workflow(object):
             # that blocked us in the first place.
             pass
         except Exception as e:
-            import logging
-            logging.warning(e, exc_info=1)
             decision.fail(e.message)
             return
 
