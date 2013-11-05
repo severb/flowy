@@ -41,8 +41,7 @@ class Activity(object):
         """
         args, kwargs = self.deserialize_activity_input(input)
         try:
-            with self._bind_to(activity_task):
-                result = self.run(activity_task.heartbeat, *args, **kwargs)
+            result = self.run(activity_task.heartbeat, *args, **kwargs)
         except Exception as e:
             activity_task.fail(e.message)
         else:

@@ -18,7 +18,7 @@ class DecisionPollingTest(TestCaseNoLogging):
         self.assertEquals(type(first), type(second))
 
     def test_decision_event_activity_scheduled(self):
-        from flowy.client import _decision_event, _ActivityScheduled
+        from flowy.swf import _decision_event, _ActivityScheduled
         event = _decision_event({
             'eventType': 'ActivityTaskScheduled',
             'eventId': 'event_id',
@@ -30,7 +30,7 @@ class DecisionPollingTest(TestCaseNoLogging):
                                                          call_id='call_id'))
 
     def test_decision_event_acitivity_completed(self):
-        from flowy.client import _decision_event, _ActivityCompleted
+        from flowy.swf import _decision_event, _ActivityCompleted
         event = _decision_event({
             'eventType': 'ActivityTaskCompleted',
             'activityTaskCompletedEventAttributes': {
@@ -42,7 +42,7 @@ class DecisionPollingTest(TestCaseNoLogging):
                                                          result='res'))
 
     def test_decision_event_acitivity_failed(self):
-        from flowy.client import _decision_event, _ActivityFailed
+        from flowy.swf import _decision_event, _ActivityFailed
         event = _decision_event({
             'eventType': 'ActivityTaskFailed',
             'activityTaskFailedEventAttributes': {
@@ -54,7 +54,7 @@ class DecisionPollingTest(TestCaseNoLogging):
                                                       reason='reas'))
 
     def test_decision_event_acitivity_timedout(self):
-        from flowy.client import _decision_event, _ActivityTimedout
+        from flowy.swf import _decision_event, _ActivityTimedout
         event = _decision_event({
             'eventType': 'ActivityTaskTimedOut',
             'activityTaskTimedOutEventAttributes': {
@@ -64,7 +64,7 @@ class DecisionPollingTest(TestCaseNoLogging):
         self.assertTypedEquals(event, _ActivityTimedout(event_id='event_id'))
 
     def test_decision_event_workflow_started(self):
-        from flowy.client import _decision_event, _WorkflowStarted
+        from flowy.swf import _decision_event, _WorkflowStarted
         event = _decision_event({
             'eventType': 'WorkflowExecutionStarted',
             'workflowExecutionStartedEventAttributes': {'input': 'in'},
@@ -72,26 +72,28 @@ class DecisionPollingTest(TestCaseNoLogging):
         self.assertTypedEquals(event, _WorkflowStarted(input='in'))
 
     def test_decision_event_decision_completed(self):
-        from flowy.client import _decision_event, _DecisionCompleted
+        from flowy.swf import _decision_event, _DecisionCompleted
         event = _decision_event({
             'eventType': 'DecisionTaskCompleted',
-            'eventId': 'event_id',
-            'executionContext': 'ctx'
+            'decisionTaskCompletedEventAttributes': {
+                'startedEventId': 'event_id',
+                'executionContext': 'ctx'
+            }
         })
-        self.assertTypedEquals(event, _DecisionCompleted(event_id='event_id',
+        self.assertTypedEquals(event, _DecisionCompleted(started_by='event_id',
                                                          context='ctx'))
 
     def test_decision_page(self):
-        from flowy.client import _decision_page, _DecisionPage
+        from flowy.swf import _decision_page, _DecisionPage
         response = {
             'workflowType': {'name': 'wfname', 'version': 'wfversion'},
             'taskToken': 'token',
             'nextPageToken': 'page_token',
             'previousStartedEventId': 'previous_id',
-            'events': [sentinel.e1, sentinel.e2, sentinel.e3],
+            'events': [sentinel.e1, sentinel.e2, sentinel.e3, sentinel.e4],
         }
         event_maker = Mock()
-        event_maker.side_effect = sentinel.r1, sentinel.r2, sentinel.r3
+        event_maker.side_effect = sentinel.r1, None, sentinel.r2, sentinel.r3
         self.assertTypedEquals(
             _decision_page(response, event_maker=event_maker),
             _DecisionPage(
@@ -105,22 +107,23 @@ class DecisionPollingTest(TestCaseNoLogging):
         )
         event_maker.assert_has_calls([call(sentinel.e1),
                                       call(sentinel.e2),
-                                      call(sentinel.e3)])
+                                      call(sentinel.e3),
+                                      call(sentinel.e4)])
 
     def test_poll_decision_page(self):
         from boto.swf.exceptions import SWFResponseError
-        from flowy.client import _repeated_poller
+        from flowy.swf import _repeated_poller
         valid = {'taskToken': 'token', 'other': 'fields'}
         poller = Mock()
         poller.side_effect = [SWFResponseError(0, 0), {}] * 2 + [valid]
         decision_page = Mock()
         _repeated_poller(poller, page_token='token',
-                         decision_page=decision_page)
+                         resp_klass=decision_page)
         decision_page.assert_called_once_with(valid)
 
     def test_poll_decision_collapsed(self):
-        from flowy.client import _poll_decision_collapsed
-        from flowy.client import _DecisionPage, _DecisionCollapsed
+        from flowy.swf import _poll_decision_collapsed
+        from flowy.swf import _DecisionPage, _DecisionCollapsed
         poller = Mock()
         poller.side_effect = [
             _DecisionPage(name='wfname', version='wfversion', token='token',
@@ -154,10 +157,10 @@ class DecisionPollingTest(TestCaseNoLogging):
         ])
 
     def test_decision_response_first_run(self):
-        from flowy.client import _decision_response, _DecisionResponse
-        from flowy.client import _WorkflowStarted, _DecisionCollapsed
+        from flowy.swf import _decision_response, _DecisionResponse
+        from flowy.swf import _WorkflowStarted, _DecisionCollapsed
         collapsed = _DecisionCollapsed(name='wfname', version='wfversion',
-                                       last_event_id=None, token='token',
+                                       last_event_id=0, token='token',
                                        all_events=[_WorkflowStarted('input')])
         response = _decision_response(collapsed)
         self.assertEquals(
@@ -168,8 +171,8 @@ class DecisionPollingTest(TestCaseNoLogging):
         )
 
     def test_decision_response_nth_run(self):
-        from flowy.client import _decision_response, _DecisionResponse
-        from flowy.client import _DecisionCompleted, _DecisionCollapsed
+        from flowy.swf import _decision_response, _DecisionResponse
+        from flowy.swf import _DecisionCompleted, _DecisionCollapsed
         all_events = [sentinel.e3, sentinel.e2, sentinel.e1,
                       _DecisionCompleted('last_id', 'ctx')]
         collapsed = _DecisionCollapsed(name='wfname', version='wfversion',
@@ -188,7 +191,7 @@ class DecisionPollingTest(TestCaseNoLogging):
 
 class SWFClientTest(TestCaseNoLogging):
     def _get_uut(self, domain='domain'):
-        from flowy.client import SWFClient
+        from flowy.swf import SWFClient
         from boto.swf.layer1 import Layer1
         m = create_autospec(Layer1, instance=True)
         return m, SWFClient(domain, client=m)
@@ -549,7 +552,7 @@ class SWFClientTest(TestCaseNoLogging):
 
 class DecisionClientTest(TestCaseNoLogging):
     def _get_uut(self, token='token'):
-        from flowy.client import DecisionClient, JSONDecisionData, SWFClient
+        from flowy.swf import DecisionClient, JSONDecisionData, SWFClient
         swf = create_autospec(SWFClient, instance=True)
         dd = create_autospec(JSONDecisionData, instance=True)
         return dd, swf, DecisionClient(client=swf, token=token,
@@ -593,7 +596,7 @@ class DecisionClientTest(TestCaseNoLogging):
 
 class JSONDecisionContext(unittest.TestCase):
     def _get_uut(self, context=None):
-        from flowy.client import JSONDecisionContext
+        from flowy.swf import JSONDecisionContext
         return JSONDecisionContext(context)
 
     def test_empty(self):
@@ -631,7 +634,7 @@ class JSONDecisionContext(unittest.TestCase):
 
 class JSONDecisoinData(unittest.TestCase):
     def _get_uut(self, data, first_run=True):
-        from flowy.client import JSONDecisionData
+        from flowy.swf import JSONDecisionData
         if first_run:
             return JSONDecisionData.for_first_run(data)
         return JSONDecisionData(data)
@@ -658,14 +661,14 @@ class JSONDecisoinData(unittest.TestCase):
 
 class DecisionTest(unittest.TestCase):
     def _get_uut(self, events=[]):
-        from flowy.client import Decision
-        from flowy.client import JSONDecisionContext, DecisionClient
+        from flowy.swf import Decision
+        from flowy.swf import JSONDecisionContext, DecisionClient
         cli = create_autospec(DecisionClient, instance=True)
         ctx = create_autospec(JSONDecisionContext, instance=True)
         return cli, ctx, Decision(cli, ctx, events)
 
     def test_event_to_call(self):
-        from flowy.client import _ActivityScheduled
+        from flowy.swf import _ActivityScheduled
         cli, ctx, d = self._get_uut([
             _ActivityScheduled('e1', 'c1'),
             _ActivityScheduled('e2', 'c2'),
@@ -678,28 +681,28 @@ class DecisionTest(unittest.TestCase):
         ])
 
     def test_events_dispatch(self):
-        from flowy.client import _ActivityScheduled, _ActivityTimedout
-        from flowy.client import _ActivityCompleted, _ActivityFailed
+        from flowy.swf import _ActivityScheduled, _ActivityTimedout
+        from flowy.swf import _ActivityCompleted, _ActivityFailed
         cli, ctx, d = self._get_uut([
             _ActivityScheduled('xx', 'yy'),
             _ActivityTimedout('e1'),
             _ActivityCompleted('e2', 'result'),
             _ActivityFailed('e3', 'reason'),
         ])
-        ctx.event_to_call.side_effect = ['c10', 'c11', 'c12']
+        ctx.event_to_call.side_effect = ['c10', 'c11', 'c12', 'c13']
         m = Mock()
         d.dispatch_new_events(m)
         ctx.event_to_call.assert_has_calls([
             call('e1'), call('e2'), call('e3')
         ])
-        m.activity_scheduled.assert_called_once_with('xx')
-        m.activity_timedout.assert_called_once_with('c10')
-        m.activity_completed.assert_called_once_with('c11', 'result')
-        m.activity_failed.assert_called_once_with('c12', 'reason')
+        m.activity_scheduled.assert_called_once_with('c10')
+        m.activity_timedout.assert_called_once_with('c11')
+        m.activity_completed.assert_called_once_with('c12', 'result')
+        m.activity_failed.assert_called_once_with('c13', 'reason')
 
     def test_events_dispatch_to_empty(self):
-        from flowy.client import _ActivityScheduled, _ActivityTimedout
-        from flowy.client import _ActivityCompleted, _ActivityFailed
+        from flowy.swf import _ActivityScheduled, _ActivityTimedout
+        from flowy.swf import _ActivityCompleted, _ActivityFailed
         cli, ctx, d = self._get_uut([
             _ActivityScheduled('xx', 'yy'),
             _ActivityTimedout('e1'),
@@ -731,7 +734,7 @@ class DecisionTest(unittest.TestCase):
 
 class ActivityTaskTest(unittest.TestCase):
     def _get_uut(self, token='token'):
-        from flowy.client import ActivityTask, SWFClient
+        from flowy.swf import ActivityTask, SWFClient
         client = create_autospec(SWFClient, instance=True)
         return client, ActivityTask(client, token=token)
 
@@ -756,7 +759,7 @@ class ActivityTaskTest(unittest.TestCase):
 
 class ClientTest(unittest.TestCase):
     def _get_uut(self):
-        from flowy.client import Client, SWFClient
+        from flowy.swf import Client, SWFClient
         client = create_autospec(SWFClient, instance=True)
         return client, Client(client)
 
@@ -770,7 +773,7 @@ class ClientTest(unittest.TestCase):
         )
 
     def test_empty(self):
-        from flowy.client import _DecisionResponse
+        from flowy.swf import _DecisionResponse
         c, wc = self._get_uut()
         c.poll_decision.return_value = _DecisionResponse(
             name='name',

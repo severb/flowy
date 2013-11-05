@@ -143,17 +143,16 @@ class SWFClient(object):
 
     def poll_decision(self, task_list):
         poller = partial(self._client.poll_for_decision_task,
-                         task_list=task_list, domain=self.domain,
+                         task_list=task_list, domain=self._domain,
                          reverse_order=True)
-        paged_poller = partial(_repeated_poller, poller)
+        paged_poller = partial(_repeated_poller, poller, _decision_page)
         decision_collapsed = _poll_decision_collapsed(paged_poller)
         return _decision_response(decision_collapsed)
 
     def poll_activity(self, task_list):
         poller = partial(self._client.poll_for_activity_task,
-                         task_list=task_list, domain=self.domain)
-        activity_poller = _repeated_poller(poller)
-        return _activity_response(activity_poller())
+                         task_list=task_list, domain=self._domain)
+        return _repeated_poller(poller, _activity_response)
 
     def queue_activity(self, call_id, name, version, input,
                        heartbeat=None,
@@ -453,7 +452,8 @@ class Decision(object):
 
     def _dispatch_activity_scheduled(self, event, obj):
         meth = 'activity_scheduled'
-        self._dispatch_if_exists(obj, meth, event.event_id)
+        call_id = self._context.event_to_call(event.event_id)
+        self._dispatch_if_exists(obj, meth, call_id)
 
     def _dispatch_activity_completed(self, event, obj):
         meth = 'activity_completed'
@@ -615,7 +615,7 @@ class Client(object):
 
         """
         version = str(version)
-        reg_successful = self._client.register_workflow(
+        reg_successful = self._client.register_activity(
             name=name,
             version=version,
             task_list=task_list,
@@ -703,23 +703,25 @@ def _decision_event(event):
         input = event[WESEA]['input']
         return _WorkflowStarted(input)
     elif event_type == 'DecisionTaskCompleted':
-        event_id = event['eventId']
-        context = event['executionContext']
-        return _DecisionCompleted(event_id, context)
+        DTCEA = 'decisionTaskCompletedEventAttributes'
+        context = event[DTCEA]['executionContext']
+        started_by = event[DTCEA]['startedEventId']
+        return _DecisionCompleted(started_by, context)
 
 
 def _decision_page(response, event_maker=_decision_event):
+    events = [event_maker(e) for e in response['events']]
     return _DecisionPage(
         name=response['workflowType']['name'],
         version=response['workflowType']['version'],
         token=response['taskToken'],
         next_page_token=response.get('nextPageToken'),
         last_event_id=response.get('previousStartedEventId'),
-        events=[event_maker(e) for e in response['events']],
+        events=filter(None, events)
     )
 
 
-def _repeated_poller(poller, page_token=None, decision_page=_decision_page):
+def _repeated_poller(poller, resp_klass, page_token=None):
     response = {}
     while 'taskToken' not in response or not response['taskToken']:
         try:
@@ -729,7 +731,7 @@ def _repeated_poller(poller, page_token=None, decision_page=_decision_page):
                 response = poller()
         except (IOError, SWFResponseError):
             logging.warning("Unknown error when pulling decision.", exc_info=1)
-    return decision_page(response)
+    return resp_klass(response)
 
 
 def _poll_decision_collapsed(poller):
@@ -760,7 +762,7 @@ def _poll_decision_collapsed(poller):
 
 
 def _decision_response(decision_collapsed):
-    first_run = decision_collapsed.last_event_id is None
+    first_run = decision_collapsed.last_event_id == 0
     if first_run:
         # The first decision is always just after a workflow started and at
         # this point this should also be first event in the history but it may
@@ -781,7 +783,7 @@ def _decision_response(decision_collapsed):
             new_events.append(event)
         else:
             raise AssertionError('Last decision was not found.')
-        assert event.event_id == decision_collapsed.last_event_id
+        assert event.started_by == decision_collapsed.last_event_id
         data = event.context
 
     return _DecisionResponse(
@@ -824,7 +826,10 @@ _ActivityCompleted = namedtuple('_ActivityCompleted', ['event_id', 'result'])
 _ActivityFailed = namedtuple('_ActivityFailed', ['event_id', 'reason'])
 _ActivityTimedout = namedtuple('_ActivityTimedout', ['event_id'])
 _WorkflowStarted = namedtuple('_WorkflowStarted', ['input'])
-_DecisionCompleted = namedtuple('_DecisionCompleted', ['event_id', 'context'])
+_DecisionCompleted = namedtuple(
+    '_DecisionCompleted',
+    ['started_by', 'context']
+)
 
 
 def _str_or_none(maybe_none):

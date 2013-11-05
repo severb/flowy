@@ -62,6 +62,9 @@ class JSONExecutionHistory(object):
         self._running.remove(call_id)
         self._timedout.add(call_id)
 
+    def any_activity_running(self):
+        return bool(self._running)
+
     def call_running(self, call_id):
         return call_id in self._running
 
@@ -102,7 +105,7 @@ class WorkflowExecution(object):
         self._error_handling_stack = [False]
         self._call_id = '0'
         self._failed = False
-        self._anything_queued = False
+        self._queued = False
 
     @contextmanager
     def options(self, heartbeat=None, schedule_to_close=None,
@@ -129,7 +132,7 @@ class WorkflowExecution(object):
                        heartbeat=None, schedule_to_close=None,
                        schedule_to_start=None, start_to_close=None,
                        task_list=None, retry=3):
-        self._anything_queued = True
+        self._queued = True
         activity_options = _ActivityOptions(
             heartbeat,
             schedule_to_close,
@@ -168,11 +171,11 @@ class WorkflowExecution(object):
     def has_failed(self):
         return self._failed
 
-    def nothing_running(self):
-        return not bool(self._running)
+    def any_activity_running(self):
+        return self._exec_history.any_activity_running()
 
-    def nothing_queued(self):
-        return not self._anything_queued
+    def any_activity_queued(self):
+        return self._queued
 
     def next_call(self):
         self._call_id = str(int(self._call_id) + 1)
@@ -248,6 +251,8 @@ class Workflow(object):
             # that blocked us in the first place.
             pass
         except Exception as e:
+            import logging
+            logging.warning(e, exc_info=1)
             decision.fail(e.message)
             return
 
@@ -256,11 +261,11 @@ class Workflow(object):
         if wc.has_failed():
             return
 
-        if wc.nothing_running() and wc.nothing_queued():
+        if not wc.any_activity_running() and not wc.any_activity_queued():
             decision.complete(self.serialize_workflow_result(result))
             return
 
-        decision.schedule_activities(wc.serialize())
+        decision.schedule_activities(execution_history.serialize())
 
     @staticmethod
     def deserialize_workflow_input(data):
@@ -317,7 +322,7 @@ class ActivityProxy(object):
     @staticmethod
     def _args_error(args, kwargs):
         a = list(args) + list(kwargs.items())
-        errs = list(filter(lambda x: isinstance(x, Error), a))[0]
+        errs = list(filter(lambda x: isinstance(x, Error), a))
         if errs:
             return errs[0]
 
@@ -372,7 +377,11 @@ class ActivityProxy(object):
             return Placeholder()
 
         result = wf_exec.current_call_result()
-        return Result(result)
+        if result is not None:
+            return Result(self.deserialize_activity_result(result))
+
+        self._queue(wf_exec, self.serialize_activity_input(*args, **kwargs))
+        return Placeholder()
 
 
 _AOBase = namedtuple(
