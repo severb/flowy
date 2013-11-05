@@ -171,7 +171,11 @@ As you can see the actual workflow implementation is pretty straight-forward,
 with a few exceptions: the method :meth:`~flowy.workflow.MaybeResult.result`.
 Whenever we want to access the result of an activity, we must do so through the
 aforementioned method. This method is the only synchronization primitive
-available in :app:`Flowy`, and its usage will be explained later on.
+available in :app:`Flowy`, and its usage will be explained later on. An
+activity result must be something that can be serialized using
+:meth:`~flowy.activity.activity.serialize_activity_result`. The default
+serialization method uses JSON. For activities returning more complex
+datatypes, simply override the serialization and deserialization methods.
 
 .. literalinclude:: workflow.py
    :language: python
@@ -211,7 +215,7 @@ So what happens if we add a new activity called ``AddSubstitles`` after the
 
 .. literalinclude:: concurrency_bad_example.py
    :language: python
-   :emphasize-lines: 7, 14
+   :emphasize-lines: 7,14
 
 Notice the ``AddSubtitles`` activity does not depend on any other activities,
 so one might expect it to start at the same time the ``Transcoding`` and
@@ -228,6 +232,44 @@ therefore be scheduled together with the ``MetadataProcessing`` activity.
    possible.
 
 Returning to our example above, if the ``AddSubtitles`` activity would have
-been called before ``MetadataProcessing``, :app:`Flowy` would have had no
-problems scheduling it together with the ``Transcoding`` and
-``ThumbnailGenerator`` activities.
+been called before ``MetadataProcessing``, :app:`Flowy` would have scheduled it
+together with the ``Transcoding`` and ``ThumbnailGenerator`` activities, which
+would have been optimal.
+
+Configuring activities
+----------------------
+
+Our imaginary application is getting more complex, and we need to make our
+activities better tailored for our specific needs. Since the ``Transcoding``
+activity can take a long long time (days, weeks, even months) to complete, we
+want it to report progress with every transcoded megabyte (which should take at
+most 30 seconds), so in case it gets stuck for whatever reason (disk space,
+deadlock, etc), we can handle the failiure accordingly. We also want to ensure
+our activity finishes in 30 minutes (1800 seconds), and in case it doesn't, we
+will transcode the video using an activity that will be processed on a faster
+machine. We also want to make sure our activity will be started within 3
+minutes (120 seconds) from the time it was scheduled.
+
+Luckily, configuring activities is easy and controllable. There are 3 ways to
+configure an activity:
+
+1. When defining the activity, through the decorator:
+
+.. literalinclude:: configurations.py
+   :language: python
+   :lines: 1-9
+   :emphasize-lines: 1,2
+
+2. When defining a :class:`~flowy.workflow.ActivityProxy` in the workflow:
+
+.. literalinclude:: configurations.py
+   :language: python
+   :lines: 12-24
+   :emphasize-lines: 4,5,6,7,8,9,10,11
+
+3. When implementing the workflow itself, via a special context manager:
+
+.. literalinclude:: configurations.py
+   :language: python
+   :lines: 27-38
+   :emphasize-lines: 8,9
