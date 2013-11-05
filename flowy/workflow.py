@@ -102,6 +102,7 @@ class WorkflowExecution(object):
         self._error_handling_stack = [False]
         self._call_id = '0'
         self._failed = False
+        self._anything_queued = False
 
     @contextmanager
     def options(self, heartbeat=None, schedule_to_close=None,
@@ -128,6 +129,7 @@ class WorkflowExecution(object):
                        heartbeat=None, schedule_to_close=None,
                        schedule_to_start=None, start_to_close=None,
                        task_list=None, retry=3):
+        self._anything_queued = True
         activity_options = _ActivityOptions(
             heartbeat,
             schedule_to_close,
@@ -162,6 +164,15 @@ class WorkflowExecution(object):
         if not self._failed:
             self._failed = True
             self._decision.fail(reason)
+
+    def has_failed(self):
+        return self._failed
+
+    def nothing_running(self):
+        return not bool(self._running)
+
+    def nothing_queued(self):
+        return not self._anything_queued
 
     def next_call(self):
         self._call_id = str(int(self._call_id) + 1)
@@ -231,14 +242,25 @@ class Workflow(object):
         try:
             result = self.run(remote, *args, **kwargs)
         except _SyncNeeded:
-            decision.schedule_activities(wc.serialize())
+            # It's ok to pass here since the code that follows won't mistakenly
+            # complete the workflow - nothing_running should always return
+            # False as long as there is at least an activity running: the one
+            # that blocked us in the first place.
+            pass
         except Exception as e:
             decision.fail(e.message)
-        else:
-            if wc.nothing_running() and wc.nothing_scheduled():
-                decision.complete(self.serialize_workflow_result(result))
-            else:
-                decision.schedule_activities(wc.serialize())
+            return
+
+        # If the execution failed return early to avoid attempting to schedule
+        # activities on a failed workflow.
+        if wc.has_failed():
+            return
+
+        if wc.nothing_running() and wc.nothing_queued():
+            decision.complete(self.serialize_workflow_result(result))
+            return
+
+        decision.schedule_activities(wc.serialize())
 
     @staticmethod
     def deserialize_workflow_input(data):
