@@ -86,7 +86,6 @@ class JSONExecutionHistory(object):
 
 class WorkflowExecution(object):
     def __init__(self, decision, execution_history):
-        self.fail = decision.fail
 
         self._decision = decision
         self._exec_history = execution_history
@@ -102,6 +101,7 @@ class WorkflowExecution(object):
         self._options_stack = [default]
         self._error_handling_stack = [False]
         self._call_id = '0'
+        self._failed = False
 
     @contextmanager
     def options(self, heartbeat=None, schedule_to_close=None,
@@ -155,6 +155,13 @@ class WorkflowExecution(object):
             task_list=options.task_list,
             context=str(retry)
         )
+
+    def fail(self, reason):
+        # Potentially this can be called multiple times one one run (i.e. an
+        # activity that was used as argument for other two activities failed)
+        if not self._failed:
+            self._failed = True
+            self._decision.fail(reason)
 
     def next_call(self):
         self._call_id = str(int(self._call_id) + 1)
