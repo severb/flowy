@@ -182,7 +182,7 @@ class WorkflowExecution(object):
         return int(self._decision.activity_context(self._call_id, 0)) > 0
 
     def error_handling(self):
-        return self._error_handling_stack[-1]
+        return bool(self._error_handling_stack[-1])
 
     @property
     def _current_options(self):
