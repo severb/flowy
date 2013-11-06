@@ -1,3 +1,2 @@
-from flowy.tests.test_client import *
-from flowy.tests.test_workflow import *
-from flowy.tests.test_activity import *
+from .test_swf import *
+from .test_activity import *
