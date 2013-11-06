@@ -25,5 +25,11 @@ class PrimeTest(Workflow):
 
 if __name__ == '__main__':
     my_config = make_config('SeversTest')
+
+    # Start a workflow
+    MyPrimeStarter = my_config.workflow_starter('MyPrime', 2)
+    print 'Starting: ', MyPrimeStarter(n=71)
+
+    # Start the workflow loop
     my_config.scan()
     my_config.start_workflow_loop(task_list='prime_task_list')

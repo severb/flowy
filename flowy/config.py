@@ -18,7 +18,7 @@ def activity_config(name, version, task_list,
                     **kwargs):
 
     def wrapper(wrapped):
-        def callback(scanner, name, obj):
+        def callback(scanner, n, obj):
             wrapped_instance = wrapped(**kwargs)
             result = scanner.client.register_activity(
                 activity_runner=wrapped_instance,
@@ -49,7 +49,7 @@ def workflow_config(name, version, task_list,
                     **kwargs):
 
     def wrapper(wrapped):
-        def callback(scanner, name, obj):
+        def callback(scanner, n, obj):
             wrapped_instance = wrapped(**kwargs)
             result = scanner.client.register_workflow(
                 decision_maker=wrapped_instance,
@@ -102,7 +102,7 @@ class ClientConfig(object):
         while 1:
             self._client.dispatch_next_decision(task_list)
 
-    def workflow_starter(self, name, version, task_list):
+    def workflow_starter(self, name, version, task_list=None):
 
         def wf_starter(*args, **kwargs):
             i = self.serialize_workflow_input(*args, **kwargs)
