@@ -1,7 +1,7 @@
-from flowy import Client, Workflow, ActivityProxy
-from flowy.swf import SWFClient
+from flowy import make_config, Workflow, ActivityProxy, workflow_config
 
 
+@workflow_config('MyPrime', 2, 'prime_task_list')
 class PrimeTest(Workflow):
     """
     Checks if a number is prime.
@@ -22,8 +22,8 @@ class PrimeTest(Workflow):
                 return 'not prime'
         return 'prime'
 
-client = Client(SWFClient(domain='SeversTest'))
-client.register_workflow(PrimeTest(), 'MyPrime', 2, 'prime_task_list')
 
-while 1:
-    client.dispatch_next_decision('prime_task_list')
+if __name__ == '__main__':
+    my_config = make_config('SeversTest')
+    my_config.scan()
+    my_config.start_workflow_loop(task_list='prime_task_list')
