@@ -15,5 +15,5 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     zip_safe=False,
-    setup_requires=['boto']  # Fix version number
+    install_requires=['boto', 'venusian']  # Fix version number
 )
