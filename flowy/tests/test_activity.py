@@ -18,12 +18,3 @@ class TestActivity(unittest.TestCase):
             '{"args": [1, "a"], "kwargs": {"a": 1, "b": "b"}}'
         )
         self.assertEquals(([1, "a"], {"a": 1, "b": "b"}), result)
-
-    def test_activity_run(self):
-
-        class MyActivity(self._get_uut()):
-            def run(self, x, y=1):
-                return [x, y]
-
-        r = MyActivity().call('{"args": [1], "kwargs": {"y": 2}}')
-        self.assertEquals('[1, 2]', r)
