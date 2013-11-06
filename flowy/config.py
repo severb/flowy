@@ -92,12 +92,6 @@ class ClientConfig(object):
         while 1:
             self._client.dispatch_next_decision(task_list)
 
-    def start_test_loop(self, task_list):
-        # Only use this for testing!
-        while 1:
-            self._client.dispatch_next_decision(task_list)
-            self._client.dispatch_next_activity(task_list)
-
 
 # Stolen from Pyramid
 
