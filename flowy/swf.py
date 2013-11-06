@@ -10,7 +10,7 @@ from boto.swf.layer1_decisions import Layer1Decisions
 from boto.swf.exceptions import SWFTypeAlreadyExistsError, SWFResponseError
 
 
-__all__ = ['Client']
+__all__ = ['Client', 'SWFClient']
 
 
 class SWFClient(object):
@@ -730,7 +730,7 @@ def _repeated_poller(poller, resp_klass, page_token=None):
             else:
                 response = poller()
         except (IOError, SWFResponseError):
-            logging.warning("Unknown error when pulling decision.", exc_info=1)
+            logging.warning("Unknown error when polling.", exc_info=1)
     return resp_klass(response)
 
 

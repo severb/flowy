@@ -1,7 +1,9 @@
-from flowy import Client, Activity
-from flowy.swf import SWFClient
+from flowy import make_config, Activity, activity_config
 
 
+@activity_config(
+    'NumberDivider', 4, 'div_list', heartbeat=5, start_to_close=60
+)
 class NumberDivider(Activity):
     """
     Divide numbers.
@@ -22,15 +24,7 @@ class NumberDivider(Activity):
         return n % x == 0
 
 
-client = Client(SWFClient(domain='SeversTest'))
-client.register_activity(
-    activity_runner=NumberDivider(),
-    name='NumberDivider',
-    version=4,
-    task_list='div_list',
-    heartbeat=5,
-    start_to_close=60
-)
-
-while 1:
-    client.dispatch_next_activity(task_list='div_list')
+if __name__ == '__main__':
+    my_config = make_config(domain='SeversTest')
+    my_config.scan()
+    my_config.start_activity_loop(task_list='div_list')
