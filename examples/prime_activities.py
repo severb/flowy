@@ -15,12 +15,8 @@ class NumberDivider(Activity):
         for i in range(3):
             time.sleep(3)
             if not heartbeat():
-                print 'abort abort!'
+                print 'cleanup'
                 return
-#         time.sleep(10)
-#         if not self.heartbeat():
-#             print 'abort abort'
-#             return
         return n % x == 0
 
 
