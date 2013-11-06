@@ -1,5 +1,6 @@
 import venusian
 import logging
+import json
 import sys
 
 from .swf import SWFClient, Client
@@ -100,6 +101,19 @@ class ClientConfig(object):
     def start_workflow_loop(self, task_list):
         while 1:
             self._client.dispatch_next_decision(task_list)
+
+    def workflow_starter(self, name, version, task_list):
+
+        def wf_starter(*args, **kwargs):
+            i = self.serialize_workflow_input(*args, **kwargs)
+            return self._client.start_workflow(name=name, version=version,
+                                               task_list=task_list, input=i)
+
+        return wf_starter
+
+    @staticmethod
+    def serialize_workflow_input(*args, **kwargs):
+        return json.dumps({'args': args, 'kwargs': kwargs})
 
 
 # Stolen from Pyramid
