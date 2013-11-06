@@ -1,4 +1,5 @@
 import venusian
+import logging
 import sys
 
 from .swf import SWFClient, Client
@@ -18,7 +19,7 @@ def activity_config(name, version, task_list,
     def wrapper(wrapped):
         def callback(scanner, name, obj):
             wrapped_instance = wrapped(**kwargs)
-            scanner.client.register_activity(
+            result = scanner.client.register_activity(
                 activity_runner=wrapped_instance,
                 name=name,
                 version=version,
@@ -29,6 +30,10 @@ def activity_config(name, version, task_list,
                 start_to_close=start_to_close,
                 descr=descr
             )
+            if not result:
+                logging.critical('Activity already registered with different'
+                                 ' default values.')
+                sys.exit(1)
         venusian.attach(wrapped, callback, category='activity')
         return wrapped
 
@@ -45,7 +50,7 @@ def workflow_config(name, version, task_list,
     def wrapper(wrapped):
         def callback(scanner, name, obj):
             wrapped_instance = wrapped(**kwargs)
-            scanner.client.register_workflow(
+            result = scanner.client.register_workflow(
                 decision_maker=wrapped_instance,
                 name=name,
                 version=version,
@@ -54,6 +59,10 @@ def workflow_config(name, version, task_list,
                 child_policy=child_policy,
                 descr=descr
             )
+            if not result:
+                logging.critical('Workflow already registered with different'
+                                 ' default values.')
+                sys.exit(1)
         venusian.attach(wrapped, callback, category='workflow')
         return wrapped
 

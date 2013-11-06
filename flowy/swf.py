@@ -147,6 +147,9 @@ class SWFClient(object):
                          reverse_order=True)
         paged_poller = partial(_repeated_poller, poller, _decision_page)
         decision_collapsed = _poll_decision_collapsed(paged_poller)
+        # Collapsing decisions pages may fail if some pages are unavailable
+        if decision_collapsed is None:
+            return
         return _decision_response(decision_collapsed)
 
     def poll_activity(self, task_list):
@@ -640,6 +643,9 @@ class Client(object):
 
         """
         decision_response = self._client.poll_decision(task_list)
+        # Polling a decision may fail if some pages are unavailable
+        if decision_response is None:
+            return
         decision_maker_key = decision_response.name, decision_response.version
         decision_maker = self._workflow_registry.get(decision_maker_key)
         if decision_maker is not None:
@@ -721,17 +727,18 @@ def _decision_page(response, event_maker=_decision_event):
     )
 
 
-def _repeated_poller(poller, resp_klass, page_token=None):
+def _repeated_poller(poller, result_klass, retries=-1, **kwargs):
     response = {}
     while 'taskToken' not in response or not response['taskToken']:
         try:
-            if page_token:
-                response = poller(next_page_token=page_token)
-            else:
-                response = poller()
+            response = poller(**kwargs)
         except (IOError, SWFResponseError):
             logging.warning("Unknown error when polling.", exc_info=1)
-    return resp_klass(response)
+        if retries == 0:
+            return
+        else:
+            retries = max(retries - 1, -1)
+    return result_klass(response)
 
 
 def _poll_decision_collapsed(poller):
@@ -745,9 +752,11 @@ def _poll_decision_collapsed(poller):
                 yield event
             if page.next_page_token is None:
                 break
-            # XXX: If a workflow is stopped and a decision page fetching fails
-            # forever we have an infinite loop here!
-            p = poller(page_token=page.next_page_token)
+            # If a workflow is stopped and a decision page fetching fails
+            # forever we avoid infinite loops
+            p = poller(next_page_token=page.next_page_token, retries=3)
+            if p is None:
+                return
             assert (
                 p.name == page.name
                 and p.version == page.version

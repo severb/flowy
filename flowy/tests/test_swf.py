@@ -116,10 +116,21 @@ class DecisionPollingTest(TestCaseNoLogging):
         valid = {'taskToken': 'token', 'other': 'fields'}
         poller = Mock()
         poller.side_effect = [SWFResponseError(0, 0), {}] * 2 + [valid]
-        decision_page = Mock()
+        result_klass = Mock()
         _repeated_poller(poller, page_token='token',
-                         resp_klass=decision_page)
-        decision_page.assert_called_once_with(valid)
+                         result_klass=result_klass)
+        result_klass.assert_called_once_with(valid)
+
+    def test_poll_decision_page_retries(self):
+        from boto.swf.exceptions import SWFResponseError
+        from flowy.swf import _repeated_poller
+        valid = {'taskToken': 'token', 'other': 'fields'}
+        poller = Mock()
+        poller.side_effect = [SWFResponseError(0, 0), {}] * 5 + [valid]
+        result_klass = Mock()
+        result = _repeated_poller(poller, page_token='token',
+                                  result_klass=result_klass, retries=4)
+        self.assertEquals(result, None)
 
     def test_poll_decision_collapsed(self):
         from flowy.swf import _poll_decision_collapsed
@@ -152,8 +163,8 @@ class DecisionPollingTest(TestCaseNoLogging):
         )
         poller.assert_has_calls([
             call(),
-            call(page_token='page_token1'),
-            call(page_token='page_token2')
+            call(retries=3, next_page_token='page_token1'),
+            call(retries=3, next_page_token='page_token2')
         ])
 
     def test_decision_response_first_run(self):
