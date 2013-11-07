@@ -4,7 +4,7 @@ from collections import namedtuple
 from contextlib import contextmanager
 
 
-__all__ = ['Workflow', 'ActivityProxy', 'ActivityError', 'ActivityTimedout']
+__all__ = 'Workflow ActivityProxy WorkflowProxy TaskError TaskTimedout'.split()
 
 
 class Placeholder(object):
@@ -17,12 +17,12 @@ class Error(object):
         self._reason = reason
 
     def result(self):
-        raise ActivityError('Failed inside activity: %s', self._reason)
+        raise TaskError('Failed inside job: %s', self._reason)
 
 
 class Timeout(object):
     def result(self):
-        raise ActivityTimedout('An activity timedout.')
+        raise TaskTimedout('A job timedout.')
 
 
 class Result(object):
@@ -62,6 +62,11 @@ class JSONExecutionHistory(object):
         self._running.remove(call_id)
         self._timedout.add(call_id)
 
+    workflow_started = activity_scheduled
+    workflow_completed = activity_completed
+    workflow_failed = activity_failed
+    workflow_timedout = activity_timedout
+
     def any_activity_running(self):
         return bool(self._running)
 
@@ -93,7 +98,7 @@ class WorkflowExecution(object):
         self._decision = decision
         self._exec_history = execution_history
 
-        default = _ActivityOptions(
+        default = _Options(
             heartbeat=None,
             schedule_to_close=None,
             schedule_to_start=None,
@@ -110,16 +115,19 @@ class WorkflowExecution(object):
     @contextmanager
     def options(self, heartbeat=None, schedule_to_close=None,
                 schedule_to_start=None, start_to_close=None,
-                error_handling=None, task_list=None, retry=None):
+                error_handling=None, task_start_to_close=None,
+                execution_start_to_close=None, task_list=None, retry=None):
         if error_handling is not None:
             self._error_handling_stack.append(error_handling)
-        options = _ActivityOptions(
-            heartbeat,
-            schedule_to_close,
-            schedule_to_start,
-            start_to_close,
-            task_list,
-            retry
+        options = _Options(
+            heartbeat=heartbeat,
+            schedule_to_close=schedule_to_close,
+            schedule_to_start=schedule_to_start,
+            start_to_close=start_to_close,
+            task_start_to_close=task_start_to_close,
+            execution_start_to_close=execution_start_to_close,
+            task_list=task_list,
+            retry=retry
         )
         new_options = self._current_options.update_with(options)
         self._options_stack.append(new_options)
@@ -133,13 +141,13 @@ class WorkflowExecution(object):
                        schedule_to_start=None, start_to_close=None,
                        task_list=None, retry=3):
         self._queued = True
-        activity_options = _ActivityOptions(
-            heartbeat,
-            schedule_to_close,
-            schedule_to_start,
-            start_to_close,
-            task_list,
-            retry
+        activity_options = _Options(
+            heartbeat=heartbeat,
+            schedule_to_close=schedule_to_close,
+            schedule_to_start=schedule_to_start,
+            start_to_close=start_to_close,
+            task_list=task_list,
+            retry=retry
         )
         # Context settings have the highest priority,
         # even higher than the ones sent as arguments in this method!
@@ -157,6 +165,33 @@ class WorkflowExecution(object):
             schedule_to_close=options.schedule_to_close,
             schedule_to_start=options.schedule_to_start,
             start_to_close=options.start_to_close,
+            task_list=options.task_list,
+            context=str(retry)
+        )
+
+    def queue_childworkflow(self, name, version, input,
+                            task_start_to_close=None,
+                            execution_start_to_close=None,
+                            task_list=None, retry=3):
+        self._queued = True
+        workflow_options = _Options(
+            task_start_to_close=task_start_to_close,
+            execution_start_to_close=execution_start_to_close,
+            task_list=task_list,
+            retry=retry
+        )
+        options = workflow_options.update_with(self._current_options)
+        retry = options.retry
+        prev_retry = self._decision.workflow_context(self._call_id)
+        if prev_retry is not None:
+            retry = int(prev_retry) - 1
+        return self._decision.queue_childworkflow(
+            call_id=self._call_id,
+            name=name,
+            version=version,
+            input=input,
+            task_start_to_close=options.task_start_to_close,
+            execution_start_to_close=options.execution_start_to_close,
             task_list=options.task_list,
             context=str(retry)
         )
@@ -211,8 +246,8 @@ class BoundInstance(object):
 
     def __getattr__(self, activity_name):
         activity_proxy = getattr(self._workflow, activity_name)
-        if not isinstance(activity_proxy, ActivityProxy):
-            raise AttributeError('%s is not an ActivityProxy instance')
+        if not isinstance(activity_proxy, BaseProxy):
+            raise AttributeError('%s is not a Proxy instance')
         return partial(activity_proxy, self._workflow_execution)
 
 
@@ -263,7 +298,7 @@ class Workflow(object):
             decision.complete(self.serialize_workflow_result(result))
             return
 
-        decision.schedule_activities(execution_history.serialize())
+        decision.schedule_queued(execution_history.serialize())
 
     @staticmethod
     def deserialize_workflow_input(data):
@@ -277,7 +312,64 @@ class Workflow(object):
         return json.dumps(result)
 
 
-class ActivityProxy(object):
+class BaseProxy(object):
+    @staticmethod
+    def serialize_input(*args, **kwargs):
+        """ Serialize the given activity *args* and *kwargs*. """
+        return json.dumps({'args': args, 'kwargs': kwargs})
+
+    @staticmethod
+    def deserialize_result(result):
+        """ Deserialize the given *result*. """
+        return json.loads(result)
+
+    def _queue(self, workflow_execution, input):
+        raise NotImplemented()
+
+    def __call__(self, wf_exec, *args, **kwargs):
+        wf_exec.next_call()
+
+        err = _args_error(args, kwargs)
+        if err is not None:
+            try:
+                err.result()
+            except TaskError as e:
+                wf_exec.fail('Proxy called with error result: %s' % e.message)
+                return Placeholder()
+
+        if _any_placeholders(args, kwargs):
+            return Placeholder()
+
+        if wf_exec.current_call_running():
+            return Placeholder()
+
+        if wf_exec.current_call_timedout():
+            if wf_exec.should_retry():
+                input = self.serialize_input(*args, **kwargs)
+                self._queue(wf_exec, input)
+                return Placeholder()
+            else:
+                if wf_exec.error_handling():
+                    return Timeout()
+                wf_exec.fail('An activity timed out.')
+                return Placeholder()
+
+        error_message = wf_exec.current_call_error()
+        if error_message is not None:
+            if wf_exec.error_handling():
+                return Error(error_message)
+            wf_exec.fail('Error in activity: %s' % error_message)
+            return Placeholder()
+
+        result = wf_exec.current_call_result()
+        if result is not None:
+            return Result(self.deserialize_result(result))
+
+        self._queue(wf_exec, self.serialize_input(*args, **kwargs))
+        return Placeholder()
+
+
+class ActivityProxy(BaseProxy):
     """ The object that represents an activity from the workflows point of
     view.
 
@@ -302,28 +394,6 @@ class ActivityProxy(object):
         self.task_list = task_list
         self.retry = retry
 
-    @staticmethod
-    def serialize_activity_input(*args, **kwargs):
-        """ Serialize the given activity *args* and *kwargs*. """
-        return json.dumps({'args': args, 'kwargs': kwargs})
-
-    @staticmethod
-    def deserialize_activity_result(result):
-        """ Deserialize the given *result*. """
-        return json.loads(result)
-
-    @staticmethod
-    def _any_placeholders(args, kwargs):
-        a = list(args) + list(kwargs.items())
-        return any(isinstance(r, Placeholder) for r in a)
-
-    @staticmethod
-    def _args_error(args, kwargs):
-        a = list(args) + list(kwargs.items())
-        errs = list(filter(lambda x: isinstance(x, Error), a))
-        if errs:
-            return errs[0]
-
     def _queue(self, workflow_execution, input):
         return workflow_execution.queue_activity(
             name=self.name,
@@ -337,78 +407,71 @@ class ActivityProxy(object):
             retry=self.retry
         )
 
-    def __call__(self, wf_exec, *args, **kwargs):
-        wf_exec.next_call()
 
-        err = self._args_error(args, kwargs)
-        if err is not None:
-            try:
-                err.result()
-            except ActivityError as e:
-                wf_exec.fail(
-                    'ActivityProxy called with error result: %s' % e.message
-                )
-                return Placeholder()
+class WorkflowProxy(BaseProxy):
+    def __init__(self, name, version,
+                 task_start_to_close=None, execution_start_to_close=None,
+                 task_list=None, retry=3):
+        self.name = name
+        self.version = version
+        self.task_start_to_close = task_start_to_close
+        self.execution_start_to_close = execution_start_to_close
+        self.task_list = task_list
+        self.retry = retry
 
-        if self._any_placeholders(args, kwargs):
-            return Placeholder()
-
-        if wf_exec.current_call_running():
-            return Placeholder()
-
-        if wf_exec.current_call_timedout():
-            if wf_exec.should_retry():
-                input = self.serialize_activity_input(*args, **kwargs)
-                self._queue(wf_exec, input)
-                return Placeholder()
-            else:
-                if wf_exec.error_handling():
-                    return Timeout()
-                wf_exec.fail('An activity timed out.')
-                return Placeholder()
-
-        error_message = wf_exec.current_call_error()
-        if error_message is not None:
-            if wf_exec.error_handling():
-                return Error(error_message)
-            wf_exec.fail('Error in activity: %s' % error_message)
-            return Placeholder()
-
-        result = wf_exec.current_call_result()
-        if result is not None:
-            return Result(self.deserialize_activity_result(result))
-
-        self._queue(wf_exec, self.serialize_activity_input(*args, **kwargs))
-        return Placeholder()
+    def _queue(self, workflow_execution, input):
+        return workflow_execution.queue_childworkflow(
+            name=self.name,
+            version=self.version,
+            input=input,
+            task_start_to_close=self.task_start_to_close,
+            execution_start_to_close=self.execution_start_to_close,
+            task_list=self.task_list,
+            retry=self.retry
+        )
 
 
-_AOBase = namedtuple(
-    typename='_ActivityOptions',
+_OBase = namedtuple(
+    typename='_Options',
     field_names=[
         'heartbeat',
         'schedule_to_close',
         'schedule_to_start',
         'start_to_close',
+        'task_start_to_close',
+        'execution_start_to_close',
         'task_list',
         'retry'
     ]
 )
 
 
-class _ActivityOptions(_AOBase):
+class _Options(_OBase):
     def update_with(self, other):
         t_pairs = zip(other, self)
         updated_fields = [x if x is not None else y for x, y in t_pairs]
-        return _ActivityOptions(*updated_fields)
+        return _Options(*updated_fields)
 
 
 class _SyncNeeded(Exception):
     """Stops the workflow execution when an activity result is unavailable."""
 
 
-class ActivityError(RuntimeError):
-    """Raised if manual handling is ON if there is a problem in an activity."""
+class TaskError(RuntimeError):
+    """Raised if manual handling is ON if there is a problem in a task."""
 
 
-class ActivityTimedout(ActivityError):
-    """Raised if manual handling is ON on activity timeout."""
+class TaskTimedout(TaskError):
+    """Raised if manual handling is ON on task timeout."""
+
+
+def _any_placeholders(args, kwargs):
+    a = list(args) + list(kwargs.items())
+    return any(isinstance(r, Placeholder) for r in a)
+
+
+def _args_error(args, kwargs):
+    a = list(args) + list(kwargs.items())
+    errs = list(filter(lambda x: isinstance(x, Error), a))
+    if errs:
+        return errs[0]
