@@ -181,7 +181,7 @@ class SWFClient(object):
                             execution_start_to_close=None,
                             task_list=None):
         self._scheduled_workflows.append((
-            (name, str(version), str(version)),
+            (name, str(version), str(workflow_id)),
             {
                 'execution_start_to_close_timeout': execution_start_to_close,
                 'task_start_to_close_timeout': task_start_to_close,
@@ -210,6 +210,7 @@ class SWFClient(object):
             return False
         finally:
             self._scheduled_activities = []
+            self._scheduled_workflows = []
         return True
 
     def complete_workflow(self, token, result=None):
@@ -778,6 +779,7 @@ class Client(object):
 
 
 def _decision_event(event):
+    print event
     event_type = event['eventType']
 
     if event_type == 'ActivityTaskScheduled':
@@ -815,22 +817,24 @@ def _decision_event(event):
         return _DecisionCompleted(started_by, context)
 
     elif event_type == 'ChildWorkflowExecutionStarted':
-        CWESEA = 'ChildWorkflowExecutionStartedEventAttributes'
+        CWESEA = 'childWorkflowExecutionStartedEventAttributes'
         workflow_id = event[CWESEA]['workflowExecution']['workflowId']
         return _ChildWorkflowStarted(workflow_id)
 
     elif event_type == 'ChildWorkflowExecutionCompleted':
-        CWECEA = 'ChildWorkflowExecutionCompletedEventAttributes'
+        CWECEA = 'childWorkflowExecutionCompletedEventAttributes'
         workflow_id = event[CWECEA]['workflowExecution']['workflowId']
-        return _ChildWorkflowCompleted(workflow_id, event['result'])
+        result = event[CWECEA]['result']
+        return _ChildWorkflowCompleted(workflow_id, result)
 
     elif event_type == 'ChildWorkflowExecutionFailed':
-        CWEFEA = 'ChildWorkflowExecutionFailedEventAttributes'
+        CWEFEA = 'childWorkflowExecutionFailedEventAttributes'
         workflow_id = event[CWEFEA]['workflowExecution']['workflowId']
-        return _ChildWorkflowFailed(workflow_id, event['reason'])
+        reason = event[CWEFEA]['reason']
+        return _ChildWorkflowFailed(workflow_id, reason)
 
     elif event_type == 'ChildWorkflowExecutionTimedOut':
-        CWETOEA = 'ChildWorkflowExecutionTimedOutEventAttributes'
+        CWETOEA = 'childWorkflowExecutionTimedOutEventAttributes'
         workflow_id = event[CWETOEA]['workflowExecution']['workflowId']
         return _ChildWorkflowTimedout(workflow_id)
 

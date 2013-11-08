@@ -103,6 +103,8 @@ class WorkflowExecution(object):
             schedule_to_close=None,
             schedule_to_start=None,
             start_to_close=None,
+            task_start_to_close=None,
+            execution_start_to_close=None,
             task_list=None,
             retry=3
         )
@@ -146,6 +148,8 @@ class WorkflowExecution(object):
             schedule_to_close=schedule_to_close,
             schedule_to_start=schedule_to_start,
             start_to_close=start_to_close,
+            task_start_to_close=None,
+            execution_start_to_close=None,
             task_list=task_list,
             retry=retry
         )
@@ -175,6 +179,10 @@ class WorkflowExecution(object):
                             task_list=None, retry=3):
         self._queued = True
         workflow_options = _Options(
+            heartbeat=None,
+            schedule_to_close=None,
+            schedule_to_start=None,
+            start_to_close=None,
             task_start_to_close=task_start_to_close,
             execution_start_to_close=execution_start_to_close,
             task_list=task_list,
@@ -186,7 +194,7 @@ class WorkflowExecution(object):
         if prev_retry is not None:
             retry = int(prev_retry) - 1
         return self._decision.queue_childworkflow(
-            call_id=self._call_id,
+            workflow_id=self._call_id,
             name=name,
             version=version,
             input=input,
@@ -244,11 +252,11 @@ class BoundInstance(object):
         self._workflow_execution = workflow_execution
         self.options = self._workflow_execution.options
 
-    def __getattr__(self, activity_name):
-        activity_proxy = getattr(self._workflow, activity_name)
-        if not isinstance(activity_proxy, BaseProxy):
-            raise AttributeError('%s is not a Proxy instance')
-        return partial(activity_proxy, self._workflow_execution)
+    def __getattr__(self, task_name):
+        task_proxy = getattr(self._workflow, task_name)
+        if not isinstance(task_proxy, BaseProxy):
+            raise AttributeError('%s is not a Proxy instance' % task_name)
+        return partial(task_proxy, self._workflow_execution)
 
 
 class Workflow(object):
