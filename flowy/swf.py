@@ -439,13 +439,14 @@ class Decision(object):
         )
         self._context.set_activity_context(call_id, context)
 
-    def queue_childworkflow(self, workflow_id, name, version, input,
+    def queue_childworkflow(self, call_id, name, version, input,
                             task_start_to_close=None,
                             execution_start_to_close=None,
                             task_list=None,
                             context=None):
         """ Queue a workflow. """
-        workflow_id = str(workflow_id)
+        call_id = str(call_id)
+        workflow_id = str(uuid.uuid4())
         self._client.queue_childworkflow(
             workflow_id=workflow_id,
             name=name,
@@ -455,7 +456,8 @@ class Decision(object):
             execution_start_to_close=execution_start_to_close,
             task_list=task_list
         )
-        self._context.set_workflow_context(workflow_id, context)
+        self._context.map_workflow_to_call(workflow_id, call_id)
+        self._context.set_workflow_context(call_id, context)
 
     def schedule_queued(self, context=None):
         """ Schedules all queued activities.
@@ -535,19 +537,23 @@ class Decision(object):
 
     def _dispatch_workflow_started(self, event, obj):
         meth = 'workflow_started'
-        self._dispatch_if_exists(obj, meth, event.workflow_id)
+        call_id = self._context.workflow_to_call(event.workflow_id)
+        self._dispatch_if_exists(obj, meth, call_id)
 
     def _dispatch_workflow_completed(self, event, obj):
         meth = 'workflow_completed'
-        self._dispatch_if_exists(obj, meth, event.workflow_id, event.result)
+        call_id = self._context.workflow_to_call(event.workflow_id)
+        self._dispatch_if_exists(obj, meth, call_id, event.result)
 
     def _dispatch_workflow_failed(self, event, obj):
         meth = 'workflow_failed'
-        self._dispatch_if_exists(obj, meth, event.workflow_id, event.reason)
+        call_id = self._context.workflow_to_call(event.workflow_id)
+        self._dispatch_if_exists(obj, meth, call_id, event.reason)
 
     def _dispatch_workflow_timedout(self, event, obj):
         meth = 'workflow_timedout'
-        self._dispatch_if_exists(obj, meth, event.workflow_id)
+        call_id = self._context.workflow_to_call(event.workflow_id)
+        self._dispatch_if_exists(obj, meth, call_id)
 
     def _dispatch_if_exists(self, obj, method_name, *args):
         getattr(obj, method_name, lambda *args: None)(*args)
@@ -562,11 +568,13 @@ class Decision(object):
 class JSONDecisionContext(object):
     def __init__(self, context=None):
         self._event_to_call_id = {}
+        self._workflow_id_to_call_id = {}
         self._activity_contexts = {}
         self._workflow_contexts = {}
         self._global_context = None
         if context is not None:
             (self._event_to_call_id,
+             self._workflow_id_to_call_id,
              self._activity_contexts,
              self._workflow_contexts,
              self._global_context) = json.loads(context)
@@ -581,22 +589,28 @@ class JSONDecisionContext(object):
             return default
         return str(self._activity_contexts[call_id])
 
-    def workflow_context(self, workflow_id, default=None):
-        if workflow_id not in self._workflow_contexts:
+    def workflow_context(self, call_id, default=None):
+        if call_id not in self._workflow_contexts:
             return default
-        return str(self._workflow_contexts[workflow_id])
+        return str(self._workflow_contexts[call_id])
 
     def set_activity_context(self, call_id, context):
         self._activity_contexts[call_id] = str(context)
 
-    def set_workflow_context(self, workflow_id, context):
-        self._workflow_contexts[workflow_id] = str(context)
+    def set_workflow_context(self, call_id, context):
+        self._workflow_contexts[call_id] = str(context)
 
     def map_event_to_call(self, event_id, call_id):
         self._event_to_call_id[event_id] = call_id
 
+    def map_workflow_to_call(self, workflow_id, call_id):
+        self._workflow_id_to_call_id = call_id
+
     def event_to_call(self, event_id):
         return self._event_to_call_id[event_id]
+
+    def workflow_to_call(self, workflow_id):
+        return self._workflow_id_to_call_id[workflow_id]
 
     def serialize(self, new_global_context=None):
         g = self.global_context()
@@ -604,6 +618,7 @@ class JSONDecisionContext(object):
             g = str(new_global_context)
         return json.dumps((
             self._event_to_call_id,
+            self._workflow_id_to_call_id,
             self._activity_contexts,
             self._workflow_contexts,
             g

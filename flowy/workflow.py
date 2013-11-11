@@ -194,7 +194,7 @@ class WorkflowExecution(object):
         if prev_retry is not None:
             retry = int(prev_retry) - 1
         return self._decision.queue_childworkflow(
-            workflow_id=self._call_id,
+            call_id=self._call_id,
             name=name,
             version=version,
             input=input,
