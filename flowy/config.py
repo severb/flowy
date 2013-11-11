@@ -19,9 +19,12 @@ def activity_config(name, version, task_list,
 
     def wrapper(wrapped):
         def callback(scanner, n, obj):
-            wrapped_instance = wrapped(**kwargs)
+            def activity_runner(*ar_args, **ar_kwargs):
+                wrapped_instance = wrapped(**kwargs)
+                wrapped_instance(*ar_args, **ar_kwargs)
+
             result = scanner.client.register_activity(
-                activity_runner=wrapped_instance,
+                activity_runner=activity_runner,
                 name=name,
                 version=version,
                 task_list=task_list,
@@ -50,9 +53,12 @@ def workflow_config(name, version, task_list,
 
     def wrapper(wrapped):
         def callback(scanner, n, obj):
-            wrapped_instance = wrapped(**kwargs)
+            def decision_maker(*dm_args, **dm_kwargs):
+                wrapped_instance = wrapped(**kwargs)
+                wrapped_instance(*dm_args, **dm_kwargs)
+
             result = scanner.client.register_workflow(
-                decision_maker=wrapped_instance,
+                decision_maker=decision_maker,
                 name=name,
                 version=version,
                 task_list=task_list,
