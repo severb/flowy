@@ -779,7 +779,6 @@ class Client(object):
 
 
 def _decision_event(event):
-    print event
     event_type = event['eventType']
 
     if event_type == 'ActivityTaskScheduled':
