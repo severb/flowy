@@ -18,6 +18,7 @@ class SWFClient(object):
         self._client = client if client is not None else Layer1()
         self._domain = domain
         self._scheduled_activities = []
+        self._scheduled_workflows = []
 
     def register_workflow(self, name, version, task_list,
                           execution_start_to_close=3600,
@@ -162,8 +163,7 @@ class SWFClient(object):
                        schedule_to_close=None,
                        schedule_to_start=None,
                        start_to_close=None,
-                       task_list=None,
-                       context=None):
+                       task_list=None):
         self._scheduled_activities.append((
             (str(call_id), name, str(version)),
             {
@@ -176,12 +176,30 @@ class SWFClient(object):
             }
         ))
 
-    def schedule_activities(self, token, context=None):
+    def queue_childworkflow(self, workflow_id, name, version, input,
+                            task_start_to_close=None,
+                            execution_start_to_close=None,
+                            task_list=None):
+        self._scheduled_workflows.append((
+            (name, str(version), str(workflow_id)),
+            {
+                'execution_start_to_close_timeout': execution_start_to_close,
+                'task_start_to_close_timeout': task_start_to_close,
+                'task_list': task_list,
+                'input': input
+            }
+        ))
+
+    def schedule_queued(self, token, context=None):
         d = Layer1Decisions()
         for args, kwargs in self._scheduled_activities:
             d.schedule_activity_task(*args, **kwargs)
             name, version = args[1:]
             logging.info("Scheduled activity: %s %s", name, version)
+        for args, kwargs in self._scheduled_workflows:
+            d.start_child_workflow_execution(*args, **kwargs)
+            name, version = args[:2]
+            logging.info("Scheduled child workflow: %s %s", name, version)
         data = d._data
         try:
             self._client.respond_decision_task_completed(
@@ -192,6 +210,7 @@ class SWFClient(object):
             return False
         finally:
             self._scheduled_activities = []
+            self._scheduled_workflows = []
         return True
 
     def complete_workflow(self, token, result=None):
@@ -269,8 +288,7 @@ class DecisionClient(object):
                        schedule_to_close=None,
                        schedule_to_start=None,
                        start_to_close=None,
-                       task_list=None,
-                       context=None):
+                       task_list=None):
         self._client.queue_activity(
             call_id=call_id,
             name=name,
@@ -280,12 +298,25 @@ class DecisionClient(object):
             schedule_to_close=schedule_to_close,
             schedule_to_start=schedule_to_start,
             start_to_close=start_to_close,
-            task_list=task_list,
-            context=context
+            task_list=task_list
         )
 
-    def schedule_activities(self, context=None):
-        return self._client.schedule_activities(
+    def queue_childworkflow(self, workflow_id, name, version, input,
+                            task_start_to_close=None,
+                            execution_start_to_close=None,
+                            task_list=None):
+        self._client.queue_childworkflow(
+            workflow_id=workflow_id,
+            name=name,
+            version=version,
+            input=input,
+            task_start_to_close=task_start_to_close,
+            execution_start_to_close=execution_start_to_close,
+            task_list=task_list
+        )
+
+    def schedule_queued(self, context=None):
+        return self._client.schedule_queued(
             token=self._token, context=self._decision_data.serialize(context)
         )
 
@@ -339,6 +370,10 @@ class Decision(object):
         de.register(_ActivityCompleted, self._dispatch_activity_completed)
         de.register(_ActivityFailed, self._dispatch_activity_failed)
         de.register(_ActivityTimedout, self._dispatch_activity_timedout)
+        de.register(_ChildWorkflowStarted, self._dispatch_workflow_started)
+        de.register(_ChildWorkflowCompleted, self._dispatch_workflow_completed)
+        de.register(_ChildWorkflowFailed, self._dispatch_workflow_failed)
+        de.register(_ChildWorkflowTimedout, self._dispatch_workflow_timedout)
 
         iu = self._internal_update = simplegeneric(self._internal_update)
         iu.register(_ActivityScheduled, self._internal_activity_scheduled)
@@ -355,6 +390,10 @@ class Decision(object):
             obj.activity_completed(call_id, result)
             obj.activity_failed(call_id, reason)
             obj.activity_timedout(call_id)
+            obj.workflow_started(workflow_id)
+            obj.workflow_completed(workflow_id, result)
+            obj.workflow_failed(workflow_id, reason)
+            obj.workflow_timedout(workflow_id)
 
         """
         for event in self._new_events:
@@ -374,7 +413,7 @@ class Decision(object):
         custom identity to this particular queued activity run inside its own
         workflow history. The queueing is done internally, without having the
         client make any requests yet. The actual scheduling is done by calling
-        :meth:`schedule_activities`. The activity will be queued in its default
+        :meth:`schedule_queued`. The activity will be queued in its default
         task list that was set when it was registered, this can be changed by
         setting a different *task_list* value.
 
@@ -400,7 +439,27 @@ class Decision(object):
         )
         self._context.set_activity_context(call_id, context)
 
-    def schedule_activities(self, context=None):
+    def queue_childworkflow(self, call_id, name, version, input,
+                            task_start_to_close=None,
+                            execution_start_to_close=None,
+                            task_list=None,
+                            context=None):
+        """ Queue a workflow. """
+        call_id = str(call_id)
+        workflow_id = str(uuid.uuid4())
+        self._client.queue_childworkflow(
+            workflow_id=workflow_id,
+            name=name,
+            version=version,
+            input=input,
+            task_start_to_close=task_start_to_close,
+            execution_start_to_close=execution_start_to_close,
+            task_list=task_list
+        )
+        self._context.map_workflow_to_call(workflow_id, call_id)
+        self._context.set_workflow_context(call_id, context)
+
+    def schedule_queued(self, context=None):
         """ Schedules all queued activities.
 
         All activities previously queued by :meth:`queue_activity` will be
@@ -410,7 +469,7 @@ class Decision(object):
         the operation. The internal collection of scheduled
         activities will always be cleared when calling this method.
         """
-        return self._client.schedule_activities(
+        return self._client.schedule_queued(
             self._context.serialize(context)
         )
 
@@ -438,7 +497,7 @@ class Decision(object):
 
     def global_context(self, default=None):
         """ Access the global context that was set by
-        :meth:`schedule_activities`.
+        :meth:`schedule_queued`.
 
         """
         return self._context.global_context(default)
@@ -449,6 +508,9 @@ class Decision(object):
 
         """
         return self._context.activity_context(call_id, default)
+
+    def workflow_context(self, workflow_id, default=None):
+        return self._context.workflow_context(workflow_id, default)
 
     def _dispatch_event(self, event, obj):
         """ Dispatch an event to the proper method of obj. """
@@ -473,6 +535,26 @@ class Decision(object):
         call_id = self._context.event_to_call(event.event_id)
         self._dispatch_if_exists(obj, meth, call_id)
 
+    def _dispatch_workflow_started(self, event, obj):
+        meth = 'workflow_started'
+        call_id = self._context.workflow_to_call(event.workflow_id)
+        self._dispatch_if_exists(obj, meth, call_id)
+
+    def _dispatch_workflow_completed(self, event, obj):
+        meth = 'workflow_completed'
+        call_id = self._context.workflow_to_call(event.workflow_id)
+        self._dispatch_if_exists(obj, meth, call_id, event.result)
+
+    def _dispatch_workflow_failed(self, event, obj):
+        meth = 'workflow_failed'
+        call_id = self._context.workflow_to_call(event.workflow_id)
+        self._dispatch_if_exists(obj, meth, call_id, event.reason)
+
+    def _dispatch_workflow_timedout(self, event, obj):
+        meth = 'workflow_timedout'
+        call_id = self._context.workflow_to_call(event.workflow_id)
+        self._dispatch_if_exists(obj, meth, call_id)
+
     def _dispatch_if_exists(self, obj, method_name, *args):
         getattr(obj, method_name, lambda *args: None)(*args)
 
@@ -486,11 +568,15 @@ class Decision(object):
 class JSONDecisionContext(object):
     def __init__(self, context=None):
         self._event_to_call_id = {}
+        self._workflow_id_to_call_id = {}
         self._activity_contexts = {}
+        self._workflow_contexts = {}
         self._global_context = None
         if context is not None:
             (self._event_to_call_id,
+             self._workflow_id_to_call_id,
              self._activity_contexts,
+             self._workflow_contexts,
              self._global_context) = json.loads(context)
 
     def global_context(self, default=None):
@@ -503,20 +589,40 @@ class JSONDecisionContext(object):
             return default
         return str(self._activity_contexts[call_id])
 
+    def workflow_context(self, call_id, default=None):
+        if call_id not in self._workflow_contexts:
+            return default
+        return str(self._workflow_contexts[call_id])
+
     def set_activity_context(self, call_id, context):
         self._activity_contexts[call_id] = str(context)
+
+    def set_workflow_context(self, call_id, context):
+        self._workflow_contexts[call_id] = str(context)
 
     def map_event_to_call(self, event_id, call_id):
         self._event_to_call_id[event_id] = call_id
 
+    def map_workflow_to_call(self, workflow_id, call_id):
+        self._workflow_id_to_call_id = call_id
+
     def event_to_call(self, event_id):
         return self._event_to_call_id[event_id]
+
+    def workflow_to_call(self, workflow_id):
+        return self._workflow_id_to_call_id[workflow_id]
 
     def serialize(self, new_global_context=None):
         g = self.global_context()
         if new_global_context is not None:
             g = str(new_global_context)
-        return json.dumps((self._event_to_call_id, self._activity_contexts, g))
+        return json.dumps((
+            self._event_to_call_id,
+            self._workflow_id_to_call_id,
+            self._activity_contexts,
+            self._workflow_contexts,
+            g
+        ))
 
 
 class JSONDecisionData(object):
@@ -689,34 +795,62 @@ class Client(object):
 
 def _decision_event(event):
     event_type = event['eventType']
+
     if event_type == 'ActivityTaskScheduled':
         event_id = event['eventId']
         ATSEA = 'activityTaskScheduledEventAttributes'
         call_id = event[ATSEA]['activityId']
         return _ActivityScheduled(event_id, call_id)
+
     elif event_type == 'ActivityTaskCompleted':
         ATCEA = 'activityTaskCompletedEventAttributes'
         event_id = event[ATCEA]['scheduledEventId']
         result = event[ATCEA]['result']
         return _ActivityCompleted(event_id, result)
+
     elif event_type == 'ActivityTaskFailed':
         ATFEA = 'activityTaskFailedEventAttributes'
         event_id = event[ATFEA]['scheduledEventId']
         reason = event[ATFEA]['reason']
         return _ActivityFailed(event_id, reason)
+
     elif event_type == 'ActivityTaskTimedOut':
         ATTOEA = 'activityTaskTimedOutEventAttributes'
         event_id = event[ATTOEA]['scheduledEventId']
         return _ActivityTimedout(event_id)
+
     elif event_type == 'WorkflowExecutionStarted':
         WESEA = 'workflowExecutionStartedEventAttributes'
         input = event[WESEA]['input']
         return _WorkflowStarted(input)
+
     elif event_type == 'DecisionTaskCompleted':
         DTCEA = 'decisionTaskCompletedEventAttributes'
         context = event[DTCEA]['executionContext']
         started_by = event[DTCEA]['startedEventId']
         return _DecisionCompleted(started_by, context)
+
+    elif event_type == 'ChildWorkflowExecutionStarted':
+        CWESEA = 'childWorkflowExecutionStartedEventAttributes'
+        workflow_id = event[CWESEA]['workflowExecution']['workflowId']
+        return _ChildWorkflowStarted(workflow_id)
+
+    elif event_type == 'ChildWorkflowExecutionCompleted':
+        CWECEA = 'childWorkflowExecutionCompletedEventAttributes'
+        workflow_id = event[CWECEA]['workflowExecution']['workflowId']
+        result = event[CWECEA]['result']
+        return _ChildWorkflowCompleted(workflow_id, result)
+
+    elif event_type == 'ChildWorkflowExecutionFailed':
+        CWEFEA = 'childWorkflowExecutionFailedEventAttributes'
+        workflow_id = event[CWEFEA]['workflowExecution']['workflowId']
+        reason = event[CWEFEA]['reason']
+        return _ChildWorkflowFailed(workflow_id, reason)
+
+    elif event_type == 'ChildWorkflowExecutionTimedOut':
+        CWETOEA = 'childWorkflowExecutionTimedOutEventAttributes'
+        workflow_id = event[CWETOEA]['workflowExecution']['workflowId']
+        return _ChildWorkflowTimedout(workflow_id)
 
 
 def _decision_page(response, event_maker=_decision_event):
@@ -821,28 +955,27 @@ def _activity_response(response):
 
 _ActivityResponse = namedtuple('_ActivityResponse', 'name version input token')
 
-_DecisionPage = namedtuple(
-    '_DecisionPage',
-    ['name', 'version', 'events', 'next_page_token', 'last_event_id', 'token']
-)
-_DecisionCollapsed = namedtuple(
-    '_DecisionCollapsed',
-    ['name', 'version', 'all_events', 'last_event_id', 'token']
-)
-_DecisionResponse = namedtuple(
-    '_DecisionResponse',
-    ['name', 'version', 'new_events', 'token', 'data', 'first_run']
-)
+_DecisionPage = namedtuple('_DecisionPage',
+                           'name version events'
+                           ' next_page_token last_event_id token')
+_DecisionCollapsed = namedtuple('_DecisionCollapsed',
+                                'name version all_events last_event_id token')
+_DecisionResponse = namedtuple('_DecisionResponse',
+                               'name version new_events token data first_run')
 
-_ActivityScheduled = namedtuple('_ActivityScheduled', ['event_id', 'call_id'])
-_ActivityCompleted = namedtuple('_ActivityCompleted', ['event_id', 'result'])
-_ActivityFailed = namedtuple('_ActivityFailed', ['event_id', 'reason'])
-_ActivityTimedout = namedtuple('_ActivityTimedout', ['event_id'])
-_WorkflowStarted = namedtuple('_WorkflowStarted', ['input'])
-_DecisionCompleted = namedtuple(
-    '_DecisionCompleted',
-    ['started_by', 'context']
-)
+_ActivityScheduled = namedtuple('_ActivityScheduled', 'event_id call_id')
+_ActivityCompleted = namedtuple('_ActivityCompleted', 'event_id result')
+_ActivityFailed = namedtuple('_ActivityFailed', 'event_id reason')
+_ActivityTimedout = namedtuple('_ActivityTimedout', 'event_id')
+_WorkflowStarted = namedtuple('_WorkflowStarted', 'input')
+_DecisionCompleted = namedtuple('_DecisionCompleted', 'started_by context')
+
+_ChildWorkflowStarted = namedtuple('_ChildWorkflowStarted', 'workflow_id')
+_ChildWorkflowTimedout = namedtuple('_ChildWorkflowTimedout', 'workflow_id')
+_ChildWorkflowCompleted = namedtuple('_ChildWorkflowCompleted',
+                                     'workflow_id result')
+_ChildWorkflowFailed = namedtuple('_ChildWorkflowFailed',
+                                  'workflow_id reason')
 
 
 def _str_or_none(maybe_none):
