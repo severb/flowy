@@ -604,7 +604,7 @@ class JSONDecisionContext(object):
         self._event_to_call_id[event_id] = call_id
 
     def map_workflow_to_call(self, workflow_id, call_id):
-        self._workflow_id_to_call_id = call_id
+        self._workflow_id_to_call_id[workflow_id] = call_id
 
     def event_to_call(self, event_id):
         return self._event_to_call_id[event_id]
