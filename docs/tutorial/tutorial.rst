@@ -273,3 +273,12 @@ configure an activity:
    :language: python
    :lines: 27-38
    :emphasize-lines: 8,9
+
+The 3 different scopes that are available for specifying certain activity
+options have a well defined hierarchy: options set via the third method will
+rewrite any options that were set either when defining the ``ActivityProxy`` or
+via the decorator. The settings specified when defining the ``ActivityProxy``
+will also rewrite any and all settings specified with the decorator.
+
+Error handling
+--------------
