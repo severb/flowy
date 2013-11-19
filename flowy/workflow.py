@@ -39,11 +39,15 @@ class JSONExecutionHistory(object):
         self._timedout = set()
         self._results = {}
         self._errors = {}
+        self._timers_started = set()
+        self._timers_fired = set()
         if context is not None:
             json_ctx = json.loads(context)
-            running, timedout, self._results, self._errors = json_ctx
+            running, timedout, ts, tf, self._results, self._errors = json_ctx
             self._running = set(running)
             self._timedout = set(timedout)
+            self._timers_started = set(ts)
+            self._timers_fired = set(tf)
 
     def activity_scheduled(self, call_id):
         if call_id in self._timedout:
@@ -67,6 +71,19 @@ class JSONExecutionHistory(object):
     workflow_failed = activity_failed
     workflow_timedout = activity_timedout
 
+    def timer_started(self, call_id):
+        self._timers_started.add(call_id)
+
+    def timer_fired(self, call_id):
+        self._timers_started.remove(call_id)
+        self._timers_fired.add(call_id)
+
+    def is_timer_started(self, call_id):
+        return call_id in self._timers_started
+
+    def is_timer_fired(self, call_id):
+        return call_id in self._timers_fired
+
     def any_activity_running(self):
         return bool(self._running)
 
@@ -86,6 +103,8 @@ class JSONExecutionHistory(object):
         data = (
             list(self._running),
             list(self._timedout),
+            list(self._timers_started),
+            list(self._timers_fired),
             self._results,
             self._errors
         )
@@ -106,7 +125,8 @@ class WorkflowExecution(object):
             task_start_to_close=None,
             execution_start_to_close=None,
             task_list=None,
-            retry=3
+            retry=3,
+            delay=0,
         )
         self._options_stack = [default]
         self._error_handling_stack = [False]
@@ -118,7 +138,8 @@ class WorkflowExecution(object):
     def options(self, heartbeat=None, schedule_to_close=None,
                 schedule_to_start=None, start_to_close=None,
                 error_handling=None, task_start_to_close=None,
-                execution_start_to_close=None, task_list=None, retry=None):
+                execution_start_to_close=None, task_list=None,
+                retry=None, delay=None):
         if error_handling is not None:
             self._error_handling_stack.append(error_handling)
         options = _Options(
@@ -129,7 +150,8 @@ class WorkflowExecution(object):
             task_start_to_close=task_start_to_close,
             execution_start_to_close=execution_start_to_close,
             task_list=task_list,
-            retry=retry
+            retry=retry,
+            delay=delay,
         )
         new_options = self._current_options.update_with(options)
         self._options_stack.append(new_options)
@@ -141,7 +163,7 @@ class WorkflowExecution(object):
     def queue_activity(self, name, version, input,
                        heartbeat=None, schedule_to_close=None,
                        schedule_to_start=None, start_to_close=None,
-                       task_list=None, retry=3):
+                       task_list=None, retry=3, delay=None):
         self._queued = True
         activity_options = _Options(
             heartbeat=heartbeat,
@@ -151,11 +173,20 @@ class WorkflowExecution(object):
             task_start_to_close=None,
             execution_start_to_close=None,
             task_list=task_list,
-            retry=retry
+            retry=retry,
+            delay=delay,
         )
         # Context settings have the highest priority,
         # even higher than the ones sent as arguments in this method!
         options = activity_options.update_with(self._current_options)
+
+        if int(options.delay) > 0:
+            if not self._exec_history.is_timer_fired(self._call_id):
+                if not self._exec_history.is_timer_started(self._call_id):
+                    self._decision.queue_timer(self._call_id, options.delay)
+                # Finish early if the timer has been already started
+                return
+
         retry = options.retry
         prev_retry = self._decision.activity_context(self._call_id)
         if prev_retry is not None:
@@ -176,7 +207,7 @@ class WorkflowExecution(object):
     def queue_childworkflow(self, name, version, input,
                             task_start_to_close=None,
                             execution_start_to_close=None,
-                            task_list=None, retry=3):
+                            task_list=None, retry=3, delay=None):
         self._queued = True
         workflow_options = _Options(
             heartbeat=None,
@@ -186,9 +217,19 @@ class WorkflowExecution(object):
             task_start_to_close=task_start_to_close,
             execution_start_to_close=execution_start_to_close,
             task_list=task_list,
-            retry=retry
+            retry=retry,
+            delay=delay,
         )
+
         options = workflow_options.update_with(self._current_options)
+
+        if int(options.delay) > 0:
+            if not self._exec_history.is_timer_fired(self._call_id):
+                if not self._exec_history.is_timer_started(self._call_id):
+                    self._decision.queue_timer(self._call_id, options.delay)
+                # Finish early if the timer has been already started
+                return
+
         retry = options.retry
         prev_retry = self._decision.workflow_context(self._call_id)
         if prev_retry is not None:
@@ -392,7 +433,7 @@ class ActivityProxy(BaseProxy):
     def __init__(self, name, version,
                  heartbeat=None, schedule_to_close=None,
                  schedule_to_start=None, start_to_close=None,
-                 task_list=None, retry=3):
+                 task_list=None, retry=3, delay=0):
         self.name = name
         self.version = version
         self.heartbeat = heartbeat
@@ -401,6 +442,7 @@ class ActivityProxy(BaseProxy):
         self.start_to_close = start_to_close
         self.task_list = task_list
         self.retry = retry
+        self.delay = delay
 
     def _queue(self, workflow_execution, input):
         return workflow_execution.queue_activity(
@@ -412,20 +454,22 @@ class ActivityProxy(BaseProxy):
             schedule_to_start=self.schedule_to_start,
             start_to_close=self.start_to_close,
             task_list=self.task_list,
-            retry=self.retry
+            retry=self.retry,
+            delay=self.delay,
         )
 
 
 class WorkflowProxy(BaseProxy):
     def __init__(self, name, version,
                  task_start_to_close=None, execution_start_to_close=None,
-                 task_list=None, retry=3):
+                 task_list=None, retry=3, delay=0):
         self.name = name
         self.version = version
         self.task_start_to_close = task_start_to_close
         self.execution_start_to_close = execution_start_to_close
         self.task_list = task_list
         self.retry = retry
+        self.delay = delay
 
     def _queue(self, workflow_execution, input):
         return workflow_execution.queue_childworkflow(
@@ -435,7 +479,8 @@ class WorkflowProxy(BaseProxy):
             task_start_to_close=self.task_start_to_close,
             execution_start_to_close=self.execution_start_to_close,
             task_list=self.task_list,
-            retry=self.retry
+            retry=self.retry,
+            delay=self.delay,
         )
 
 
@@ -449,7 +494,8 @@ _OBase = namedtuple(
         'task_start_to_close',
         'execution_start_to_close',
         'task_list',
-        'retry'
+        'retry',
+        'delay',
     ]
 )
 

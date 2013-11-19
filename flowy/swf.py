@@ -19,6 +19,7 @@ class SWFClient(object):
         self._domain = domain
         self._scheduled_activities = []
         self._scheduled_workflows = []
+        self._scheduled_timers = []
 
     def register_workflow(self, name, version, task_list,
                           execution_start_to_close=3600,
@@ -190,6 +191,9 @@ class SWFClient(object):
             }
         ))
 
+    def queue_timer(self, call_id, delay):
+        self._scheduled_timers.append((str(delay), str(call_id)))
+
     def schedule_queued(self, token, context=None):
         d = Layer1Decisions()
         for args, kwargs in self._scheduled_activities:
@@ -200,6 +204,8 @@ class SWFClient(object):
             d.start_child_workflow_execution(*args, **kwargs)
             name, version = args[:2]
             logging.info("Scheduled child workflow: %s %s", name, version)
+        for args in self._scheduled_timers:
+            d.start_timer(*args)
         data = d._data
         try:
             self._client.respond_decision_task_completed(
@@ -211,6 +217,7 @@ class SWFClient(object):
         finally:
             self._scheduled_activities = []
             self._scheduled_workflows = []
+            self._scheduled_timers = []
         return True
 
     def complete_workflow(self, token, result=None):
@@ -315,6 +322,9 @@ class DecisionClient(object):
             task_list=task_list
         )
 
+    def queue_timer(self, call_id, delay):
+        return self._client.queue_timer(call_id=call_id, delay=delay)
+
     def schedule_queued(self, context=None):
         return self._client.schedule_queued(
             token=self._token, context=self._decision_data.serialize(context)
@@ -374,6 +384,8 @@ class Decision(object):
         de.register(_ChildWorkflowCompleted, self._dispatch_workflow_completed)
         de.register(_ChildWorkflowFailed, self._dispatch_workflow_failed)
         de.register(_ChildWorkflowTimedout, self._dispatch_workflow_timedout)
+        de.register(_TimerStarted, self._dispatch_timer_started)
+        de.register(_TimerFired, self._dispatch_timer_fired)
 
         iu = self._internal_update = simplegeneric(self._internal_update)
         iu.register(_ActivityScheduled, self._internal_activity_scheduled)
@@ -437,7 +449,8 @@ class Decision(object):
             start_to_close=start_to_close,
             task_list=task_list
         )
-        self._context.set_activity_context(call_id, context)
+        if context is not None:
+            self._context.set_activity_context(call_id, context)
 
     def queue_childworkflow(self, call_id, name, version, input,
                             task_start_to_close=None,
@@ -457,7 +470,11 @@ class Decision(object):
             task_list=task_list
         )
         self._context.map_workflow_to_call(workflow_id, call_id)
-        self._context.set_workflow_context(call_id, context)
+        if context is not None:
+            self._context.set_workflow_context(call_id, context)
+
+    def queue_timer(self, call_id, delay):
+        self._client.queue_timer(call_id=call_id, delay=delay)
 
     def schedule_queued(self, context=None):
         """ Schedules all queued activities.
@@ -554,6 +571,14 @@ class Decision(object):
         meth = 'workflow_timedout'
         call_id = self._context.workflow_to_call(event.workflow_id)
         self._dispatch_if_exists(obj, meth, call_id)
+
+    def _dispatch_timer_started(self, event, obj):
+        meth = 'timer_started'
+        self._dispatch_if_exists(obj, meth, event.timer_id)
+
+    def _dispatch_timer_fired(self, event, obj):
+        meth = 'timer_fired'
+        self._dispatch_if_exists(obj, meth, event.timer_id)
 
     def _dispatch_if_exists(self, obj, method_name, *args):
         getattr(obj, method_name, lambda *args: None)(*args)
@@ -852,6 +877,14 @@ def _decision_event(event):
         workflow_id = event[CWETOEA]['workflowExecution']['workflowId']
         return _ChildWorkflowTimedout(workflow_id)
 
+    elif event_type == 'TimerStarted':
+        TSEA = 'timerStartedEventAttributes'
+        return _TimerStarted(event[TSEA]['timerId'])
+
+    elif event_type == 'TimerFired':
+        TFEA = 'timerFiredEventAttributes'
+        return _TimerFired(event[TFEA]['timerId'])
+
 
 def _decision_page(response, event_maker=_decision_event):
     events = [event_maker(e) for e in response['events']]
@@ -976,6 +1009,8 @@ _ChildWorkflowCompleted = namedtuple('_ChildWorkflowCompleted',
                                      'workflow_id result')
 _ChildWorkflowFailed = namedtuple('_ChildWorkflowFailed',
                                   'workflow_id reason')
+_TimerStarted = namedtuple('_TimerStarted', 'timer_id')
+_TimerFired = namedtuple('_TimerFired', 'timer_id')
 
 
 def _str_or_none(maybe_none):

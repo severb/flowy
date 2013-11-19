@@ -33,8 +33,10 @@ class PrimeMaster(Workflow):
     )
 
     def run(self, remote, n=13):
-        r1 = remote.prime_test(n)
-        r2 = remote.prime_test(n+1)
+        with remote.options(delay=10):
+            r1 = remote.prime_test(n)
+        with remote.options(delay=20):
+            r2 = remote.prime_test(n+1)
         if r1.result() or r2.result():
             print 'one of them is prime!'
 
