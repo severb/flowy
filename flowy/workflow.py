@@ -163,7 +163,7 @@ class WorkflowExecution(object):
     def queue_activity(self, name, version, input,
                        heartbeat=None, schedule_to_close=None,
                        schedule_to_start=None, start_to_close=None,
-                       task_list=None, retry=3, delay=None):
+                       task_list=None, retry=None, delay=None):
         self._queued = True
         activity_options = _Options(
             heartbeat=heartbeat,
@@ -207,7 +207,7 @@ class WorkflowExecution(object):
     def queue_childworkflow(self, name, version, input,
                             task_start_to_close=None,
                             execution_start_to_close=None,
-                            task_list=None, retry=3, delay=None):
+                            task_list=None, retry=None, delay=None):
         self._queued = True
         workflow_options = _Options(
             heartbeat=None,
@@ -433,7 +433,7 @@ class ActivityProxy(BaseProxy):
     def __init__(self, name, version,
                  heartbeat=None, schedule_to_close=None,
                  schedule_to_start=None, start_to_close=None,
-                 task_list=None, retry=3, delay=0):
+                 task_list=None, retry=None, delay=None):
         self.name = name
         self.version = version
         self.heartbeat = heartbeat
@@ -462,7 +462,7 @@ class ActivityProxy(BaseProxy):
 class WorkflowProxy(BaseProxy):
     def __init__(self, name, version,
                  task_start_to_close=None, execution_start_to_close=None,
-                 task_list=None, retry=3, delay=0):
+                 task_list=None, retry=None, delay=None):
         self.name = name
         self.version = version
         self.task_start_to_close = task_start_to_close
