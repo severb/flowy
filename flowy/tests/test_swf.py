@@ -439,7 +439,7 @@ class SWFClientTest(TestCaseNoLogging):
         c.queue_activity(call_id='call2', name='name', version=3, input='i',
                          heartbeat=10, schedule_to_close=11, task_list='tl',
                          schedule_to_start=12, start_to_close=13)
-        r = c.schedule_activities(token='tok', context='ctx')
+        r = c.schedule_queued(token='tok', context='ctx')
         self.assertTrue(r)
         m.respond_decision_task_completed.assert_called_with(
             task_token='tok', decisions=[
@@ -484,7 +484,7 @@ class SWFClientTest(TestCaseNoLogging):
         c.queue_activity(call_id='call2', name='name', version=3, input='i',
                          heartbeat=10, schedule_to_close=11, task_list='tl',
                          schedule_to_start=12, start_to_close=13)
-        r = c.schedule_activities(token='tok', context='ctx')
+        r = c.schedule_queued(token='tok', context='ctx')
         self.assertFalse(r)
 
     def test_complete_workflow(self):
@@ -572,11 +572,11 @@ class DecisionClientTest(TestCaseNoLogging):
     def test_schedule_activities(self):
         dd, swf, dc = self._get_uut(token='tok')
         dd.serialize.return_value = 'ctx'
-        swf.schedule_activities.return_value = sentinel.r
-        result = dc.schedule_activities(context='newcontext')
+        swf.schedule_queued.return_value = sentinel.r
+        result = dc.schedule_queued(context='newcontext')
         self.assertEquals(result, sentinel.r)
-        swf.schedule_activities.assert_called_once_with(token='tok',
-                                                        context='ctx')
+        swf.schedule_queued.assert_called_once_with(token='tok',
+                                                    context='ctx')
         dd.serialize.assert_called_once_with('newcontext')
 
     def test_queue_activity(self):
@@ -584,8 +584,8 @@ class DecisionClientTest(TestCaseNoLogging):
         dc.queue_activity('call_id', 'name', 'version', 'input')
         swf.queue_activity.assert_called_once_with(
             name='name', schedule_to_start=None, start_to_close=None,
-            schedule_to_close=None, version='version', context=None,
-            task_list=None, heartbeat=None, call_id='call_id', input='input'
+            schedule_to_close=None, version='version', task_list=None,
+            heartbeat=None, call_id='call_id', input='input'
         )
 
     def test_complete(self):
@@ -738,9 +738,9 @@ class DecisionTest(unittest.TestCase):
     def test_queue_activities(self):
         cli, ctx, d = self._get_uut()
         ctx.serialize.return_value = 'ctx'
-        d.schedule_activities('context')
+        d.schedule_queued('context')
         ctx.serialize.assert_called_once_with('context')
-        cli.schedule_activities.assert_called_with('ctx')
+        cli.schedule_queued.assert_called_with('ctx')
 
 
 class ActivityTaskTest(unittest.TestCase):
