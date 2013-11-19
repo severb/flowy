@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='flowy',
-    version='0.1',
+    version='0.1b',
     description="Python library for Amazon Simple Workflow Service",
     long_description=open('README.rst').read(),
     keywords='amazon swf simple workflow',
@@ -15,5 +15,5 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     zip_safe=False,
-    install_requires=['boto', 'venusian']  # Fix version number
+    install_requires=['boto==2.17.0', 'venusian==1.0a8']
 )
