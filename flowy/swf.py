@@ -593,13 +593,13 @@ class Decision(object):
 class JSONDecisionContext(object):
     def __init__(self, context=None):
         self._event_to_call_id = {}
-        self._workflow_id_to_call_id = {}
+        self._workflow_to_call_id = {}
         self._activity_contexts = {}
         self._workflow_contexts = {}
         self._global_context = None
         if context is not None:
             (self._event_to_call_id,
-             self._workflow_id_to_call_id,
+             self._workflow_to_call_id,
              self._activity_contexts,
              self._workflow_contexts,
              self._global_context) = json.loads(context)
@@ -629,13 +629,13 @@ class JSONDecisionContext(object):
         self._event_to_call_id[event_id] = call_id
 
     def map_workflow_to_call(self, workflow_id, call_id):
-        self._workflow_id_to_call_id[workflow_id] = call_id
+        self._workflow_to_call_id[workflow_id] = call_id
 
     def event_to_call(self, event_id):
         return self._event_to_call_id[event_id]
 
     def workflow_to_call(self, workflow_id):
-        return self._workflow_id_to_call_id[workflow_id]
+        return self._workflow_to_call_id[workflow_id]
 
     def serialize(self, new_global_context=None):
         g = self.global_context()
@@ -643,7 +643,7 @@ class JSONDecisionContext(object):
             g = str(new_global_context)
         return json.dumps((
             self._event_to_call_id,
-            self._workflow_id_to_call_id,
+            self._workflow_to_call_id,
             self._activity_contexts,
             self._workflow_contexts,
             g
@@ -655,7 +655,11 @@ class JSONDecisionData(object):
         self._context = None
         self._input = data
         if not _first_run:
-            self._input, self._context = json.loads(data)
+            input_len, data = data.split(' ', 1)
+            self._input = data[:int(input_len)]
+            self._context = data[int(input_len):]
+            if self._context == '':
+                self._context = None
 
     @classmethod
     def for_first_run(cls, data):
@@ -673,7 +677,8 @@ class JSONDecisionData(object):
         context = self.context
         if new_context is not None:
             context = str(new_context)
-        return json.dumps((self.input, context))
+            return '%d %s%s' % (len(self.input), self.input, context)
+        return '%d %s' % (len(self.input), self.input)
 
 
 class Client(object):
