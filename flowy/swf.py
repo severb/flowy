@@ -598,11 +598,11 @@ class JSONDecisionContext(object):
         self._workflow_contexts = {}
         self._global_context = None
         if context is not None:
+            json_data, self._global_context = _str_deconcat(context)
             (self._event_to_call_id,
              self._workflow_to_call_id,
              self._activity_contexts,
-             self._workflow_contexts,
-             self._global_context) = json.loads(context)
+             self._workflow_contexts) = json.loads(json_data)
 
     def global_context(self, default=None):
         if self._global_context is None:
@@ -641,25 +641,20 @@ class JSONDecisionContext(object):
         g = self.global_context()
         if new_global_context is not None:
             g = str(new_global_context)
-        return json.dumps((
+        return _str_concat(json.dumps((
             self._event_to_call_id,
             self._workflow_to_call_id,
             self._activity_contexts,
             self._workflow_contexts,
-            g
-        ))
+        )), g)
 
 
-class JSONDecisionData(object):
+class DecisionData(object):
     def __init__(self, data, _first_run=False):
         self._context = None
         self._input = data
         if not _first_run:
-            input_len, data = data.split(' ', 1)
-            self._input = data[:int(input_len)]
-            self._context = data[int(input_len):]
-            if self._context == '':
-                self._context = None
+            self._input, self._context = _str_deconcat(data)
 
     @classmethod
     def for_first_run(cls, data):
@@ -677,8 +672,7 @@ class JSONDecisionData(object):
         context = self.context
         if new_context is not None:
             context = str(new_context)
-            return '%d %s%s' % (len(self.input), self.input, context)
-        return '%d %s' % (len(self.input), self.input)
+        return _str_concat(self.input, context)
 
 
 class Client(object):
@@ -690,7 +684,7 @@ class Client(object):
     argument and it will be used instead of the default one.
 
     """
-    _DecisionData = JSONDecisionData
+    _DecisionData = DecisionData
     _DecisionClient = DecisionClient
     _DecisionContext = JSONDecisionContext
     _Decision = Decision
@@ -1021,3 +1015,19 @@ _TimerFired = namedtuple('_TimerFired', 'timer_id')
 def _str_or_none(maybe_none):
     if maybe_none is not None:
         return str(maybe_none)
+
+
+def _str_concat(str1, str2=None):
+    str1 = str(str1)
+    if str2 is None:
+        return '%d %s' % (len(str1), str1)
+    return '%d %s%s' % (len(str1), str1, str2)
+
+
+def _str_deconcat(s):
+    str1_len, str1str2 = s.split(' ', 1)
+    str1_len = int(str1_len)
+    str1, str2 = str1str2[:str1_len], str1str2[str1_len:]
+    if str2 == '':
+        str2 = None
+    return str1, str2

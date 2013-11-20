@@ -563,9 +563,9 @@ class SWFClientTest(TestCaseNoLogging):
 
 class DecisionClientTest(TestCaseNoLogging):
     def _get_uut(self, token='token'):
-        from flowy.swf import DecisionClient, JSONDecisionData, SWFClient
+        from flowy.swf import DecisionClient, DecisionData, SWFClient
         swf = create_autospec(SWFClient, instance=True)
-        dd = create_autospec(JSONDecisionData, instance=True)
+        dd = create_autospec(DecisionData, instance=True)
         return dd, swf, DecisionClient(client=swf, token=token,
                                        decision_data=dd)
 
@@ -643,12 +643,12 @@ class JSONDecisionContext(unittest.TestCase):
         self.assertEquals(dc.event_to_call('e1'), 'c1')
 
 
-class JSONDecisoinData(unittest.TestCase):
+class DecisionDataTest(unittest.TestCase):
     def _get_uut(self, data, first_run=True):
-        from flowy.swf import JSONDecisionData
+        from flowy.swf import DecisionData
         if first_run:
-            return JSONDecisionData.for_first_run(data)
-        return JSONDecisionData(data)
+            return DecisionData.for_first_run(data)
+        return DecisionData(data)
 
     def test_empty_context(self):
         input = 'input'
