@@ -376,19 +376,19 @@ class Decision(object):
         self._context = context
 
         de = self._dispatch_event = simplegeneric(self._dispatch_event)
-        de.register(_ActivityScheduled, self._dispatch_activity_scheduled)
-        de.register(_ActivityCompleted, self._dispatch_activity_completed)
-        de.register(_ActivityFailed, self._dispatch_activity_failed)
-        de.register(_ActivityTimedout, self._dispatch_activity_timedout)
-        de.register(_ChildWorkflowStarted, self._dispatch_workflow_started)
-        de.register(_ChildWorkflowCompleted, self._dispatch_workflow_completed)
-        de.register(_ChildWorkflowFailed, self._dispatch_workflow_failed)
-        de.register(_ChildWorkflowTimedout, self._dispatch_workflow_timedout)
-        de.register(_TimerStarted, self._dispatch_timer_started)
-        de.register(_TimerFired, self._dispatch_timer_fired)
+        de.register(_EVENTS._ActivityScheduled, self._dispatch_activity_scheduled)
+        de.register(_EVENTS._ActivityCompleted, self._dispatch_activity_completed)
+        de.register(_EVENTS._ActivityFailed, self._dispatch_activity_failed)
+        de.register(_EVENTS._ActivityTimedout, self._dispatch_activity_timedout)
+        de.register(_EVENTS._SubworkflowStarted, self._dispatch_workflow_started)
+        de.register(_EVENTS._SubworkflowCompleted, self._dispatch_workflow_completed)
+        de.register(_EVENTS._SubworkflowFailed, self._dispatch_workflow_failed)
+        de.register(_EVENTS._SubworkflowTimedout, self._dispatch_workflow_timedout)
+        de.register(_EVENTS._TimerStarted, self._dispatch_timer_started)
+        de.register(_EVENTS._TimerFired, self._dispatch_timer_fired)
 
         iu = self._internal_update = simplegeneric(self._internal_update)
-        iu.register(_ActivityScheduled, self._internal_activity_scheduled)
+        iu.register(_EVENTS._ActivityScheduled, self._internal_activity_scheduled)
         for event in new_events:
             self._internal_update(event)
 
@@ -817,86 +817,6 @@ class Client(object):
             return activity_runner
 
 
-def _decision_event(event):
-    event_type = event['eventType']
-
-    if event_type == 'ActivityTaskScheduled':
-        event_id = event['eventId']
-        ATSEA = 'activityTaskScheduledEventAttributes'
-        call_id = event[ATSEA]['activityId']
-        return _ActivityScheduled(event_id, call_id)
-
-    elif event_type == 'ActivityTaskCompleted':
-        ATCEA = 'activityTaskCompletedEventAttributes'
-        event_id = event[ATCEA]['scheduledEventId']
-        result = event[ATCEA]['result']
-        return _ActivityCompleted(event_id, result)
-
-    elif event_type == 'ActivityTaskFailed':
-        ATFEA = 'activityTaskFailedEventAttributes'
-        event_id = event[ATFEA]['scheduledEventId']
-        reason = event[ATFEA]['reason']
-        return _ActivityFailed(event_id, reason)
-
-    elif event_type == 'ActivityTaskTimedOut':
-        ATTOEA = 'activityTaskTimedOutEventAttributes'
-        event_id = event[ATTOEA]['scheduledEventId']
-        return _ActivityTimedout(event_id)
-
-    elif event_type == 'WorkflowExecutionStarted':
-        WESEA = 'workflowExecutionStartedEventAttributes'
-        input = event[WESEA]['input']
-        return _WorkflowStarted(input)
-
-    elif event_type == 'DecisionTaskCompleted':
-        DTCEA = 'decisionTaskCompletedEventAttributes'
-        context = event[DTCEA]['executionContext']
-        started_by = event[DTCEA]['startedEventId']
-        return _DecisionCompleted(started_by, context)
-
-    elif event_type == 'ChildWorkflowExecutionStarted':
-        CWESEA = 'childWorkflowExecutionStartedEventAttributes'
-        workflow_id = event[CWESEA]['workflowExecution']['workflowId']
-        return _ChildWorkflowStarted(workflow_id)
-
-    elif event_type == 'ChildWorkflowExecutionCompleted':
-        CWECEA = 'childWorkflowExecutionCompletedEventAttributes'
-        workflow_id = event[CWECEA]['workflowExecution']['workflowId']
-        result = event[CWECEA]['result']
-        return _ChildWorkflowCompleted(workflow_id, result)
-
-    elif event_type == 'ChildWorkflowExecutionFailed':
-        CWEFEA = 'childWorkflowExecutionFailedEventAttributes'
-        workflow_id = event[CWEFEA]['workflowExecution']['workflowId']
-        reason = event[CWEFEA]['reason']
-        return _ChildWorkflowFailed(workflow_id, reason)
-
-    elif event_type == 'ChildWorkflowExecutionTimedOut':
-        CWETOEA = 'childWorkflowExecutionTimedOutEventAttributes'
-        workflow_id = event[CWETOEA]['workflowExecution']['workflowId']
-        return _ChildWorkflowTimedout(workflow_id)
-
-    elif event_type == 'TimerStarted':
-        TSEA = 'timerStartedEventAttributes'
-        return _TimerStarted(event[TSEA]['timerId'])
-
-    elif event_type == 'TimerFired':
-        TFEA = 'timerFiredEventAttributes'
-        return _TimerFired(event[TFEA]['timerId'])
-
-
-def _decision_page(response, event_maker=_decision_event):
-    events = [event_maker(e) for e in response['events']]
-    return _DecisionPage(
-        name=response['workflowType']['name'],
-        version=response['workflowType']['version'],
-        token=response['taskToken'],
-        next_page_token=response.get('nextPageToken'),
-        last_event_id=response.get('previousStartedEventId'),
-        events=filter(None, events)
-    )
-
-
 def _repeated_poller(poller, result_klass, retries=-1, **kwargs):
     response = {}
     while 'taskToken' not in response or not response['taskToken']:
@@ -909,6 +829,133 @@ def _repeated_poller(poller, result_klass, retries=-1, **kwargs):
         else:
             retries = max(retries - 1, -1)
     return result_klass(response)
+
+
+_ActivityResponse = namedtuple(
+    '_ActivityResponse',
+    'name version input token'
+)
+
+
+def _activity_response(response):
+    return _ActivityResponse(
+        name=response['activityType']['name'],
+        version=response['activityType']['version'],
+        input=response['input'],
+        token=response['taskToken']
+    )
+
+
+class _EventFactory(object):
+    def __init__(self, event_map):
+        self._event_map = event_map
+        for event_class_name, attrs in event_map.values():
+            setattr(self, namedtuple(event_class_name, attrs.keys()))
+
+    def __call__(self, event):
+        event_type = event['eventType']
+        if event_type in self._event_map:
+            event_class_name, attrs = self._event_map[event_type]
+            kwargs = {}
+            for attr_name, attr_path in attrs:
+                attr_value = event
+                for attr_path_part in attr_path.split('.'):
+                    attr_value = attr_value[attr_path_part]
+                kwargs[attr_name] = attr_value
+            event_class = getattr(self, event_class_name, lambda **k: None)
+            return event_class(**kwargs)
+        return None
+
+    def __iter__(self):
+        for event_class_name, _ in self._event_map:
+            yield event_class_name, getattr(self, event_class_name)
+
+
+_event_factory = _EventFactory({
+    # Activities
+
+    'ActivityTaskScheduled': ('activity_scheduled', {
+        'event_id': 'event_id',
+        'call_id': 'activityTaskScheduledEventAttributes.activityId',
+    }),
+    'ActivityTaskCompleted': ('activity_completed', {
+        'event_id': 'activityTaskCompletedEventAttributes.scheduledEventId',
+        'result': 'activityTaskCompletedEventAttributes.result',
+    }),
+    'ActivityTaskFailed': ('activity_failed', {
+        'event_id': 'activityTaskFailedEventAttributes.scheduledEventId',
+        'reason': 'activityTaskFailedEventAttributes.reason',
+    }),
+    'ActivityTaskTimedOut': ('activity_timedout', {
+        'event_id': 'activityTaskTimedOutEventAttributes.scheduledEventId',
+    }),
+
+    # Subworkflows
+
+    'ChildWorkflowExecutionStarted': ('subworkflow_started', {
+        'workflow_id': 'childWorkflowExecutionStartedEventAttributes'
+                       '.workflowId',
+    }),
+
+    'ChildWorkflowExecutionCompleted': ('subworkflow_completed', {
+        'workflow_id': 'childWorkflowExecutionCompletedEventAttributes'
+                       '.workflowId',
+        'result': 'childWorkflowExecutionCompletedEventAttributes.result',
+    }),
+
+    'ChildWorkflowExecutionFailed': ('subworkflow_failed', {
+        'workflow_id': 'childWorkflowExecutionFailedEventAttributes'
+                       '.workflowId',
+        'reason': 'childWorkflowExecutionFailedEventAttributes.reason',
+    }),
+
+    'ChildWorkflowExecutionTimedOut': ('subworkflow_timedout', {
+        'workflow_id': 'childWorkflowExecutionStartedEventAttributes'
+                       '.workflowId',
+    }),
+
+    # Timers
+
+    'TimerStarted': ('timer_started', {
+        'timer_id': 'timerStartedEventAttributes.timerId',
+    }),
+    'TimerFired': ('timer_fired', {
+        'timer_id': 'timerStartedEventAttributes.timerId',
+    }),
+
+    # Misc
+
+    'WorkflowExecutionStarted': ('workflow_started', {
+        'input': 'workflowExecutionStartedEventAttributes.input',
+    }),
+    'DecisionTaskCompleted': ('decision_completed', {
+        'context': 'decisionTaskCompletedEventAttributes.context',
+        'started_by': 'decisionTaskCompletedEventAttributes.startedEventId',
+    }),
+})
+
+
+_DecisionPage = namedtuple(
+    '_DecisionPage',
+    'name version events next_page_token last_event_id token'
+)
+
+
+def _decision_page(response, event_factory=_event_factory):
+    return _DecisionPage(
+        name=response['workflowType']['name'],
+        version=response['workflowType']['version'],
+        token=response['taskToken'],
+        next_page_token=response.get('nextPageToken'),
+        last_event_id=response.get('previousStartedEventId'),
+        events=filter(None, (event_factory(e) for e in response['events']))
+    )
+
+
+_DecisionCollapsed = namedtuple(
+    '_DecisionCollapsed',
+    'name version all_events last_event_id token'
+)
 
 
 def _poll_decision_collapsed(poller):
@@ -940,6 +987,12 @@ def _poll_decision_collapsed(poller):
                               last_event_id=first_page.last_event_id)
 
 
+_DecisionResponse = namedtuple(
+    '_DecisionResponse',
+    'name version new_events token data first_run'
+)
+
+
 def _decision_response(decision_collapsed):
     first_run = decision_collapsed.last_event_id == 0
     if first_run:
@@ -950,14 +1003,14 @@ def _decision_response(decision_collapsed):
         all_events = tuple(decision_collapsed.all_events)
         workflow_started = all_events[-1]
         new_events = all_events[:-1]
-        assert isinstance(workflow_started, _WorkflowStarted)
+        assert isinstance(workflow_started, _event_factory.workflow_started)
         data = workflow_started.input
     else:
         # The workflow had previous decisions completed and we should search
         # for the last one
         new_events = []
         for event in decision_collapsed.all_events:
-            if isinstance(event, _DecisionCompleted):
+            if isinstance(event, _event_factory.decision_completed):
                 break
             new_events.append(event)
         else:
@@ -976,45 +1029,10 @@ def _decision_response(decision_collapsed):
     )
 
 
-def _activity_response(response):
-    return _ActivityResponse(
-        name=response['activityType']['name'],
-        version=response['activityType']['version'],
-        input=response['input'],
-        token=response['taskToken']
-    )
-
-
-_ActivityResponse = namedtuple('_ActivityResponse', 'name version input token')
-
-_DecisionPage = namedtuple('_DecisionPage',
-                           'name version events'
-                           ' next_page_token last_event_id token')
-_DecisionCollapsed = namedtuple('_DecisionCollapsed',
-                                'name version all_events last_event_id token')
-_DecisionResponse = namedtuple('_DecisionResponse',
-                               'name version new_events token data first_run')
-
-_ActivityScheduled = namedtuple('_ActivityScheduled', 'event_id call_id')
-_ActivityCompleted = namedtuple('_ActivityCompleted', 'event_id result')
-_ActivityFailed = namedtuple('_ActivityFailed', 'event_id reason')
-_ActivityTimedout = namedtuple('_ActivityTimedout', 'event_id')
-_WorkflowStarted = namedtuple('_WorkflowStarted', 'input')
-_DecisionCompleted = namedtuple('_DecisionCompleted', 'started_by context')
-
-_ChildWorkflowStarted = namedtuple('_ChildWorkflowStarted', 'workflow_id')
-_ChildWorkflowTimedout = namedtuple('_ChildWorkflowTimedout', 'workflow_id')
-_ChildWorkflowCompleted = namedtuple('_ChildWorkflowCompleted',
-                                     'workflow_id result')
-_ChildWorkflowFailed = namedtuple('_ChildWorkflowFailed',
-                                  'workflow_id reason')
-_TimerStarted = namedtuple('_TimerStarted', 'timer_id')
-_TimerFired = namedtuple('_TimerFired', 'timer_id')
-
-
 def _str_or_none(maybe_none):
     if maybe_none is not None:
         return str(maybe_none)
+    return None
 
 
 def _str_concat(str1, str2=None):
