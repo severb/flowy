@@ -715,7 +715,7 @@ class Client(object):
 
         """
         version = str(version)
-        reg_successful = self._client.register_workflow(
+        reg_result = self._client.register_workflow(
             name=name,
             version=version,
             task_list=task_list,
@@ -724,9 +724,9 @@ class Client(object):
             child_policy=child_policy,
             descr=descr
         )
-        if reg_successful:
+        if reg_result:
             self._workflow_registry[(name, version)] = decision_maker
-        return reg_successful
+        return reg_result
 
     def register_activity(self, activity_runner, name, version, task_list,
                           heartbeat=60, schedule_to_close=420,
@@ -748,7 +748,7 @@ class Client(object):
 
         """
         version = str(version)
-        reg_successful = self._client.register_activity(
+        reg_result = self._client.register_activity(
             name=name,
             version=version,
             task_list=task_list,
@@ -758,9 +758,9 @@ class Client(object):
             start_to_close=start_to_close,
             descr=descr
         )
-        if reg_successful:
+        if reg_result:
             self._activity_registry[(name, version)] = activity_runner
-        return reg_successful
+        return reg_result
 
     def start_workflow(self, name, version, task_list, input):
         return self._client.start_workflow(name=name, version=version,
