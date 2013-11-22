@@ -817,7 +817,7 @@ class Client(object):
             return activity_runner
 
 
-def _repeated_poller(poller, result_klass, retries=-1, **kwargs):
+def _repeated_poller(poller, result_factory, retries=-1, **kwargs):
     response = {}
     while 'taskToken' not in response or not response['taskToken']:
         try:
@@ -828,7 +828,7 @@ def _repeated_poller(poller, result_klass, retries=-1, **kwargs):
             return
         else:
             retries = max(retries - 1, -1)
-    return result_klass(response)
+    return result_factory(response)
 
 
 _ActivityResponse = namedtuple(
