@@ -826,8 +826,7 @@ def _repeated_poller(poller, result_factory, retries=-1, **kwargs):
             logging.warning("Unknown error when polling.", exc_info=1)
         if retries == 0:
             return
-        else:
-            retries = max(retries - 1, -1)
+        retries = max(retries - 1, -1)
     return result_factory(response)
 
 
