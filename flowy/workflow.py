@@ -1,8 +1,7 @@
 import json
-from functools import partial
 from collections import namedtuple
 from contextlib import contextmanager
-
+from functools import partial
 
 __all__ = 'Workflow ActivityProxy WorkflowProxy TaskError TaskTimedout'.split()
 

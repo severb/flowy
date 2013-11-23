@@ -1,10 +1,9 @@
-import venusian
-import logging
 import json
+import logging
 import sys
 
-from .swf import SWFClient, Client
-
+import venusian
+from .swf import Client, SWFClient
 
 __all__ = ['make_config', 'ClientConfig', 'activity_config', 'workflow_config']
 

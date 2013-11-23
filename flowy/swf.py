@@ -1,14 +1,13 @@
 import json
-import uuid
 import logging
+import uuid
 from collections import namedtuple
 from functools import partial
 from pkgutil import simplegeneric
 
+from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
 from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
-from boto.swf.exceptions import SWFTypeAlreadyExistsError, SWFResponseError
-
 
 __all__ = ['Client', 'SWFClient']
 
