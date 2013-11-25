@@ -3,6 +3,7 @@ import logging
 import uuid
 from collections import namedtuple
 from functools import partial
+from itertools import ifilter, imap
 from pkgutil import simplegeneric
 
 from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
@@ -146,17 +147,56 @@ class SWFClient(object):
         poller = partial(self._client.poll_for_decision_task,
                          task_list=task_list, domain=self._domain,
                          reverse_order=True)
-        paged_poller = partial(_repeated_poller, poller, _decision_page)
-        decision_collapsed = _poll_decision_collapsed(paged_poller)
-        # Collapsing decisions pages may fail if some pages are unavailable
-        if decision_collapsed is None:
-            return
-        return _decision_response(decision_collapsed)
+
+        first_page = _repeated_poller(poller)
+
+        def all_events():
+            page = first_page
+            while 1:
+                for event in page['events']:
+                    yield event
+                if not page['nextPageToken']:
+                    break
+                # If a workflow is stopped and a decision page fetching fails
+                # forever we avoid infinite loops
+                p = _repeated_poller(
+                    poller, next_page_token=page['nextPageToken'], retries=3
+                )
+                if p is None:
+                    return
+                assert (
+                    p['taskToken'] == page['taskToken']
+                    and (
+                        p['workflowType']['name']
+                        == page['workflowType']['name'])
+                    and (
+                        p['workflowType']['version']
+                        == page['workflowType']['version'])
+                    and (
+                        p.get('previousStartedEventId')
+                        == page.get('previousStartedEventId')
+                    )
+                ), 'Inconsistent decision pages.'
+                page = p
+
+        return _DecisionResponse(
+            name=first_page['workflowType']['name'],
+            version=first_page['workflowType']['version'],
+            token=first_page['taskToken'],
+            last_event_id=first_page.get('previousStartedEventId'),
+            all_events=ifilter(imap(all_events(), _event_factory))
+        )
 
     def poll_activity(self, task_list):
         poller = partial(self._client.poll_for_activity_task,
                          task_list=task_list, domain=self._domain)
-        return _repeated_poller(poller, _activity_response)
+        response = _repeated_poller(poller)
+        return _ActivityResponse(
+            name=response['activityType']['name'],
+            version=response['activityType']['version'],
+            input=response['input'],
+            token=response['taskToken']
+        )
 
     def queue_activity(self, call_id, name, version, input,
                        heartbeat=None,
@@ -281,6 +321,30 @@ class SWFClient(object):
                             token, exc_info=1)
             return False
         return True
+
+
+_DecisionResponse = namedtuple(
+    '_DecisionResponse',
+    'name version all_events last_event_id token'
+)
+
+_ActivityResponse = namedtuple(
+    '_ActivityResponse',
+    'name version input token'
+)
+
+
+def _repeated_poller(poller, retries=-1, **kwargs):
+    response = {}
+    while 'taskToken' not in response or not response['taskToken']:
+        try:
+            response = poller(**kwargs)
+        except (IOError, SWFResponseError):
+            logging.warning("Unknown error when polling.", exc_info=1)
+        if retries == 0:
+            return
+        retries = max(retries - 1, -1)
+    return response
 
 
 class DecisionClient(object):
@@ -674,7 +738,7 @@ class DecisionData(object):
         return _str_concat(self.input, context)
 
 
-class Client(object):
+class CachingClient(object):
     """ A simple wrapper around Boto's SWF Layer1 that provides a cleaner
     interface and some convenience.
 
@@ -768,7 +832,7 @@ class Client(object):
     def dispatch_next_decision(self, task_list):
         """ Poll for the next decision and call the matching runner registered.
 
-        If any runner previsouly registered with :meth:`register_workflow`
+        If any runner previously registered with :meth:`register_workflow`
         matches the polled decision it will be called with two arguments in
         this order: the input that was used when the workflow was scheduled and
         a :class:`Decision` instance. It returns the matched runner if any or
@@ -779,13 +843,39 @@ class Client(object):
         # Polling a decision may fail if some pages are unavailable
         if decision_response is None:
             return
+
+        first_run = decision_response.last_event_id == 0
+        if first_run:
+            # The first decision is always just after a workflow started and at
+            # this point this should also be first event in the history but it
+            # may not be the only one - there may be also be previous decisions
+            # that have timed out.
+            all_events = tuple(decision_response.all_events)
+            workflow_started = all_events[-1]
+            new_events = all_events[:-1]
+            assert isinstance(workflow_started,
+                              _event_factory.workflow_started)
+            data = workflow_started.input
+        else:
+            # The workflow had previous decisions completed and we should
+            # search for the last one
+            new_events = []
+            for event in decision_response.all_events:
+                if isinstance(event, _event_factory.decision_completed):
+                    break
+                new_events.append(event)
+            else:
+                raise AssertionError('Last decision was not found.')
+            assert event.started_by == decision_response.last_event_id
+            data = event.context
+
         decision_maker_key = decision_response.name, decision_response.version
         decision_maker = self._workflow_registry.get(decision_maker_key)
         if decision_maker is not None:
-            if decision_response.first_run:
-                data = self._DecisionData.for_first_run(decision_response.data)
+            if first_run:
+                data = self._DecisionData.for_first_run(data)
             else:
-                data = self._DecisionData(decision_response.data)
+                data = self._DecisionData(data)
             decision_client = self._DecisionClient(
                 self._client, decision_response.token, data
             )
@@ -798,7 +888,7 @@ class Client(object):
     def dispatch_next_activity(self, task_list):
         """ Poll for the next activity and call the matching runner registered.
 
-        If any runner previsouly registered with :meth:`register_activity`
+        If any runner previously registered with :meth:`register_activity`
         matches the polled activity it will be called with two arguments in
         this order: the input that was used when the activity was scheduled and
         a :class:`ActivityTask` instance. It returns the matched runner if any
@@ -814,34 +904,6 @@ class Client(object):
             )
             activity_runner(activity_response.input, activity_task)
             return activity_runner
-
-
-def _repeated_poller(poller, result_factory, retries=-1, **kwargs):
-    response = {}
-    while 'taskToken' not in response or not response['taskToken']:
-        try:
-            response = poller(**kwargs)
-        except (IOError, SWFResponseError):
-            logging.warning("Unknown error when polling.", exc_info=1)
-        if retries == 0:
-            return
-        retries = max(retries - 1, -1)
-    return result_factory(response)
-
-
-_ActivityResponse = namedtuple(
-    '_ActivityResponse',
-    'name version input token'
-)
-
-
-def _activity_response(response):
-    return _ActivityResponse(
-        name=response['activityType']['name'],
-        version=response['activityType']['version'],
-        input=response['input'],
-        token=response['taskToken']
-    )
 
 
 class _EventFactory(object):
@@ -933,98 +995,10 @@ _event_factory = _EventFactory({
 })
 
 
-_DecisionPage = namedtuple(
-    '_DecisionPage',
-    'name version events next_page_token last_event_id token'
-)
-
-
-def _decision_page(response, event_factory=_event_factory):
-    return _DecisionPage(
-        name=response['workflowType']['name'],
-        version=response['workflowType']['version'],
-        token=response['taskToken'],
-        next_page_token=response.get('nextPageToken'),
-        last_event_id=response.get('previousStartedEventId'),
-        events=filter(None, (event_factory(e) for e in response['events']))
-    )
-
-
-_DecisionCollapsed = namedtuple(
-    '_DecisionCollapsed',
-    'name version all_events last_event_id token'
-)
-
-
-def _poll_decision_collapsed(poller):
-
-    first_page = poller()
-
-    def all_events():
-        page = first_page
-        while 1:
-            for event in page.events:
-                yield event
-            if page.next_page_token is None:
-                break
-            # If a workflow is stopped and a decision page fetching fails
-            # forever we avoid infinite loops
-            p = poller(next_page_token=page.next_page_token, retries=3)
-            if p is None:
-                return
-            assert (
-                p.name == page.name
-                and p.version == page.version
-                and p.token == page.token
-                and p.last_event_id == page.last_event_id
-            ), 'Inconsistent decision pages.'
-            page = p
-
-    return _DecisionCollapsed(name=first_page.name, version=first_page.version,
-                              all_events=all_events(), token=first_page.token,
-                              last_event_id=first_page.last_event_id)
-
-
 _DecisionResponse = namedtuple(
     '_DecisionResponse',
     'name version new_events token data first_run'
 )
-
-
-def _decision_response(decision_collapsed):
-    first_run = decision_collapsed.last_event_id == 0
-    if first_run:
-        # The first decision is always just after a workflow started and at
-        # this point this should also be first event in the history but it may
-        # not be the only one - there may be also be previos decisions that
-        # have timed out.
-        all_events = tuple(decision_collapsed.all_events)
-        workflow_started = all_events[-1]
-        new_events = all_events[:-1]
-        assert isinstance(workflow_started, _event_factory.workflow_started)
-        data = workflow_started.input
-    else:
-        # The workflow had previous decisions completed and we should search
-        # for the last one
-        new_events = []
-        for event in decision_collapsed.all_events:
-            if isinstance(event, _event_factory.decision_completed):
-                break
-            new_events.append(event)
-        else:
-            raise AssertionError('Last decision was not found.')
-        assert event.started_by == decision_collapsed.last_event_id
-        data = event.context
-
-    return _DecisionResponse(
-        name=decision_collapsed.name,
-        version=decision_collapsed.version,
-        token=decision_collapsed.token,
-        data=data,
-        first_run=first_run,
-        # Preserve the order in which the events happend.
-        new_events=tuple(reversed(new_events))
-    )
 
 
 def _str_or_none(maybe_none):
