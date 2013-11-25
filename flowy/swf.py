@@ -10,7 +10,7 @@ from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
 from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
 
-__all__ = ['Client', 'SWFClient']
+__all__ = ['CachingClient', 'SWFClient']
 
 
 class SWFClient(object):
@@ -163,7 +163,7 @@ class SWFClient(object):
                     poller, next_page_token=page['nextPageToken'], retries=3
                 )
                 if p is None:
-                    return
+                    raise PageError()
                 assert (
                     p['taskToken'] == page['taskToken']
                     and (
@@ -184,7 +184,7 @@ class SWFClient(object):
             version=first_page['workflowType']['version'],
             token=first_page['taskToken'],
             last_event_id=first_page.get('previousStartedEventId'),
-            all_events=ifilter(imap(all_events(), _event_factory))
+            events_iter=ifilter(imap(all_events(), _event_factory))
         )
 
     def poll_activity(self, task_list):
@@ -325,13 +325,17 @@ class SWFClient(object):
 
 _DecisionResponse = namedtuple(
     '_DecisionResponse',
-    'name version all_events last_event_id token'
+    'name version events_iter last_event_id token'
 )
 
 _ActivityResponse = namedtuple(
     '_ActivityResponse',
     'name version input token'
 )
+
+
+class PageError(RuntimeError):
+    """ Raised when a page in a decision response is unavailable. """
 
 
 def _repeated_poller(poller, retries=-1, **kwargs):
@@ -844,46 +848,53 @@ class CachingClient(object):
         if decision_response is None:
             return
 
+        decision_maker_key = decision_response.name, decision_response.version
+        decision_maker = self._workflow_registry.get(decision_maker_key)
+        if decision_maker is not None:
+            return
+
         first_run = decision_response.last_event_id == 0
+        input = None
+        context_data = None
         if first_run:
             # The first decision is always just after a workflow started and at
             # this point this should also be first event in the history but it
             # may not be the only one - there may be also be previous decisions
             # that have timed out.
-            all_events = tuple(decision_response.all_events)
+            try:
+                all_events = tuple(decision_response.all_events)
+            except PageError:
+                return  # Not all pages were available
             workflow_started = all_events[-1]
             new_events = all_events[:-1]
             assert isinstance(workflow_started,
                               _event_factory.workflow_started)
-            data = workflow_started.input
+            input = workflow_started.input
         else:
             # The workflow had previous decisions completed and we should
             # search for the last one
             new_events = []
-            for event in decision_response.all_events:
-                if isinstance(event, _event_factory.decision_completed):
-                    break
-                new_events.append(event)
-            else:
-                raise AssertionError('Last decision was not found.')
+            try:
+                for event in decision_response.all_events:
+                    if isinstance(event, _event_factory.decision_completed):
+                        break
+                    new_events.append(event)
+                else:
+                    assert False, 'Last decision was not found.'
+            except PageError:
+                return
             assert event.started_by == decision_response.last_event_id
-            data = event.context
+            context_data = event.context
 
-        decision_maker_key = decision_response.name, decision_response.version
-        decision_maker = self._workflow_registry.get(decision_maker_key)
-        if decision_maker is not None:
-            if first_run:
-                data = self._DecisionData.for_first_run(data)
-            else:
-                data = self._DecisionData(data)
-            decision_client = self._DecisionClient(
-                self._client, decision_response.token, data
-            )
-            decision_context = self._DecisionContext(data.context)
-            decision = self._Decision(decision_client, decision_context,
-                                      decision_response.new_events)
-            decision_maker(data.input, decision)
-            return decision_maker
+        decision_data = self._DecisionData(input, context_data)
+        decision_client = self._DecisionClient(
+            self._client, decision_response.token, decision_data
+        )
+        decision_context = self._DecisionContext(decision_data.context)
+        decision = self._Decision(decision_client, decision_context,
+                                  decision_response.new_events)
+        decision_maker(decision_data.input, decision)
+        return decision_maker
 
     def dispatch_next_activity(self, task_list):
         """ Poll for the next activity and call the matching runner registered.
@@ -993,12 +1004,6 @@ _event_factory = _EventFactory({
         'started_by': 'decisionTaskCompletedEventAttributes.startedEventId',
     }),
 })
-
-
-_DecisionResponse = namedtuple(
-    '_DecisionResponse',
-    'name version new_events token data first_run'
-)
 
 
 def _str_or_none(maybe_none):
