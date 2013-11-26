@@ -3,7 +3,7 @@ import logging
 import sys
 
 import venusian
-from .swf import Client, SWFClient
+from .swf import CachingClient, SWFClient
 
 __all__ = ['make_config', 'ClientConfig', 'activity_config', 'workflow_config']
 
@@ -76,7 +76,7 @@ def workflow_config(name, version, task_list,
 
 
 def make_config(domain, client=None):
-    return ClientConfig(Client(SWFClient(domain, client=client)))
+    return ClientConfig(CachingClient(SWFClient(domain, client=client)))
 
 
 class ClientConfig(object):
