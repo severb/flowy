@@ -450,7 +450,7 @@ class ActivityTask(object):
         self._token = token
 
     def complete(self, result):
-        """ Signal the successful completion of the activity with *result*.
+        """ Triggers the successful completion of the activity with *result*.
 
         Returns a boolean indicating the success of the operation.
 
@@ -458,7 +458,7 @@ class ActivityTask(object):
         return self._client.complete_activity(token=self._token, result=result)
 
     def fail(self, reason):
-        """ Signal the failure of the activity for the specified reason.
+        """ Triggers the failure of the activity for the specified reason.
 
         Returns a boolean indicating the success of the operation.
 
@@ -667,7 +667,7 @@ class CachingDecision(object):
             self._timer_contexts[call_id] = str(context)
 
     def complete(self, result):
-        """ Signals the successful completion of the workflow.
+        """ Triggers the successful completion of the workflow.
 
         Completes the workflow the *result* value. Returns a boolean indicating
         the success of the operation.
@@ -678,7 +678,7 @@ class CachingDecision(object):
                                               result=str(result))
 
     def fail(self, reason):
-        """ Signals the termination of the workflow.
+        """ Triggers the termination of the workflow.
 
         Terminate the workflow identified by *workflow_id* for the specified
         *reason*. All the workflow activities will be abandoned and the final
