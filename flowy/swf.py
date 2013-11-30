@@ -10,7 +10,7 @@ from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
 from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
 
-__all__ = ['CachingClient', 'SWFClient']
+__all__ = ['Client', 'SWFClient']
 
 
 class SWFClient(object):
@@ -179,7 +179,7 @@ class SWFClient(object):
                 ), 'Inconsistent decision pages.'
                 page = p
 
-        return _DecisionResponse(
+        return DecisionResponse(
             name=first_page['workflowType']['name'],
             version=first_page['workflowType']['version'],
             token=first_page['taskToken'],
@@ -191,7 +191,7 @@ class SWFClient(object):
         poller = partial(self._client.poll_for_activity_task,
                          task_list=task_list, domain=self._domain)
         response = _repeated_poller(poller)
-        return _ActivityResponse(
+        return ActivityResponse(
             name=response['activityType']['name'],
             version=response['activityType']['version'],
             input=response['input'],
@@ -327,13 +327,13 @@ class SWFClient(object):
         return True
 
 
-_DecisionResponse = namedtuple(
-    '_DecisionResponse',
+DecisionResponse = namedtuple(
+    'DecisionResponse',
     'name version events_iter last_event_id token'
 )
 
-_ActivityResponse = namedtuple(
-    '_ActivityResponse',
+ActivityResponse = namedtuple(
+    'ActivityResponse',
     'name version input token'
 )
 
@@ -488,25 +488,109 @@ class CachingDecision(object):
         self._timer_contexts = {}
         self._activity_to_call_id = {}
         self._subworkflow_to_call_id = {}
+        self._running = set()
+        self._timedout = {}
+        self._results = {}
+        self._errors = {}
+        self._timers_started = set()
+        self._timers_fired = set()
         self._global_context = None
+        self._is_finished = False
+
         if execution_context is not None:
-            json_data, self._global_context = _str_deconcat(execution_context)
-            (self._activity_contexts,
-             self._subworkflow_contexts,
-             self._timer_contexts,
-             self._activity_to_call_id,
-             self._subworkflow_to_call_id) = json.loads(json_data)
+            self.load(execution_context)
+
+        self._setup_internal_dispatch()
+        self.update(new_events)
+
+    def _setup_internal_dispatch(self):
         iu = self._internal_update = simplegeneric(self._internal_update)
         iu.register(ActivityScheduled, self._activity_scheduled)  # noqa
+        iu.register(ActivityCompleted, self._activity_completed)  # noqa
+        iu.register(ActivityFailed, self._activity_failed)  # noqa
+        iu.register(ActivityTimedout, self._activity_timedout)  # noqa
+        iu.register(SubworkflowStarted, self._subworkflow_started)  # noqa
+        iu.register(SubworkflowCompleted, self._subworkflow_completed)  # noqa
+        iu.register(SubworkflowFailed, self._subworkflow_failed)  # noqa
+        iu.register(SubworkflowTimedout, self._subworkflow_timedout)  # noqa
+        iu.register(TimerStarted, self._timer_started)  # noqa
+        iu.register(TimerFired, self._timer_fired)  # noqa
+
+    def update(self, new_events):
         for event in self._new_events:
             self._internal_update(event)
-        self._is_finished = False
 
     def _internal_update(self, event):
         """ Dispatch an event for internal purposes. """
 
     def _activity_scheduled(self, event):
         self._activity_to_call_id[event.scheduled_id] = event.call_id
+        self._running.add(event.call_id)
+
+    def _activity_completed(self, event):
+        call_id = self._activity_to_call_id[event.event_id]
+        assert call_id not in self._errors
+        self._running.remove(call_id)
+        self._timedout.pop(call_id, None)
+        self._results[call_id] = event.result
+
+    def _activity_failed(self, event):
+        call_id = self._activity_to_call_id[event.event_id]
+        assert call_id not in self._results
+        self._running.remove(call_id)
+        self._timedout.pop(call_id, None)
+        self._errors[call_id] = event.reason
+
+    def _activity_timedout(self, event):
+        call_id = self._activity_to_call_id[event.event_id]
+        assert call_id not in self._errors
+        assert call_id not in self._results
+        self._running.remove(call_id)
+        timeout_counter = self._timedout.get(call_id, 0)
+        self._timedout[call_id] = timeout_counter + 1
+
+    def _subworkflow_scheduled(self, event):
+        call_id = self._subworkflow_to_call_id[event.workflow_id]
+        self._running.add(call_id)
+
+    def _subworkflow_completed(self, event):
+        call_id = self._subworkflow_to_call_id[event.workflow_id]
+        assert call_id not in self._errors
+        self._running.remove(call_id)
+        self._timedout.pop(call_id, None)
+        self._results[call_id] = event.result
+
+    def _subworkflow_failed(self, event):
+        call_id = self._subworkflow_to_call_id[event.workflow_id]
+        assert call_id not in self._results
+        self._running.remove(call_id)
+        self._timedout.pop(call_id, None)
+        self._errors[call_id] = event.reason
+
+    def _subworkflow_timedout(self, event):
+        call_id = self._subworkflow_to_call_id[event.workflow_id]
+        assert call_id not in self._errors
+        assert call_id not in self._results
+        self._running.remove(call_id)
+        timeout_counter = self._timedout.get(call_id, 0)
+        self._timedout[call_id] = timeout_counter + 1
+
+    def _timer_started(self, event):
+        self._timers_started.add(event.timer_id)
+
+    def _timer_fired(self, event):
+        self._timers_started.remove(event.timer_id)
+        self._timers_fired.add(event.timer_id)
+
+    def _check_call_id(self, call_id):
+        if (
+            call_id in self.running
+            or call_id in self._results
+            or call_id in self._errors
+            or call_id in self._timers_started
+            or call_id in self._timers_fired
+        ):
+            raise RuntimeError("call_id %s was already used." % call_id)
 
     def queue_activity(self, call_id, name, version, input,
                        heartbeat=None,
@@ -520,21 +604,26 @@ class CachingDecision(object):
         This will schedule a run of a previously registered activity with the
         specified *name* and *version*. The *call_id* is used to assign a
         custom identity to this particular queued activity run inside its own
-        workflow history. The queueing is done internally, without having the
-        client make any requests yet. The actual scheduling is done by calling
-        :meth:`schedule_queued`. The activity will be queued in its default
-        task list that was set when it was registered, this can be changed by
-        setting a different *task_list* value.
+        workflow history. It must be unique and can only be reused for timedout
+        jobs. The queueing is done internally and all queued activities will be
+        discarded if at a later point in time any meth:`complete` or
+        meth:`fail` methods are called.
+
+        The activity will be queued in its default task list that was set when
+        it was registered, this can be changed by setting a different
+        *task_list* value.
 
         The activity options specified here, if any, have a higher priority
         than the ones used when the activity was registered. For more
-        information about the various arguments see :meth:`register_activity`.
+        information about the various arguments see
+        :meth:`Client.register_activity`.
 
         When queueing an acctivity a custom *context* can be set. It can be
-        retrieved later by :meth:`activity_context`.
+        retrieved later in the methods used by :meth:`dispatch_events`.
 
         """
         call_id = str(call_id)
+        self._check_call_id(call_id)
         self._client.queue_activity(
             call_id=call_id,
             name=name,
@@ -554,6 +643,8 @@ class CachingDecision(object):
                           execution_start_to_close=None,
                           task_list=None,
                           context=None):
+        call_id = str(call_id)
+        self._check_call_id(call_id)
         workflow_id = str(uuid.uuid4())
         self._client.queue_subworkflow(
             workflow_id=workflow_id,
@@ -564,13 +655,13 @@ class CachingDecision(object):
             execution_start_to_close=execution_start_to_close,
             task_list=task_list
         )
-        call_id = str(call_id)
         self._subworkflow_to_call_id[workflow_id] = call_id
         if context is not None:
             self._subworkflow_contexts[call_id] = str(context)
 
     def queue_timer(self, call_id, delay, context=None):
         call_id = str(call_id)
+        self._check_call_id(call_id)
         self._client.queue_timer(call_id=call_id, delay=delay)
         if context is not None:
             self._timer_contexts[call_id] = str(context)
@@ -628,19 +719,42 @@ class CachingDecision(object):
             obj.timer_fired(call_id, context)
 
         """
-        self._event_dispatcher.dispatch(obj)
+        pass
 
-    def serialize(self):
+    def dump(self):
         return _str_concat(json.dumps((
             self._activity_contexts,
             self._subworkflow_contexts,
             self._timer_contexts,
             self._activity_to_call_id,
-            self._subworkflow_to_call_id
+            self._subworkflow_to_call_id,
+            list(self._running),
+            self._timedout,
+            self._results,
+            self._errors,
+            list(self._timers_started),
+            list(self._timers_fired),
         )), self._global_context)
 
+    def load(self, data):
+        json_data, self._global_context = _str_deconcat(data)
+        (self._activity_contexts,
+         self._subworkflow_contexts,
+         self._timer_contexts,
+         self._activity_to_call_id,
+         self._subworkflow_to_call_id,
+         running,
+         timers_started,
+         timers_fired,
+         self._timedout,
+         self._results,
+         self._errors) = json.loads(json_data)
+        self._running = set(running)
+        self._timers_started = timers_started
+        self._timers_fired = timers_fired
 
-class CachingClient(object):
+
+class Client(object):
     """ A simple wrapper around Boto's SWF Layer1 that provides a cleaner
     interface and some convenience.
 
@@ -782,24 +896,24 @@ class CachingClient(object):
         if context_data is not None:
             cached_events, decision_context = _str_deconcat(context_data)
 
-        decision_client = CachingDecisionClient(
-            self._client, decision_response.token, decision_context
-        )
-        event_dispatcher = CachedEventDispatcher(cached_events, new_events)
+#         decision_client = CachingDecisionClient(
+#             self._client, decision_response.token, decision_context
+#         )
+#         event_dispatcher = CachedEventDispatcher(cached_events, new_events)
 
-        decision = Decision(decision_client, event_dispatcher)
+#         decision = Decision(decision_client, event_dispatcher)
 
-        decision_maker(input, decision)
+#         decision_maker(input, decision)
 
-        self._client.schedule_queued(
-            _str_concat(
-                input,
-                _str_concat(
-                    event_dispatcher.serialize(),
-                    decision_client.serialize()
-                )
-            )
-        )
+#         self._client.schedule_queued(
+#             _str_concat(
+#                 input,
+#                 _str_concat(
+#                     event_dispatcher.serialize(),
+#                     decision_client.serialize()
+#                 )
+#             )
+#         )
         return decision_maker
 
     def dispatch_next_activity(self, task_list):
