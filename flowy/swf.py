@@ -402,34 +402,34 @@ _event_factory = _make_event_factory({
     # Subworkflows
 
     'ChildWorkflowExecutionStarted': ('SubworkflowStarted', {
-        'workflow_id': 'childWorkflowExecutionStartedEventAttributes'
-                       '.workflowId',
+        'event_id': 'childWorkflowExecutionStartedEventAttributes'
+                    '.workflowId',
     }),
 
     'ChildWorkflowExecutionCompleted': ('SubworkflowCompleted', {
-        'workflow_id': 'childWorkflowExecutionCompletedEventAttributes'
-                       '.workflowId',
+        'event_id': 'childWorkflowExecutionCompletedEventAttributes'
+                    '.workflowId',
         'result': 'childWorkflowExecutionCompletedEventAttributes.result',
     }),
 
     'ChildWorkflowExecutionFailed': ('SubworkflowFailed', {
-        'workflow_id': 'childWorkflowExecutionFailedEventAttributes'
-                       '.workflowId',
+        'event_id': 'childWorkflowExecutionFailedEventAttributes'
+                    '.workflowId',
         'reason': 'childWorkflowExecutionFailedEventAttributes.reason',
     }),
 
     'ChildWorkflowExecutionTimedOut': ('SubworkflowTimedout', {
-        'workflow_id': 'childWorkflowExecutionStartedEventAttributes'
-                       '.workflowId',
+        'event_id': 'childWorkflowExecutionStartedEventAttributes'
+                    '.workflowId',
     }),
 
     # Timers
 
     'TimerStarted': ('TimerStarted', {
-        'timer_id': 'timerStartedEventAttributes.timerId',
+        'event_id': 'timerStartedEventAttributes.timerId',
     }),
     'TimerFired': ('TimerFired', {
-        'timer_id': 'timerStartedEventAttributes.timerId',
+        'event_id': 'timerStartedEventAttributes.timerId',
     }),
 
     # Misc
@@ -483,11 +483,8 @@ class CachingDecision(object):
         # over it multiple times
         self._new_events = tuple(new_events)
         self._token = token
-        self._activity_contexts = {}
-        self._subworkflow_contexts = {}
-        self._timer_contexts = {}
-        self._activity_to_call_id = {}
-        self._subworkflow_to_call_id = {}
+        self._contexts = {}
+        self._to_call_id = {}
         self._running = set()
         self._timedout = {}
         self._results = {}
@@ -506,13 +503,13 @@ class CachingDecision(object):
     def _setup_internal_dispatch(self):
         iu = self._internal_update = simplegeneric(self._internal_update)
         iu.register(ActivityScheduled, self._activity_scheduled)  # noqa
-        iu.register(ActivityCompleted, self._activity_completed)  # noqa
-        iu.register(ActivityFailed, self._activity_failed)  # noqa
-        iu.register(ActivityTimedout, self._activity_timedout)  # noqa
+        iu.register(ActivityCompleted, self._job_completed)  # noqa
+        iu.register(ActivityFailed, self._job_failed)  # noqa
+        iu.register(ActivityTimedout, self._job_timedout)  # noqa
         iu.register(SubworkflowStarted, self._subworkflow_started)  # noqa
-        iu.register(SubworkflowCompleted, self._subworkflow_completed)  # noqa
-        iu.register(SubworkflowFailed, self._subworkflow_failed)  # noqa
-        iu.register(SubworkflowTimedout, self._subworkflow_timedout)  # noqa
+        iu.register(SubworkflowCompleted, self._job_completed)  # noqa
+        iu.register(SubworkflowFailed, self._job_failed)  # noqa
+        iu.register(SubworkflowTimedout, self._job_timedout)  # noqa
         iu.register(TimerStarted, self._timer_started)  # noqa
         iu.register(TimerFired, self._timer_fired)  # noqa
 
@@ -524,51 +521,29 @@ class CachingDecision(object):
         """ Dispatch an event for internal purposes. """
 
     def _activity_scheduled(self, event):
-        self._activity_to_call_id[event.scheduled_id] = event.call_id
+        self._to_call_id[event.scheduled_id] = event.call_id
         self._running.add(event.call_id)
 
-    def _activity_completed(self, event):
-        call_id = self._activity_to_call_id[event.event_id]
-        assert call_id not in self._errors
-        self._running.remove(call_id)
-        self._timedout.pop(call_id, None)
-        self._results[call_id] = event.result
-
-    def _activity_failed(self, event):
-        call_id = self._activity_to_call_id[event.event_id]
-        assert call_id not in self._results
-        self._running.remove(call_id)
-        self._timedout.pop(call_id, None)
-        self._errors[call_id] = event.reason
-
-    def _activity_timedout(self, event):
-        call_id = self._activity_to_call_id[event.event_id]
-        assert call_id not in self._errors
-        assert call_id not in self._results
-        self._running.remove(call_id)
-        timeout_counter = self._timedout.get(call_id, 0)
-        self._timedout[call_id] = timeout_counter + 1
-
-    def _subworkflow_scheduled(self, event):
-        call_id = self._subworkflow_to_call_id[event.workflow_id]
+    def _subworkflow_started(self, event):
+        call_id = self._to_call_id[event.workflow_id]
         self._running.add(call_id)
 
-    def _subworkflow_completed(self, event):
-        call_id = self._subworkflow_to_call_id[event.workflow_id]
+    def _job_completed(self, event):
+        call_id = self._to_call_id[event.event_id]
         assert call_id not in self._errors
         self._running.remove(call_id)
         self._timedout.pop(call_id, None)
         self._results[call_id] = event.result
 
-    def _subworkflow_failed(self, event):
-        call_id = self._subworkflow_to_call_id[event.workflow_id]
+    def _job_failed(self, event):
+        call_id = self._to_call_id[event.event_id]
         assert call_id not in self._results
         self._running.remove(call_id)
         self._timedout.pop(call_id, None)
         self._errors[call_id] = event.reason
 
-    def _subworkflow_timedout(self, event):
-        call_id = self._subworkflow_to_call_id[event.workflow_id]
+    def _job_timedout(self, event):
+        call_id = self._to_call_id[event.event_id]
         assert call_id not in self._errors
         assert call_id not in self._results
         self._running.remove(call_id)
@@ -576,15 +551,15 @@ class CachingDecision(object):
         self._timedout[call_id] = timeout_counter + 1
 
     def _timer_started(self, event):
-        self._timers_started.add(event.timer_id)
+        self._timers_started.add(event.event_id)
 
     def _timer_fired(self, event):
-        self._timers_started.remove(event.timer_id)
-        self._timers_fired.add(event.timer_id)
+        self._timers_started.remove(event.event_id)
+        self._timers_fired.add(event.event_id)
 
     def _check_call_id(self, call_id):
         if (
-            call_id in self.running
+            call_id in self._running
             or call_id in self._results
             or call_id in self._errors
             or call_id in self._timers_started
@@ -636,7 +611,7 @@ class CachingDecision(object):
             task_list=task_list
         )
         if context is not None:
-            self._activity_contexts[call_id] = str(context)
+            self._contexts[call_id] = str(context)
 
     def queue_subworkflow(self, call_id, name, version, input,
                           task_start_to_close=None,
@@ -655,7 +630,7 @@ class CachingDecision(object):
             execution_start_to_close=execution_start_to_close,
             task_list=task_list
         )
-        self._subworkflow_to_call_id[workflow_id] = call_id
+        self._to_call_id[workflow_id] = call_id
         if context is not None:
             self._subworkflow_contexts[call_id] = str(context)
 
@@ -664,7 +639,7 @@ class CachingDecision(object):
         self._check_call_id(call_id)
         self._client.queue_timer(call_id=call_id, delay=delay)
         if context is not None:
-            self._timer_contexts[call_id] = str(context)
+            self._contexts[call_id] = str(context)
 
     def complete(self, result):
         """ Triggers the successful completion of the workflow.
@@ -673,6 +648,8 @@ class CachingDecision(object):
         the success of the operation.
 
         """
+        if self._is_finished:
+            return
         self._is_finished = True
         return self._client.complete_workflow(token=self._token,
                                               result=str(result))
@@ -688,6 +665,8 @@ class CachingDecision(object):
         Returns a boolean indicating the success of the operation.
 
         """
+        if self._is_finished:
+            return
         self._is_finished = True
         return self._client.fail_workflow(token=self._token,
                                           reason=str(reason))
@@ -695,39 +674,31 @@ class CachingDecision(object):
     def is_finished(self):
         return self._is_finished
 
+    def is_running(self, call_id):
+        return call_id in self._running or call_id in self._timers_started
+
+    def is_fired(self, call_id):
+        return call_id in self._timer_fired
+
+    def get_result(self, call_id, default=None):
+        return self._results.get(call_id, default)
+
+    def get_error(self, call_id, default=None):
+        return self._errors.get(call_id, default)
+
+    def get_timeout_counter(self, call_id, default=None):
+        return self._timedout.get(call_id, default)
+
     def override_global_context(self, context=None):
         self._global_context = str(context)
 
     def global_context(self):
         return self._global_context
 
-    def dispatch_events(self, obj):
-        """ Dispatch the new events to specific *obj* methods.
-
-        The dispatch is done in the order the events happened to the following
-        methods of which all are optional::
-
-            obj.activity_scheduled(call_id, context)
-            obj.activity_completed(call_id, result, context)
-            obj.activity_failed(call_id, reason, context)
-            obj.activity_timedout(call_id, context)
-            obj.subworkflow_started(call_id, context)
-            obj.subworkflow_completed(call_id, result, context)
-            obj.subworkflow_failed(call_id, reason, context)
-            obj.subworkflow_timedout(call_id, context)
-            obj.timer_started(call_id, context)
-            obj.timer_fired(call_id, context)
-
-        """
-        pass
-
     def dump(self):
         return _str_concat(json.dumps((
-            self._activity_contexts,
-            self._subworkflow_contexts,
-            self._timer_contexts,
-            self._activity_to_call_id,
-            self._subworkflow_to_call_id,
+            self._contexts,
+            self._to_call_id,
             list(self._running),
             self._timedout,
             self._results,
@@ -738,11 +709,8 @@ class CachingDecision(object):
 
     def load(self, data):
         json_data, self._global_context = _str_deconcat(data)
-        (self._activity_contexts,
-         self._subworkflow_contexts,
-         self._timer_contexts,
-         self._activity_to_call_id,
-         self._subworkflow_to_call_id,
+        (self._contexts,
+         self._to_call_id,
          running,
          timers_started,
          timers_fired,
