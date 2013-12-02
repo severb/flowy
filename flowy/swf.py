@@ -486,11 +486,10 @@ class CachingDecision(object):
         self._contexts = {}
         self._to_call_id = {}
         self._running = set()
-        self._timedout = {}
+        self._timedout = set()
         self._results = {}
         self._errors = {}
-        self._timers_started = set()
-        self._timers_fired = set()
+        self._fired = set()
         self._global_context = None
         self._is_finished = False
 
@@ -521,49 +520,51 @@ class CachingDecision(object):
         """ Dispatch an event for internal purposes. """
 
     def _activity_scheduled(self, event):
-        self._to_call_id[event.scheduled_id] = event.call_id
+        self._to_call_id[event.event_id] = event.call_id
         self._running.add(event.call_id)
 
     def _subworkflow_started(self, event):
-        call_id = self._to_call_id[event.workflow_id]
+        call_id = self._to_call_id[event.event_id]
         self._running.add(call_id)
 
     def _job_completed(self, event):
         call_id = self._to_call_id[event.event_id]
+        assert call_id not in self._result
         assert call_id not in self._errors
+        assert call_id not in self._timedout
         self._running.remove(call_id)
-        self._timedout.pop(call_id, None)
         self._results[call_id] = event.result
 
     def _job_failed(self, event):
         call_id = self._to_call_id[event.event_id]
         assert call_id not in self._results
+        assert call_id not in self._errors
+        assert call_id not in self._timedout
         self._running.remove(call_id)
-        self._timedout.pop(call_id, None)
         self._errors[call_id] = event.reason
 
     def _job_timedout(self, event):
         call_id = self._to_call_id[event.event_id]
-        assert call_id not in self._errors
         assert call_id not in self._results
+        assert call_id not in self._errors
+        assert call_id not in self._timedout
         self._running.remove(call_id)
-        timeout_counter = self._timedout.get(call_id, 0)
-        self._timedout[call_id] = timeout_counter + 1
+        self._timedout.add(call_id)
 
     def _timer_started(self, event):
-        self._timers_started.add(event.event_id)
+        self._running.add(event.event_id)
 
     def _timer_fired(self, event):
-        self._timers_started.remove(event.event_id)
-        self._timers_fired.add(event.event_id)
+        self._running.remove(event.event_id)
+        self._fired.add(event.event_id)
 
     def _check_call_id(self, call_id):
         if (
             call_id in self._running
             or call_id in self._results
             or call_id in self._errors
-            or call_id in self._timers_started
-            or call_id in self._timers_fired
+            or call_id in self._timedout
+            or call_id in self._fired
         ):
             raise RuntimeError("call_id %s was already used." % call_id)
 
@@ -675,7 +676,7 @@ class CachingDecision(object):
         return self._is_finished
 
     def is_running(self, call_id):
-        return call_id in self._running or call_id in self._timers_started
+        return call_id in self._running
 
     def is_fired(self, call_id):
         return call_id in self._timer_fired
@@ -686,8 +687,8 @@ class CachingDecision(object):
     def get_error(self, call_id, default=None):
         return self._errors.get(call_id, default)
 
-    def get_timeout_counter(self, call_id, default=None):
-        return self._timedout.get(call_id, default)
+    def is_timeout(self, call_id):
+        return call_id in self._timedout
 
     def override_global_context(self, context=None):
         self._global_context = str(context)
@@ -703,8 +704,7 @@ class CachingDecision(object):
             self._timedout,
             self._results,
             self._errors,
-            list(self._timers_started),
-            list(self._timers_fired),
+            list(self._fired),
         )), self._global_context)
 
     def load(self, data):
@@ -712,14 +712,12 @@ class CachingDecision(object):
         (self._contexts,
          self._to_call_id,
          running,
-         timers_started,
-         timers_fired,
+         fired,
          self._timedout,
          self._results,
          self._errors) = json.loads(json_data)
         self._running = set(running)
-        self._timers_started = timers_started
-        self._timers_fired = timers_fired
+        self._fired = fired
 
 
 class Client(object):
@@ -731,7 +729,8 @@ class Client(object):
     argument and it will be used instead of the default one.
 
     """
-    _ActivityTask = ActivityTask
+    ActivityTask = ActivityTask
+    Decision = CachingDecision
 
     def __init__(self, client):
         self._client = client
@@ -859,29 +858,14 @@ class Client(object):
             assert event.started_by == decision_response.last_event_id
             input, context_data = _str_deconcat(event.context)
 
-        cached_events = None
-        decision_context = None
-        if context_data is not None:
-            cached_events, decision_context = _str_deconcat(context_data)
+        decision = self.Decision(self._client, new_events,
+                                 decision_response.token, context_data)
 
-#         decision_client = CachingDecisionClient(
-#             self._client, decision_response.token, decision_context
-#         )
-#         event_dispatcher = CachedEventDispatcher(cached_events, new_events)
+        decision_maker(input, decision)
 
-#         decision = Decision(decision_client, event_dispatcher)
+        if not decision.is_finished():
+            self._client.schedule_queued(_str_concat(input, decision.dump()))
 
-#         decision_maker(input, decision)
-
-#         self._client.schedule_queued(
-#             _str_concat(
-#                 input,
-#                 _str_concat(
-#                     event_dispatcher.serialize(),
-#                     decision_client.serialize()
-#                 )
-#             )
-#         )
         return decision_maker
 
     def dispatch_next_activity(self, task_list):
@@ -898,7 +882,8 @@ class Client(object):
         activity_runner_key = activity_response.name, activity_response.version
         activity_runner = self._activity_registry.get(activity_runner_key)
         if activity_runner is not None:
-            activity_task = ActivityTask(self._client, activity_response.token)
+            activity_task = self.ActivityTask(self._client,
+                                              activity_response.token)
             activity_runner(activity_response.input, activity_task)
             return activity_runner
 
