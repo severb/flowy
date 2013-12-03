@@ -34,9 +34,7 @@ class Result(object):
 
 class WorkflowExecution(object):
     def __init__(self, decision, execution_history):
-
         self._decision = decision
-
         default = _Options(
             heartbeat=None,
             schedule_to_close=None,
@@ -45,12 +43,16 @@ class WorkflowExecution(object):
             task_start_to_close=None,
             execution_start_to_close=None,
             task_list=None,
-            retry=3,
-            delay=0,
+            retry=None,
+            delay=None,
         )
         self._options_stack = [default]
         self._error_handling_stack = [False]
         self._call_id = 0
+        self._is_completed = True
+
+    def is_completed(self):
+        return self._is_completed
 
     @contextmanager
     def options(self, heartbeat=None, schedule_to_close=None,
@@ -78,33 +80,64 @@ class WorkflowExecution(object):
         if error_handling is not None:
             self._error_handling_stack.pop()
 
-    def queue_childworkflow(self, name, version, input,
-                            task_start_to_close=None,
-                            execution_start_to_close=None,
-                            task_list=None, retry=None, delay=None):
-        workflow_options = _Options(
-            heartbeat=None,
-            schedule_to_close=None,
-            schedule_to_start=None,
-            start_to_close=None,
-            task_start_to_close=task_start_to_close,
-            execution_start_to_close=execution_start_to_close,
-            task_list=task_list,
-            retry=None,
-            delay=None,
+    def _reserve_call_ids(self, call_id, delay, retry):
+        # Reserve the call_ids need by this call
+        self._call_id = (
+            1 + call_id  # one for the first call
+            + int(delay > 0)  # one for the timer if needed
+            + retry  # one for each possible retry
         )
 
-        options = workflow_options.update_with(self._current_options)
-        return self._decision.queue_childworkflow(
-            call_id=self._call_id,
-            name=name,
-            version=version,
-            input=input,
-            task_start_to_close=options.task_start_to_close,
-            execution_start_to_close=options.execution_start_to_close,
-            task_list=options.task_list,
-            context=str(retry)
-        )
+    def _check_args(self, args, kwargs):
+        a = tuple(args) + tuple(kwargs.items())
+        errs = list(filter(lambda x: isinstance(x, Error), a))
+        if errs:
+            try:
+                errs[0].result()
+            except TaskError as e:
+                self._decision.fail(
+                    'Proxy called with error result: %s' % e.message
+                )
+                return Placeholder()
+        if any(isinstance(r, Placeholder) for r in a):
+            return Placeholder()
+        return None
+
+    def _add_delay(self, call_id, delay):
+        if not delay > 0:
+            return
+        if self.decisoin.is_running(str(call_id)):
+            self._is_completed = False
+            return Placeholder()
+        if not self._decision.is_fired(str(call_id)):
+            # if not running and not fired it must be queued
+            self._is_completed = False
+            self._decision.queue_timer(str(call_id), delay)
+            return Placeholder()
+        self._call_id += 1
+        return None
+
+    def _search_result(self, call_id, retry, transport):
+        for self._call_id in range(self._call_id, retry + 1):
+            if self._decision.is_timeout(str(self._call_id)):
+                continue
+            if self._decision.is_running(str(self._call_id)):
+                self._is_completed = False
+                return Placeholder()
+            error_message = self._decision.get_error(self._call_id)
+            if error_message is not None:
+                if self._error_handling:
+                    return Error(error_message)
+                self._decision.fail('Error in activity: %s' % error_message)
+                return Placeholder()
+            result = self._decision.get_result(self._call_id)
+            if result is not None:
+                return Result(transport.deserialize_result(result))
+            return None  # There is nothing we could find about this call
+        if self._error_handling():
+            return Timeout()
+        self._decision.fail('An activity timed out.')
+        return Placeholder()
 
     def activity_call(self, name, version, args, kwargs, transport,
                       heartbeat=None, schedule_to_close=None,
@@ -125,70 +158,75 @@ class WorkflowExecution(object):
         # Context settings have the highest priority,
         # even higher than the ones sent as arguments in this method!
         options = activity_options.update_with(self._current_options)
-
-        call_id = self._call_id
         delay = int(options.delay)
         retry = max(int(options.retry), 0)
 
-        # Reserve the call_ids need by this call
-        self._call_id = (
-            1 + call_id  # one for the first call
-            + int(options.delay > 0)  # one for the timer if needed
-            + retry  # one for each possible retry
+        initial_call_id = self._call_id
+        result = self._check_args(args, kwargs)
+        if result is not None:
+            return result
+        result = self._add_delay(delay)
+        if result is not None:
+            return result
+        result = self._search_result(retry, transport)
+        if result is not None:
+            return result
+        self._is_completed = False
+        self._decision.queue_activity(
+            call_id=str(self._call_id),
+            name=name,
+            version=version,
+            input=transport.serialize_input(*args, **kwargs),
+            heartbeat=options.heartbeat,
+            schedule_to_close=options.schedule_to_close,
+            schedule_to_start=options.schedule_to_start,
+            start_to_close=options.start_to_close,
+            task_list=options.task_list,
+        )
+        self._reserve_call_ids(initial_call_id, delay, retry)
+        return Placeholder()
+
+    def queue_childworkflow(self, name, version, args, kwargs, transport,
+                            task_start_to_close=None,
+                            execution_start_to_close=None,
+                            task_list=None, retry=None, delay=None):
+        workflow_options = _Options(
+            heartbeat=None,
+            schedule_to_close=None,
+            schedule_to_start=None,
+            start_to_close=None,
+            task_start_to_close=task_start_to_close,
+            execution_start_to_close=execution_start_to_close,
+            task_list=task_list,
+            retry=None,
+            delay=None,
         )
 
-        err = _args_error(tuple(args) + tuple(kwargs.items()))
-        if err is not None:
-            try:
-                err.result()
-            except TaskError as e:
-                self.decision.fail(
-                    'Proxy called with error result: %s' % e.message
-                )
-                return Placeholder()
+        options = workflow_options.update_with(self._current_options)
+        delay = int(options.delay)
+        retry = max(int(options.retry), 0)
 
-        if _any_placeholders(tuple(args) + tuple(kwargs.items())):
-            return Placeholder()
-
-        if delay > 0:
-            if self._is_running(str(call_id)):
-                return Placeholder()
-            if not self._decision.is_fired(str(call_id)):
-                # if not running and not fired it must be queued
-                self._decision.queue_timer(options.delay)
-                return Placeholder()
-            call_id += 1
-
-        for call_id in range(call_id, retry + 1):
-            if self.decision.is_timeout(str(call_id)):
-                continue
-            if self.decision.is_running(str(call_id)):
-                return Placeholder()
-            error_message = self.decision.get_error(call_id)
-            if error_message is not None:
-                if self._error_handling:
-                    return Error(error_message)
-                self.decision.fail('Error in activity: %s' % error_message)
-                return Placeholder()
-            result = self.decision.get_result(call_id)
-            if result is not None:
-                return Result(transport.deserialize_result(result))
-            self._decision.queue_activity(
-                call_id=str(call_id),
-                name=name,
-                version=version,
-                input=transport.serialize_input(*args, **kwargs),
-                heartbeat=options.heartbeat,
-                schedule_to_close=options.schedule_to_close,
-                schedule_to_start=options.schedule_to_start,
-                start_to_close=options.start_to_close,
-                task_list=options.task_list,
-            )
-
-        # Well we reached the max retrying
-        if self._error_handling():
-            return Timeout()
-        self.decision.fail('An activity timed out.')
+        initial_call_id = self._call_id
+        result = self._check_args(args, kwargs)
+        if result is not None:
+            return result
+        result = self._add_delay(delay)
+        if result is not None:
+            return result
+        result = self._search_result(retry, transport)
+        if result is not None:
+            return result
+        self._is_completed = False
+        return self._decision.queue_childworkflow(
+            call_id=str(self._call_id),
+            name=name,
+            version=version,
+            input=transport.serialize_input(*args, **kwargs),
+            task_start_to_close=options.task_start_to_close,
+            execution_start_to_close=options.execution_start_to_close,
+            task_list=options.task_list,
+        )
+        self._reserve_call_ids(initial_call_id, delay, retry)
         return Placeholder()
 
     @property
@@ -239,11 +277,7 @@ class Workflow(object):
         try:
             result = self.run(remote, *args, **kwargs)
         except _SyncNeeded:
-            # It's ok to pass here since the code that follows won't mistakenly
-            # complete the workflow - nothing_running should always return
-            # False as long as there is at least an activity running: the one
-            # that blocked us in the first place.
-            pass
+            return
         except Exception as e:
             decision.fail(e.message)
             return
@@ -290,7 +324,7 @@ class ActivityProxy(JSONTransportProxy):
     def __init__(self, name, version,
                  heartbeat=None, schedule_to_close=None,
                  schedule_to_start=None, start_to_close=None,
-                 task_list=None, retry=None, delay=None):
+                 task_list=None, retry=3, delay=0):
         self.name = name
         self.version = version
         self.heartbeat = heartbeat
@@ -320,7 +354,7 @@ class ActivityProxy(JSONTransportProxy):
 class WorkflowProxy(JSONTransportProxy):
     def __init__(self, name, version,
                  task_start_to_close=None, execution_start_to_close=None,
-                 task_list=None, retry=None, delay=None):
+                 task_list=None, retry=3, delay=0):
         self.name = name
         self.version = version
         self.task_start_to_close = task_start_to_close
@@ -377,13 +411,3 @@ class TaskError(RuntimeError):
 
 class TaskTimedout(TaskError):
     """Raised if manual handling is ON on task timeout."""
-
-
-def _any_placeholders(a):
-    return any(isinstance(r, Placeholder) for r in a)
-
-
-def _args_error(a):
-    errs = list(filter(lambda x: isinstance(x, Error), a))
-    if errs:
-        return errs[0]
