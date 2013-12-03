@@ -1,29 +1,22 @@
 import unittest
 from mock import create_autospec, MagicMock, patch
-from flowy import Workflow, make_config, workflow_config, ActivityProxy
+from flowy import Workflow
+from flowy import make_config, workflow_config
 from boto.swf.layer1 import Layer1
 import json
 
-@workflow_config('SimpleWorkflow', 1, 'constant_list', 60, 60)
-class SimpleWorkflow(Workflow):
+
+@workflow_config('BlankWorkflow', 1, 'a_list', 60, 60)
+class BlankWorkflow(Workflow):
     """
     Does nothing
 
     """
-    div = ActivityProxy(
-        name='SimpleActivity',
-        version=1,
-        task_list='constant_list',
-    )
 
     def run(self, remote):
-        print("what?")
-        r = remote.div()
-        print(r.result())
         return True
 
-
-f = open("./simple/mocks_output.txt", "rb")
+f = open("./blank/mocks_output.txt", "rb")
 responses = map(json.loads, f.readlines())
 f.close()
 
@@ -44,11 +37,11 @@ class BlankWorkflowTest(unittest.TestCase):
         my_config = make_config('RolisTest')
 
         # Start a workflow
-        SimpleWorkflowID = my_config.workflow_starter('SimpleWorkflow', 1)
-        print 'Starting: ', SimpleWorkflowID()
+        BlankWorkflowId = my_config.workflow_starter('BlankWorkflow', 1)
+        print 'Starting: ', BlankWorkflowId()
 
         # Run one decision task
         my_config.scan()
-        my_config._client.dispatch_next_decision(task_list='constant_list')
+        my_config._client.dispatch_next_decision(task_list='a_list')
 
 
