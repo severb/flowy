@@ -127,11 +127,14 @@ class SWFClient(object):
             return False
         return True
 
-    def start_workflow(self, name, version, task_list, input):
+    def start_workflow(self, name, version, task_list, input,
+                       wokrflow_id=None):
+        if wokrflow_id is None:
+            wokrflow_id = uuid.uuid4()
         try:
             r = self._client.start_workflow_execution(
                 domain=self._domain,
-                workflow_id=str(uuid.uuid4()),
+                workflow_id=str(wokrflow_id),
                 workflow_name=name,
                 workflow_version=str(version),
                 task_list=task_list,
