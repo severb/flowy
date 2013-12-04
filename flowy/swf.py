@@ -376,7 +376,6 @@ def _make_event_factory(event_map):
                     try:
                         attr_value = attr_value[attr_path_part]
                     except KeyError:
-                        print event
                         raise
                 kwargs[attr_name] = attr_value
             event_class = tuples.get(event_class_name, lambda **k: None)
@@ -872,7 +871,7 @@ class CachingClient(object):
             assert event.started_by == decision_response.last_event_id
             input, context_data = _str_deconcat(event.context)
 
-        decision = self.Decision(self._client, new_events,
+        decision = self.Decision(self._client, reversed(new_events),
                                  decision_response.token, context_data)
 
         decision_maker(input, decision)
