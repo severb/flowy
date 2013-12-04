@@ -765,9 +765,15 @@ class Client(object):
             self._activity_registry[(name, version)] = activity_runner
         return reg_successful
 
-    def start_workflow(self, name, version, task_list, input):
-        return self._client.start_workflow(name=name, version=version,
-                                           task_list=task_list, input=input)
+    def start_workflow(self, name, version, task_list, input,
+                       workflow_id=None):
+        return self._client.start_workflow(
+            name=name,
+            version=version,
+            task_list=task_list,
+            input=input,
+            workflow_id=workflow_id,
+        )
 
     def dispatch_next_decision(self, task_list):
         """ Poll for the next decision and call the matching runner registered.
