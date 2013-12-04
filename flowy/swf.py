@@ -10,7 +10,7 @@ from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
 from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
 
-__all__ = ['Client', 'SWFClient']
+__all__ = ['CachingClient', 'SWFClient']
 
 
 class SWFClient(object):
@@ -155,7 +155,7 @@ class SWFClient(object):
             while 1:
                 for event in page['events']:
                     yield event
-                if not page['nextPageToken']:
+                if not page.get('nextPageToken'):
                     break
                 # If a workflow is stopped and a decision page fetching fails
                 # forever we avoid infinite loops
@@ -184,7 +184,7 @@ class SWFClient(object):
             version=first_page['workflowType']['version'],
             token=first_page['taskToken'],
             last_event_id=first_page.get('previousStartedEventId'),
-            events_iter=ifilter(imap(all_events(), _event_factory))
+            events_iter=ifilter(None, imap(_event_factory, all_events()))
         )
 
     def poll_activity(self, task_list):
@@ -367,12 +367,16 @@ def _make_event_factory(event_map):
         if event_type in event_map:
             event_class_name, attrs = event_map[event_type]
             kwargs = {}
-            for attr_name, attr_path in attrs:
+            for attr_name, attr_path in attrs.items():
                 attr_value = event
                 for attr_path_part in attr_path.split('.'):
-                    attr_value = attr_value[attr_path_part]
+                    try:
+                        attr_value = attr_value[attr_path_part]
+                    except KeyError:
+                        print event
+                        raise
                 kwargs[attr_name] = attr_value
-            event_class = getattr(tuples, event_class_name, lambda **k: None)
+            event_class = tuples.get(event_class_name, lambda **k: None)
             return event_class(**kwargs)
         return None
 
@@ -429,7 +433,7 @@ _event_factory = _make_event_factory({
         'event_id': 'timerStartedEventAttributes.timerId',
     }),
     'TimerFired': ('TimerFired', {
-        'event_id': 'timerStartedEventAttributes.timerId',
+        'event_id': 'timerFiredEventAttributes.timerId',
     }),
 
     # Misc
@@ -438,7 +442,7 @@ _event_factory = _make_event_factory({
         'input': 'workflowExecutionStartedEventAttributes.input',
     }),
     'DecisionTaskCompleted': ('DecisionCompleted', {
-        'context': 'decisionTaskCompletedEventAttributes.context',
+        'context': 'decisionTaskCompletedEventAttributes.executionContext',
         'started_by': 'decisionTaskCompletedEventAttributes.startedEventId',
     }),
 })
@@ -679,7 +683,7 @@ class CachingDecision(object):
         return call_id in self._running
 
     def is_fired(self, call_id):
-        return call_id in self._timer_fired
+        return call_id in self._fired
 
     def get_result(self, call_id, default=None):
         return self._results.get(call_id, default)
@@ -701,7 +705,7 @@ class CachingDecision(object):
             self._contexts,
             self._to_call_id,
             list(self._running),
-            self._timedout,
+            list(self._timedout),
             self._results,
             self._errors,
             list(self._fired),
@@ -712,15 +716,16 @@ class CachingDecision(object):
         (self._contexts,
          self._to_call_id,
          running,
-         fired,
-         self._timedout,
+         timedout,
          self._results,
-         self._errors) = json.loads(json_data)
+         self._errors,
+         fired) = json.loads(json_data)
         self._running = set(running)
-        self._fired = fired
+        self._timedout = set(timedout)
+        self._fired = set(fired)
 
 
-class Client(object):
+class CachingClient(object):
     """ A simple wrapper around Boto's SWF Layer1 that provides a cleaner
     interface and some convenience.
 
@@ -825,7 +830,7 @@ class Client(object):
 
         decision_maker_key = decision_response.name, decision_response.version
         decision_maker = self._workflow_registry.get(decision_maker_key)
-        if decision_maker is not None:
+        if decision_maker is None:
             return
 
         first_run = decision_response.last_event_id == 0
@@ -835,7 +840,7 @@ class Client(object):
             # may not be the only one - there may be also be previous decisions
             # that have timed out.
             try:
-                all_events = tuple(decision_response.all_events)
+                all_events = tuple(decision_response.events_iter)
             except PageError:
                 return  # Not all pages were available
             workflow_started = all_events[-1]
@@ -847,7 +852,7 @@ class Client(object):
             # search for the last one
             new_events = []
             try:
-                for event in decision_response.all_events:
+                for event in decision_response.events_iter:
                     if isinstance(event, DecisionCompleted):  # noqa
                         break
                     new_events.append(event)
@@ -864,7 +869,8 @@ class Client(object):
         decision_maker(input, decision)
 
         if not decision.is_finished():
-            self._client.schedule_queued(_str_concat(input, decision.dump()))
+            self._client.schedule_queued(decision_response.token,
+                                         _str_concat(input, decision.dump()))
 
         return decision_maker
 

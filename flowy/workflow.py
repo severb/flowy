@@ -33,7 +33,7 @@ class Result(object):
 
 
 class WorkflowExecution(object):
-    def __init__(self, decision, execution_history):
+    def __init__(self, decision):
         self._decision = decision
         default = _Options(
             heartbeat=None,
@@ -103,21 +103,21 @@ class WorkflowExecution(object):
             return Placeholder()
         return None
 
-    def _add_delay(self, call_id, delay):
+    def _add_delay(self, delay):
         if not delay > 0:
             return
-        if self.decisoin.is_running(str(call_id)):
+        if self._decision.is_running(str(self._call_id)):
             self._is_completed = False
             return Placeholder()
-        if not self._decision.is_fired(str(call_id)):
+        if not self._decision.is_fired(str(self._call_id)):
             # if not running and not fired it must be queued
             self._is_completed = False
-            self._decision.queue_timer(str(call_id), delay)
+            self._decision.queue_timer(str(self._call_id), delay)
             return Placeholder()
         self._call_id += 1
         return None
 
-    def _search_result(self, call_id, retry, transport):
+    def _search_result(self, retry, transport):
         for self._call_id in range(self._call_id, retry + 1):
             if self._decision.is_timeout(str(self._call_id)):
                 continue
@@ -157,39 +157,37 @@ class WorkflowExecution(object):
 
         # Context settings have the highest priority,
         # even higher than the ones sent as arguments in this method!
-        options = activity_options.update_with(self._current_options)
-        delay = int(options.delay)
-        retry = max(int(options.retry), 0)
+        opts = activity_options.update_with(self._current_options)
+        delay = int(opts.delay)
+        retry = max(int(opts.retry), 0)
 
         initial_call_id = self._call_id
         result = self._check_args(args, kwargs)
-        if result is not None:
-            return result
-        result = self._add_delay(delay)
-        if result is not None:
-            return result
-        result = self._search_result(retry, transport)
-        if result is not None:
-            return result
-        self._is_completed = False
-        self._decision.queue_activity(
-            call_id=str(self._call_id),
-            name=name,
-            version=version,
-            input=transport.serialize_input(*args, **kwargs),
-            heartbeat=options.heartbeat,
-            schedule_to_close=options.schedule_to_close,
-            schedule_to_start=options.schedule_to_start,
-            start_to_close=options.start_to_close,
-            task_list=options.task_list,
-        )
+        if result is None:
+            result = self._add_delay(delay)
+            if result is None:
+                result = self._search_result(retry, transport)
+                if result is None:
+                    self._is_completed = False
+                    self._decision.queue_activity(
+                        call_id=str(self._call_id),
+                        name=name,
+                        version=version,
+                        input=transport.serialize_input(*args, **kwargs),
+                        heartbeat=opts.heartbeat,
+                        schedule_to_close=opts.schedule_to_close,
+                        schedule_to_start=opts.schedule_to_start,
+                        start_to_close=opts.start_to_close,
+                        task_list=opts.task_list,
+                    )
+                    result = Placeholder()
         self._reserve_call_ids(initial_call_id, delay, retry)
-        return Placeholder()
+        return result
 
-    def queue_childworkflow(self, name, version, args, kwargs, transport,
-                            task_start_to_close=None,
-                            execution_start_to_close=None,
-                            task_list=None, retry=None, delay=None):
+    def subworkflow_call(self, name, version, args, kwargs, transport,
+                         task_start_to_close=None,
+                         execution_start_to_close=None,
+                         task_list=None, retry=None, delay=None):
         workflow_options = _Options(
             heartbeat=None,
             schedule_to_close=None,
@@ -198,36 +196,34 @@ class WorkflowExecution(object):
             task_start_to_close=task_start_to_close,
             execution_start_to_close=execution_start_to_close,
             task_list=task_list,
-            retry=None,
-            delay=None,
+            retry=retry,
+            delay=delay,
         )
 
-        options = workflow_options.update_with(self._current_options)
-        delay = int(options.delay)
-        retry = max(int(options.retry), 0)
+        opts = workflow_options.update_with(self._current_options)
+        delay = int(opts.delay)
+        retry = max(int(opts.retry), 0)
 
         initial_call_id = self._call_id
         result = self._check_args(args, kwargs)
-        if result is not None:
-            return result
-        result = self._add_delay(delay)
-        if result is not None:
-            return result
-        result = self._search_result(retry, transport)
-        if result is not None:
-            return result
-        self._is_completed = False
-        return self._decision.queue_childworkflow(
-            call_id=str(self._call_id),
-            name=name,
-            version=version,
-            input=transport.serialize_input(*args, **kwargs),
-            task_start_to_close=options.task_start_to_close,
-            execution_start_to_close=options.execution_start_to_close,
-            task_list=options.task_list,
-        )
+        if result is None:
+            result = self._add_delay(delay)
+            if result is None:
+                result = self._search_result(retry, transport)
+                if result is None:
+                    self._is_completed = False
+                    self._decision.queue_subworkflow(
+                        call_id=str(self._call_id),
+                        name=name,
+                        version=version,
+                        input=transport.serialize_input(*args, **kwargs),
+                        task_start_to_close=opts.task_start_to_close,
+                        execution_start_to_close=opts.execution_start_to_close,
+                        task_list=opts.task_list,
+                    )
+                    result = Placeholder()
         self._reserve_call_ids(initial_call_id, delay, retry)
-        return Placeholder()
+        return result
 
     @property
     def _error_handling(self):
@@ -279,7 +275,9 @@ class Workflow(object):
         except _SyncNeeded:
             return
         except Exception as e:
-            decision.fail(e.message)
+            import traceback
+            traceback.print_exc()
+            decision.fail(str(e))
             return
 
         if we.is_completed():
