@@ -110,9 +110,15 @@ class ClientConfig(object):
     def workflow_starter(self, name, version, task_list=None):
 
         def wf_starter(*args, **kwargs):
+            workflow_id = kwargs.get('workflow_id')
             i = self.serialize_workflow_input(*args, **kwargs)
-            return self._client.start_workflow(name=name, version=version,
-                                               task_list=task_list, input=i)
+            return self._client.start_workflow(
+                name=name,
+                version=version,
+                task_list=task_list,
+                input=i,
+                workflow_id=workflow_id
+            )
 
         return wf_starter
 
