@@ -24,7 +24,6 @@ f.close()
 def mock_json_values(self, action, data, object_hook=None):
     try:
         resp = responses.pop(0)
-        print(resp)
         return resp[1]
     except IndexError:
         return None
@@ -37,8 +36,7 @@ class SimpleActivityTest(unittest.TestCase):
     def test_activity(self):
         my_config = make_config('RolisTest')
 
-
-        # Run one decision task
+        # Run one activity task
         my_config.scan()
         my_config._client.dispatch_next_activity(task_list='constant_list')
 
