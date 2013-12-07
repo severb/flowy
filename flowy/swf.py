@@ -373,10 +373,7 @@ def _make_event_factory(event_map):
             for attr_name, attr_path in attrs.items():
                 attr_value = event
                 for attr_path_part in attr_path.split('.'):
-                    try:
-                        attr_value = attr_value[attr_path_part]
-                    except KeyError:
-                        raise
+                    attr_value = attr_value[attr_path_part]
                 kwargs[attr_name] = attr_value
             event_class = tuples.get(event_class_name, lambda **k: None)
             return event_class(**kwargs)
@@ -390,7 +387,7 @@ _event_factory = _make_event_factory({
     # Activities
 
     'ActivityTaskScheduled': ('ActivityScheduled', {
-        'event_id': 'event_id',
+        'event_id': 'eventId',
         'call_id': 'activityTaskScheduledEventAttributes.activityId',
     }),
     'ActivityTaskCompleted': ('ActivityCompleted', {
@@ -409,24 +406,24 @@ _event_factory = _make_event_factory({
 
     'ChildWorkflowExecutionStarted': ('SubworkflowStarted', {
         'event_id': 'childWorkflowExecutionStartedEventAttributes'
-                    '.workflowId',
+                    '.workflowExecution.workflowId',
     }),
 
     'ChildWorkflowExecutionCompleted': ('SubworkflowCompleted', {
         'event_id': 'childWorkflowExecutionCompletedEventAttributes'
-                    '.workflowId',
+                    '.workflowExecution.workflowId',
         'result': 'childWorkflowExecutionCompletedEventAttributes.result',
     }),
 
     'ChildWorkflowExecutionFailed': ('SubworkflowFailed', {
         'event_id': 'childWorkflowExecutionFailedEventAttributes'
-                    '.workflowId',
+                    '.workflowExecution.workflowId',
         'reason': 'childWorkflowExecutionFailedEventAttributes.reason',
     }),
 
     'ChildWorkflowExecutionTimedOut': ('SubworkflowTimedout', {
-        'event_id': 'childWorkflowExecutionStartedEventAttributes'
-                    '.workflowId',
+        'event_id': 'childWorkflowExecutionTimedOutEventAttributes'
+                    '.workflowExecution.workflowId',
     }),
 
     # Timers
@@ -535,7 +532,7 @@ class CachingDecision(object):
 
     def _job_completed(self, event):
         call_id = self._to_call_id[event.event_id]
-        assert call_id not in self._result
+        assert call_id not in self._results
         assert call_id not in self._errors
         assert call_id not in self._timedout
         self._running.remove(call_id)

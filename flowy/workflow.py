@@ -106,37 +106,39 @@ class WorkflowExecution(object):
     def _add_delay(self, delay):
         if not delay > 0:
             return
-        if self._decision.is_running(str(self._call_id)):
+        call_id = str(self._call_id)
+        if self._decision.is_running(call_id):
             self._is_completed = False
             return Placeholder()
-        if not self._decision.is_fired(str(self._call_id)):
+        if not self._decision.is_fired(call_id):
             # if not running and not fired it must be queued
             self._is_completed = False
-            self._decision.queue_timer(str(self._call_id), delay)
+            self._decision.queue_timer(call_id, delay)
             return Placeholder()
         self._call_id += 1
         return None
 
     def _search_result(self, retry, transport):
-        for self._call_id in range(self._call_id, retry + 1):
-            if self._decision.is_timeout(str(self._call_id)):
+        for self._call_id in range(self._call_id, self._call_id + retry + 1):
+            call_id = str(self._call_id)
+            if self._decision.is_timeout(call_id):
                 continue
-            if self._decision.is_running(str(self._call_id)):
+            if self._decision.is_running(call_id):
                 self._is_completed = False
                 return Placeholder()
-            error_message = self._decision.get_error(self._call_id)
+            error_message = self._decision.get_error(call_id)
             if error_message is not None:
                 if self._error_handling:
                     return Error(error_message)
-                self._decision.fail('Error in activity: %s' % error_message)
+                self._decision.fail('Error in job: %s' % error_message)
                 return Placeholder()
-            result = self._decision.get_result(self._call_id)
+            result = self._decision.get_result(call_id)
             if result is not None:
                 return Result(transport.deserialize_result(result))
             return None  # There is nothing we could find about this call
-        if self._error_handling():
+        if self._error_handling:
             return Timeout()
-        self._decision.fail('An activity timed out.')
+        self._decision.fail('A job has timed out.')
         return Placeholder()
 
     def activity_call(self, name, version, args, kwargs, transport,
@@ -275,8 +277,6 @@ class Workflow(object):
         except _SyncNeeded:
             return
         except Exception as e:
-            import traceback
-            traceback.print_exc()
             decision.fail(str(e))
             return
 
