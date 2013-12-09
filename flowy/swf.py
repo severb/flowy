@@ -1,16 +1,16 @@
 import json
-import uuid
 import logging
+import uuid
 from collections import namedtuple
 from functools import partial
+from itertools import ifilter, imap
 from pkgutil import simplegeneric
 
+from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
 from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
-from boto.swf.exceptions import SWFTypeAlreadyExistsError, SWFResponseError
 
-
-__all__ = ['Client', 'SWFClient']
+__all__ = ['CachingClient', 'SWFClient']
 
 
 class SWFClient(object):
@@ -127,11 +127,14 @@ class SWFClient(object):
             return False
         return True
 
-    def start_workflow(self, name, version, task_list, input):
+    def start_workflow(self, name, version, task_list, input,
+                       workflow_id=None):
+        if workflow_id is None:
+            workflow_id = uuid.uuid4()
         try:
             r = self._client.start_workflow_execution(
                 domain=self._domain,
-                workflow_id=str(uuid.uuid4()),
+                workflow_id=str(workflow_id),
                 workflow_name=name,
                 workflow_version=str(version),
                 task_list=task_list,
@@ -147,24 +150,64 @@ class SWFClient(object):
         poller = partial(self._client.poll_for_decision_task,
                          task_list=task_list, domain=self._domain,
                          reverse_order=True)
-        paged_poller = partial(_repeated_poller, poller, _decision_page)
-        decision_collapsed = _poll_decision_collapsed(paged_poller)
-        # Collapsing decisions pages may fail if some pages are unavailable
-        if decision_collapsed is None:
-            return
-        return _decision_response(decision_collapsed)
+
+        first_page = _repeated_poller(poller)
+
+        def all_events():
+            page = first_page
+            while 1:
+                for event in page['events']:
+                    yield event
+                if not page.get('nextPageToken'):
+                    break
+                # If a workflow is stopped and a decision page fetching fails
+                # forever we avoid infinite loops
+                p = _repeated_poller(
+                    poller, next_page_token=page['nextPageToken'], retries=3
+                )
+                if p is None:
+                    raise PageError()
+                assert (
+                    p['taskToken'] == page['taskToken']
+                    and (
+                        p['workflowType']['name']
+                        == page['workflowType']['name'])
+                    and (
+                        p['workflowType']['version']
+                        == page['workflowType']['version'])
+                    and (
+                        p.get('previousStartedEventId')
+                        == page.get('previousStartedEventId')
+                    )
+                ), 'Inconsistent decision pages.'
+                page = p
+
+        return DecisionResponse(
+            name=first_page['workflowType']['name'],
+            version=first_page['workflowType']['version'],
+            token=first_page['taskToken'],
+            last_event_id=first_page.get('previousStartedEventId'),
+            events_iter=ifilter(None, imap(_event_factory, all_events()))
+        )
 
     def poll_activity(self, task_list):
         poller = partial(self._client.poll_for_activity_task,
                          task_list=task_list, domain=self._domain)
-        return _repeated_poller(poller, _activity_response)
+        response = _repeated_poller(poller)
+        return ActivityResponse(
+            name=response['activityType']['name'],
+            version=response['activityType']['version'],
+            input=response['input'],
+            token=response['taskToken']
+        )
 
     def queue_activity(self, call_id, name, version, input,
                        heartbeat=None,
                        schedule_to_close=None,
                        schedule_to_start=None,
                        start_to_close=None,
-                       task_list=None):
+                       task_list=None,
+                       context=None):
         self._scheduled_activities.append((
             (str(call_id), name, str(version)),
             {
@@ -173,26 +216,29 @@ class SWFClient(object):
                 'schedule_to_start_timeout': _str_or_none(schedule_to_start),
                 'start_to_close_timeout': _str_or_none(start_to_close),
                 'task_list': task_list,
-                'input': input
+                'input': input,
+                'control': context,
             }
         ))
 
-    def queue_childworkflow(self, workflow_id, name, version, input,
-                            task_start_to_close=None,
-                            execution_start_to_close=None,
-                            task_list=None):
+    def queue_subworkflow(self, workflow_id, name, version, input,
+                          task_start_to_close=None,
+                          execution_start_to_close=None,
+                          task_list=None,
+                          context=None):
         self._scheduled_workflows.append((
             (name, str(version), str(workflow_id)),
             {
                 'execution_start_to_close_timeout': execution_start_to_close,
                 'task_start_to_close_timeout': task_start_to_close,
                 'task_list': task_list,
-                'input': input
+                'input': input,
+                'control': context,
             }
         ))
 
-    def queue_timer(self, call_id, delay):
-        self._scheduled_timers.append((str(delay), str(call_id)))
+    def queue_timer(self, call_id, delay, context=None):
+        self._scheduled_timers.append((str(delay), str(call_id), context))
 
     def schedule_queued(self, token, context=None):
         d = Layer1Decisions()
@@ -284,57 +330,121 @@ class SWFClient(object):
         return True
 
 
-class DecisionClient(object):
-    def __init__(self, client, token, decision_data):
-        self._client = client
-        self._token = token
-        self._decision_data = decision_data
+DecisionResponse = namedtuple(
+    'DecisionResponse',
+    'name version events_iter last_event_id token'
+)
 
-    def queue_activity(self, call_id, name, version, input,
-                       heartbeat=None,
-                       schedule_to_close=None,
-                       schedule_to_start=None,
-                       start_to_close=None,
-                       task_list=None):
-        self._client.queue_activity(
-            call_id=call_id,
-            name=name,
-            version=version,
-            input=input,
-            heartbeat=heartbeat,
-            schedule_to_close=schedule_to_close,
-            schedule_to_start=schedule_to_start,
-            start_to_close=start_to_close,
-            task_list=task_list
-        )
+ActivityResponse = namedtuple(
+    'ActivityResponse',
+    'name version input token'
+)
 
-    def queue_childworkflow(self, workflow_id, name, version, input,
-                            task_start_to_close=None,
-                            execution_start_to_close=None,
-                            task_list=None):
-        self._client.queue_childworkflow(
-            workflow_id=workflow_id,
-            name=name,
-            version=version,
-            input=input,
-            task_start_to_close=task_start_to_close,
-            execution_start_to_close=execution_start_to_close,
-            task_list=task_list
-        )
 
-    def queue_timer(self, call_id, delay):
-        return self._client.queue_timer(call_id=call_id, delay=delay)
+class PageError(RuntimeError):
+    """ Raised when a page in a decision response is unavailable. """
 
-    def schedule_queued(self, context=None):
-        return self._client.schedule_queued(
-            token=self._token, context=self._decision_data.serialize(context)
-        )
 
-    def complete(self, result):
-        return self._client.complete_workflow(token=self._token, result=result)
+def _repeated_poller(poller, retries=-1, **kwargs):
+    response = {}
+    while 'taskToken' not in response or not response['taskToken']:
+        try:
+            response = poller(**kwargs)
+        except (IOError, SWFResponseError):
+            logging.warning("Unknown error when polling.", exc_info=1)
+        if retries == 0:
+            return
+        retries = max(retries - 1, -1)
+    return response
 
-    def fail(self, reason):
-        return self._client.fail_workflow(token=self._token, reason=reason)
+
+def _make_event_factory(event_map):
+    tuples = {}
+    for event_class_name, attrs in event_map.values():
+        tuples[event_class_name] = namedtuple(event_class_name, attrs.keys())
+
+    globals().update(tuples)
+
+    def factory(event):
+        event_type = event['eventType']
+        if event_type in event_map:
+            event_class_name, attrs = event_map[event_type]
+            kwargs = {}
+            for attr_name, attr_path in attrs.items():
+                attr_value = event
+                for attr_path_part in attr_path.split('.'):
+                    attr_value = attr_value[attr_path_part]
+                kwargs[attr_name] = attr_value
+            event_class = tuples.get(event_class_name, lambda **k: None)
+            return event_class(**kwargs)
+        return None
+
+    return factory
+
+
+# Dynamically create all the event tuples and a factory for them
+_event_factory = _make_event_factory({
+    # Activities
+
+    'ActivityTaskScheduled': ('ActivityScheduled', {
+        'event_id': 'eventId',
+        'call_id': 'activityTaskScheduledEventAttributes.activityId',
+    }),
+    'ActivityTaskCompleted': ('ActivityCompleted', {
+        'event_id': 'activityTaskCompletedEventAttributes.scheduledEventId',
+        'result': 'activityTaskCompletedEventAttributes.result',
+    }),
+    'ActivityTaskFailed': ('ActivityFailed', {
+        'event_id': 'activityTaskFailedEventAttributes.scheduledEventId',
+        'reason': 'activityTaskFailedEventAttributes.reason',
+    }),
+    'ActivityTaskTimedOut': ('ActivityTimedout', {
+        'event_id': 'activityTaskTimedOutEventAttributes.scheduledEventId',
+    }),
+
+    # Subworkflows
+
+    'ChildWorkflowExecutionStarted': ('SubworkflowStarted', {
+        'event_id': 'childWorkflowExecutionStartedEventAttributes'
+                    '.workflowExecution.workflowId',
+    }),
+
+    'ChildWorkflowExecutionCompleted': ('SubworkflowCompleted', {
+        'event_id': 'childWorkflowExecutionCompletedEventAttributes'
+                    '.workflowExecution.workflowId',
+        'result': 'childWorkflowExecutionCompletedEventAttributes.result',
+    }),
+
+    'ChildWorkflowExecutionFailed': ('SubworkflowFailed', {
+        'event_id': 'childWorkflowExecutionFailedEventAttributes'
+                    '.workflowExecution.workflowId',
+        'reason': 'childWorkflowExecutionFailedEventAttributes.reason',
+    }),
+
+    'ChildWorkflowExecutionTimedOut': ('SubworkflowTimedout', {
+        'event_id': 'childWorkflowExecutionTimedOutEventAttributes'
+                    '.workflowExecution.workflowId',
+    }),
+
+    # Timers
+
+    'TimerStarted': ('TimerStarted', {
+        'event_id': 'timerStartedEventAttributes.timerId',
+    }),
+    'TimerFired': ('TimerFired', {
+        'event_id': 'timerFiredEventAttributes.timerId',
+    }),
+
+    # Misc
+
+    'WorkflowExecutionStarted': ('WorkflowStarted', {
+        'input': 'workflowExecutionStartedEventAttributes.input',
+    }),
+    'DecisionTaskCompleted': ('DecisionCompleted', {
+        'context': 'decisionTaskCompletedEventAttributes.executionContext',
+        'started_by': 'decisionTaskCompletedEventAttributes.startedEventId',
+    }),
+})
 
 
 class ActivityTask(object):
@@ -343,7 +453,7 @@ class ActivityTask(object):
         self._token = token
 
     def complete(self, result):
-        """ Signal the successful completion of the activity with *result*.
+        """ Triggers the successful completion of the activity with *result*.
 
         Returns a boolean indicating the success of the operation.
 
@@ -351,7 +461,7 @@ class ActivityTask(object):
         return self._client.complete_activity(token=self._token, result=result)
 
     def fail(self, reason):
-        """ Signal the failure of the activity for the specified reason.
+        """ Triggers the failure of the activity for the specified reason.
 
         Returns a boolean indicating the success of the operation.
 
@@ -369,47 +479,97 @@ class ActivityTask(object):
         return self._client.heartbeat(token=self._token)
 
 
-class Decision(object):
-    def __init__(self, client, context, new_events):
+class CachingDecision(object):
+    def __init__(self, client, new_events, token, execution_context=None):
         self._client = client
-        self._new_events = new_events
-        self._context = context
+        # Cache the events in case of an iterator because we may need to walk
+        # over it multiple times
+        self._new_events = tuple(new_events)
+        self._token = token
+        self._contexts = {}
+        self._to_call_id = {}
+        self._running = set()
+        self._timedout = set()
+        self._results = {}
+        self._errors = {}
+        self._fired = set()
+        self._global_context = None
+        self._is_finished = False
 
-        de = self._dispatch_event = simplegeneric(self._dispatch_event)
-        de.register(_ActivityScheduled, self._dispatch_activity_scheduled)
-        de.register(_ActivityCompleted, self._dispatch_activity_completed)
-        de.register(_ActivityFailed, self._dispatch_activity_failed)
-        de.register(_ActivityTimedout, self._dispatch_activity_timedout)
-        de.register(_ChildWorkflowStarted, self._dispatch_workflow_started)
-        de.register(_ChildWorkflowCompleted, self._dispatch_workflow_completed)
-        de.register(_ChildWorkflowFailed, self._dispatch_workflow_failed)
-        de.register(_ChildWorkflowTimedout, self._dispatch_workflow_timedout)
-        de.register(_TimerStarted, self._dispatch_timer_started)
-        de.register(_TimerFired, self._dispatch_timer_fired)
+        if execution_context is not None:
+            self.load(execution_context)
 
+        self._setup_internal_dispatch()
+        self.update(new_events)
+
+    def _setup_internal_dispatch(self):
         iu = self._internal_update = simplegeneric(self._internal_update)
-        iu.register(_ActivityScheduled, self._internal_activity_scheduled)
-        for event in new_events:
+        iu.register(ActivityScheduled, self._activity_scheduled)  # noqa
+        iu.register(ActivityCompleted, self._job_completed)  # noqa
+        iu.register(ActivityFailed, self._job_failed)  # noqa
+        iu.register(ActivityTimedout, self._job_timedout)  # noqa
+        iu.register(SubworkflowStarted, self._subworkflow_started)  # noqa
+        iu.register(SubworkflowCompleted, self._job_completed)  # noqa
+        iu.register(SubworkflowFailed, self._job_failed)  # noqa
+        iu.register(SubworkflowTimedout, self._job_timedout)  # noqa
+        iu.register(TimerStarted, self._timer_started)  # noqa
+        iu.register(TimerFired, self._timer_fired)  # noqa
+
+    def update(self, new_events):
+        for event in self._new_events:
             self._internal_update(event)
 
-    def dispatch_new_events(self, obj):
-        """ Dispatch the new events to specific *obj* methods.
+    def _internal_update(self, event):
+        """ Dispatch an event for internal purposes. """
 
-        The dispatch is done in the order the events happened to the following
-        methods of which all are optional::
+    def _activity_scheduled(self, event):
+        self._to_call_id[event.event_id] = event.call_id
+        self._running.add(event.call_id)
 
-            obj.activity_scheduled(call_id)
-            obj.activity_completed(call_id, result)
-            obj.activity_failed(call_id, reason)
-            obj.activity_timedout(call_id)
-            obj.workflow_started(workflow_id)
-            obj.workflow_completed(workflow_id, result)
-            obj.workflow_failed(workflow_id, reason)
-            obj.workflow_timedout(workflow_id)
+    def _subworkflow_started(self, event):
+        call_id = self._to_call_id[event.event_id]
+        self._running.add(call_id)
 
-        """
-        for event in self._new_events:
-            self._dispatch_event(event, obj)
+    def _job_completed(self, event):
+        call_id = self._to_call_id[event.event_id]
+        assert call_id not in self._results
+        assert call_id not in self._errors
+        assert call_id not in self._timedout
+        self._running.remove(call_id)
+        self._results[call_id] = event.result
+
+    def _job_failed(self, event):
+        call_id = self._to_call_id[event.event_id]
+        assert call_id not in self._results
+        assert call_id not in self._errors
+        assert call_id not in self._timedout
+        self._running.remove(call_id)
+        self._errors[call_id] = event.reason
+
+    def _job_timedout(self, event):
+        call_id = self._to_call_id[event.event_id]
+        assert call_id not in self._results
+        assert call_id not in self._errors
+        assert call_id not in self._timedout
+        self._running.remove(call_id)
+        self._timedout.add(call_id)
+
+    def _timer_started(self, event):
+        self._running.add(event.event_id)
+
+    def _timer_fired(self, event):
+        self._running.remove(event.event_id)
+        self._fired.add(event.event_id)
+
+    def _check_call_id(self, call_id):
+        if (
+            call_id in self._running
+            or call_id in self._results
+            or call_id in self._errors
+            or call_id in self._timedout
+            or call_id in self._fired
+        ):
+            raise RuntimeError("call_id %s was already used." % call_id)
 
     def queue_activity(self, call_id, name, version, input,
                        heartbeat=None,
@@ -423,21 +583,26 @@ class Decision(object):
         This will schedule a run of a previously registered activity with the
         specified *name* and *version*. The *call_id* is used to assign a
         custom identity to this particular queued activity run inside its own
-        workflow history. The queueing is done internally, without having the
-        client make any requests yet. The actual scheduling is done by calling
-        :meth:`schedule_queued`. The activity will be queued in its default
-        task list that was set when it was registered, this can be changed by
-        setting a different *task_list* value.
+        workflow history. It must be unique and can only be reused for timedout
+        jobs. The queueing is done internally and all queued activities will be
+        discarded if at a later point in time any meth:`complete` or
+        meth:`fail` methods are called.
+
+        The activity will be queued in its default task list that was set when
+        it was registered, this can be changed by setting a different
+        *task_list* value.
 
         The activity options specified here, if any, have a higher priority
         than the ones used when the activity was registered. For more
-        information about the various arguments see :meth:`register_activity`.
+        information about the various arguments see
+        :meth:`Client.register_activity`.
 
         When queueing an acctivity a custom *context* can be set. It can be
-        retrieved later by :meth:`activity_context`.
+        retrieved later in the methods used by :meth:`dispatch_events`.
 
         """
         call_id = str(call_id)
+        self._check_call_id(call_id)
         self._client.queue_activity(
             call_id=call_id,
             name=name,
@@ -450,17 +615,17 @@ class Decision(object):
             task_list=task_list
         )
         if context is not None:
-            self._context.set_activity_context(call_id, context)
+            self._contexts[call_id] = str(context)
 
-    def queue_childworkflow(self, call_id, name, version, input,
-                            task_start_to_close=None,
-                            execution_start_to_close=None,
-                            task_list=None,
-                            context=None):
-        """ Queue a workflow. """
+    def queue_subworkflow(self, call_id, name, version, input,
+                          task_start_to_close=None,
+                          execution_start_to_close=None,
+                          task_list=None,
+                          context=None):
         call_id = str(call_id)
+        self._check_call_id(call_id)
         workflow_id = str(uuid.uuid4())
-        self._client.queue_childworkflow(
+        self._client.queue_subworkflow(
             workflow_id=workflow_id,
             name=name,
             version=version,
@@ -469,38 +634,32 @@ class Decision(object):
             execution_start_to_close=execution_start_to_close,
             task_list=task_list
         )
-        self._context.map_workflow_to_call(workflow_id, call_id)
+        self._to_call_id[workflow_id] = call_id
         if context is not None:
-            self._context.set_workflow_context(call_id, context)
+            self._subworkflow_contexts[call_id] = str(context)
 
-    def queue_timer(self, call_id, delay):
+    def queue_timer(self, call_id, delay, context=None):
+        call_id = str(call_id)
+        self._check_call_id(call_id)
         self._client.queue_timer(call_id=call_id, delay=delay)
-
-    def schedule_queued(self, context=None):
-        """ Schedules all queued activities.
-
-        All activities previously queued by :meth:`queue_activity` will be
-        scheduled within the workflow. An optional textual *context* can be set
-        and will be available in subsequent decisions using
-        :meth:`global_context`. Returns a boolean indicating the success of
-        the operation. The internal collection of scheduled
-        activities will always be cleared when calling this method.
-        """
-        return self._client.schedule_queued(
-            self._context.serialize(context)
-        )
+        if context is not None:
+            self._contexts[call_id] = str(context)
 
     def complete(self, result):
-        """ Signals the successful completion of the workflow.
+        """ Triggers the successful completion of the workflow.
 
         Completes the workflow the *result* value. Returns a boolean indicating
         the success of the operation.
 
         """
-        return self._client.complete(result)
+        if self._is_finished:
+            return
+        self._is_finished = True
+        return self._client.complete_workflow(token=self._token,
+                                              result=str(result))
 
     def fail(self, reason):
-        """ Signals the termination of the workflow.
+        """ Triggers the termination of the workflow.
 
         Terminate the workflow identified by *workflow_id* for the specified
         *reason*. All the workflow activities will be abandoned and the final
@@ -510,172 +669,62 @@ class Decision(object):
         Returns a boolean indicating the success of the operation.
 
         """
-        return self._client.fail(reason)
+        if self._is_finished:
+            return
+        self._is_finished = True
+        return self._client.fail_workflow(token=self._token,
+                                          reason=str(reason))
 
-    def global_context(self, default=None):
-        """ Access the global context that was set by
-        :meth:`schedule_queued`.
+    def is_finished(self):
+        return self._is_finished
 
-        """
-        return self._context.global_context(default)
+    def is_running(self, call_id):
+        return call_id in self._running
 
-    def activity_context(self, call_id, default=None):
-        """ Access an activity specific context that was set by
-        :meth:`queue_activity`.
+    def is_fired(self, call_id):
+        return call_id in self._fired
 
-        """
-        return self._context.activity_context(call_id, default)
+    def get_result(self, call_id, default=None):
+        return self._results.get(call_id, default)
 
-    def workflow_context(self, workflow_id, default=None):
-        return self._context.workflow_context(workflow_id, default)
+    def get_error(self, call_id, default=None):
+        return self._errors.get(call_id, default)
 
-    def _dispatch_event(self, event, obj):
-        """ Dispatch an event to the proper method of obj. """
+    def is_timeout(self, call_id):
+        return call_id in self._timedout
 
-    def _dispatch_activity_scheduled(self, event, obj):
-        meth = 'activity_scheduled'
-        call_id = self._context.event_to_call(event.event_id)
-        self._dispatch_if_exists(obj, meth, call_id)
+    def override_global_context(self, context=None):
+        self._global_context = str(context)
 
-    def _dispatch_activity_completed(self, event, obj):
-        meth = 'activity_completed'
-        call_id = self._context.event_to_call(event.event_id)
-        self._dispatch_if_exists(obj, meth, call_id, event.result)
+    def global_context(self):
+        return self._global_context
 
-    def _dispatch_activity_failed(self, event, obj):
-        meth = 'activity_failed'
-        call_id = self._context.event_to_call(event.event_id)
-        self._dispatch_if_exists(obj, meth, call_id, event.reason)
-
-    def _dispatch_activity_timedout(self, event, obj):
-        meth = 'activity_timedout'
-        call_id = self._context.event_to_call(event.event_id)
-        self._dispatch_if_exists(obj, meth, call_id)
-
-    def _dispatch_workflow_started(self, event, obj):
-        meth = 'workflow_started'
-        call_id = self._context.workflow_to_call(event.workflow_id)
-        self._dispatch_if_exists(obj, meth, call_id)
-
-    def _dispatch_workflow_completed(self, event, obj):
-        meth = 'workflow_completed'
-        call_id = self._context.workflow_to_call(event.workflow_id)
-        self._dispatch_if_exists(obj, meth, call_id, event.result)
-
-    def _dispatch_workflow_failed(self, event, obj):
-        meth = 'workflow_failed'
-        call_id = self._context.workflow_to_call(event.workflow_id)
-        self._dispatch_if_exists(obj, meth, call_id, event.reason)
-
-    def _dispatch_workflow_timedout(self, event, obj):
-        meth = 'workflow_timedout'
-        call_id = self._context.workflow_to_call(event.workflow_id)
-        self._dispatch_if_exists(obj, meth, call_id)
-
-    def _dispatch_timer_started(self, event, obj):
-        meth = 'timer_started'
-        self._dispatch_if_exists(obj, meth, event.timer_id)
-
-    def _dispatch_timer_fired(self, event, obj):
-        meth = 'timer_fired'
-        self._dispatch_if_exists(obj, meth, event.timer_id)
-
-    def _dispatch_if_exists(self, obj, method_name, *args):
-        getattr(obj, method_name, lambda *args: None)(*args)
-
-    def _internal_update(self, event):
-        """ Dispatch an event for internal purposes. """
-
-    def _internal_activity_scheduled(self, event):
-        self._context.map_event_to_call(event.event_id, event.call_id)
-
-
-class JSONDecisionContext(object):
-    def __init__(self, context=None):
-        self._event_to_call_id = {}
-        self._workflow_to_call_id = {}
-        self._activity_contexts = {}
-        self._workflow_contexts = {}
-        self._global_context = None
-        if context is not None:
-            json_data, self._global_context = _str_deconcat(context)
-            (self._event_to_call_id,
-             self._workflow_to_call_id,
-             self._activity_contexts,
-             self._workflow_contexts) = json.loads(json_data)
-
-    def global_context(self, default=None):
-        if self._global_context is None:
-            return default
-        return str(self._global_context)
-
-    def activity_context(self, call_id, default=None):
-        if call_id not in self._activity_contexts:
-            return default
-        return str(self._activity_contexts[call_id])
-
-    def workflow_context(self, call_id, default=None):
-        if call_id not in self._workflow_contexts:
-            return default
-        return str(self._workflow_contexts[call_id])
-
-    def set_activity_context(self, call_id, context):
-        self._activity_contexts[call_id] = str(context)
-
-    def set_workflow_context(self, call_id, context):
-        self._workflow_contexts[call_id] = str(context)
-
-    def map_event_to_call(self, event_id, call_id):
-        self._event_to_call_id[event_id] = call_id
-
-    def map_workflow_to_call(self, workflow_id, call_id):
-        self._workflow_to_call_id[workflow_id] = call_id
-
-    def event_to_call(self, event_id):
-        return self._event_to_call_id[event_id]
-
-    def workflow_to_call(self, workflow_id):
-        return self._workflow_to_call_id[workflow_id]
-
-    def serialize(self, new_global_context=None):
-        g = self.global_context()
-        if new_global_context is not None:
-            g = str(new_global_context)
+    def dump(self):
         return _str_concat(json.dumps((
-            self._event_to_call_id,
-            self._workflow_to_call_id,
-            self._activity_contexts,
-            self._workflow_contexts,
-        )), g)
+            self._contexts,
+            self._to_call_id,
+            list(self._running),
+            list(self._timedout),
+            self._results,
+            self._errors,
+            list(self._fired),
+        )), self._global_context)
+
+    def load(self, data):
+        json_data, self._global_context = _str_deconcat(data)
+        (self._contexts,
+         self._to_call_id,
+         running,
+         timedout,
+         self._results,
+         self._errors,
+         fired) = json.loads(json_data)
+        self._running = set(running)
+        self._timedout = set(timedout)
+        self._fired = set(fired)
 
 
-class DecisionData(object):
-    def __init__(self, data, _first_run=False):
-        self._context = None
-        self._input = data
-        if not _first_run:
-            self._input, self._context = _str_deconcat(data)
-
-    @classmethod
-    def for_first_run(cls, data):
-        return cls(data, _first_run=True)
-
-    @property
-    def context(self):
-        return str(self._context) if self._context is not None else None
-
-    @property
-    def input(self):
-        return str(self._input)
-
-    def serialize(self, new_context=None):
-        context = self.context
-        if new_context is not None:
-            context = str(new_context)
-        return _str_concat(self.input, context)
-
-
-class Client(object):
+class CachingClient(object):
     """ A simple wrapper around Boto's SWF Layer1 that provides a cleaner
     interface and some convenience.
 
@@ -684,11 +733,8 @@ class Client(object):
     argument and it will be used instead of the default one.
 
     """
-    _DecisionData = DecisionData
-    _DecisionClient = DecisionClient
-    _DecisionContext = JSONDecisionContext
-    _Decision = Decision
-    _ActivityTask = ActivityTask
+    ActivityTask = ActivityTask
+    Decision = CachingDecision
 
     def __init__(self, client):
         self._client = client
@@ -715,7 +761,7 @@ class Client(object):
 
         """
         version = str(version)
-        reg_successful = self._client.register_workflow(
+        reg_result = self._client.register_workflow(
             name=name,
             version=version,
             task_list=task_list,
@@ -724,9 +770,9 @@ class Client(object):
             child_policy=child_policy,
             descr=descr
         )
-        if reg_successful:
+        if reg_result:
             self._workflow_registry[(name, version)] = decision_maker
-        return reg_successful
+        return reg_result
 
     def register_activity(self, activity_runner, name, version, task_list,
                           heartbeat=60, schedule_to_close=420,
@@ -748,7 +794,7 @@ class Client(object):
 
         """
         version = str(version)
-        reg_successful = self._client.register_activity(
+        reg_result = self._client.register_activity(
             name=name,
             version=version,
             task_list=task_list,
@@ -758,18 +804,24 @@ class Client(object):
             start_to_close=start_to_close,
             descr=descr
         )
-        if reg_successful:
+        if reg_result:
             self._activity_registry[(name, version)] = activity_runner
-        return reg_successful
+        return reg_result
 
-    def start_workflow(self, name, version, task_list, input):
-        return self._client.start_workflow(name=name, version=version,
-                                           task_list=task_list, input=input)
+    def start_workflow(self, name, version, task_list, input,
+                       workflow_id=None):
+        return self._client.start_workflow(
+            name=name,
+            version=version,
+            task_list=task_list,
+            input=input,
+            workflow_id=workflow_id,
+        )
 
     def dispatch_next_decision(self, task_list):
         """ Poll for the next decision and call the matching runner registered.
 
-        If any runner previsouly registered with :meth:`register_workflow`
+        If any runner previously registered with :meth:`register_workflow`
         matches the polled decision it will be called with two arguments in
         this order: the input that was used when the workflow was scheduled and
         a :class:`Decision` instance. It returns the matched runner if any or
@@ -780,26 +832,57 @@ class Client(object):
         # Polling a decision may fail if some pages are unavailable
         if decision_response is None:
             return
+
         decision_maker_key = decision_response.name, decision_response.version
         decision_maker = self._workflow_registry.get(decision_maker_key)
-        if decision_maker is not None:
-            if decision_response.first_run:
-                data = self._DecisionData.for_first_run(decision_response.data)
-            else:
-                data = self._DecisionData(decision_response.data)
-            decision_client = self._DecisionClient(
-                self._client, decision_response.token, data
-            )
-            decision_context = self._DecisionContext(data.context)
-            decision = self._Decision(decision_client, decision_context,
-                                      decision_response.new_events)
-            decision_maker(data.input, decision)
-            return decision_maker
+        if decision_maker is None:
+            return
+
+        first_run = decision_response.last_event_id == 0
+        if first_run:
+            # The first decision is always just after a workflow started and at
+            # this point this should also be first event in the history but it
+            # may not be the only one - there may be also be previous decisions
+            # that have timed out.
+            try:
+                all_events = tuple(decision_response.events_iter)
+            except PageError:
+                return  # Not all pages were available
+            workflow_started = all_events[-1]
+            new_events = all_events[:-1]
+            assert isinstance(workflow_started, WorkflowStarted)  # noqa
+            input, context_data = workflow_started.input, None
+        else:
+            # The workflow had previous decisions completed and we should
+            # search for the last one
+            new_events = []
+            try:
+                for event in decision_response.events_iter:
+                    if isinstance(event, DecisionCompleted):  # noqa
+                        break
+                    new_events.append(event)
+                else:
+                    assert False, 'Last decision was not found.'
+            except PageError:
+                return
+            assert event.started_by == decision_response.last_event_id
+            input, context_data = _str_deconcat(event.context)
+
+        decision = self.Decision(self._client, reversed(new_events),
+                                 decision_response.token, context_data)
+
+        decision_maker(input, decision)
+
+        if not decision.is_finished():
+            self._client.schedule_queued(decision_response.token,
+                                         _str_concat(input, decision.dump()))
+
+        return decision_maker
 
     def dispatch_next_activity(self, task_list):
         """ Poll for the next activity and call the matching runner registered.
 
-        If any runner previsouly registered with :meth:`register_activity`
+        If any runner previously registered with :meth:`register_activity`
         matches the polled activity it will be called with two arguments in
         this order: the input that was used when the activity was scheduled and
         a :class:`ActivityTask` instance. It returns the matched runner if any
@@ -810,211 +893,16 @@ class Client(object):
         activity_runner_key = activity_response.name, activity_response.version
         activity_runner = self._activity_registry.get(activity_runner_key)
         if activity_runner is not None:
-            activity_task = self._ActivityTask(
-                self._client, activity_response.token
-            )
+            activity_task = self.ActivityTask(self._client,
+                                              activity_response.token)
             activity_runner(activity_response.input, activity_task)
             return activity_runner
-
-
-def _decision_event(event):
-    event_type = event['eventType']
-
-    if event_type == 'ActivityTaskScheduled':
-        event_id = event['eventId']
-        ATSEA = 'activityTaskScheduledEventAttributes'
-        call_id = event[ATSEA]['activityId']
-        return _ActivityScheduled(event_id, call_id)
-
-    elif event_type == 'ActivityTaskCompleted':
-        ATCEA = 'activityTaskCompletedEventAttributes'
-        event_id = event[ATCEA]['scheduledEventId']
-        result = event[ATCEA]['result']
-        return _ActivityCompleted(event_id, result)
-
-    elif event_type == 'ActivityTaskFailed':
-        ATFEA = 'activityTaskFailedEventAttributes'
-        event_id = event[ATFEA]['scheduledEventId']
-        reason = event[ATFEA]['reason']
-        return _ActivityFailed(event_id, reason)
-
-    elif event_type == 'ActivityTaskTimedOut':
-        ATTOEA = 'activityTaskTimedOutEventAttributes'
-        event_id = event[ATTOEA]['scheduledEventId']
-        return _ActivityTimedout(event_id)
-
-    elif event_type == 'WorkflowExecutionStarted':
-        WESEA = 'workflowExecutionStartedEventAttributes'
-        input = event[WESEA]['input']
-        return _WorkflowStarted(input)
-
-    elif event_type == 'DecisionTaskCompleted':
-        DTCEA = 'decisionTaskCompletedEventAttributes'
-        context = event[DTCEA]['executionContext']
-        started_by = event[DTCEA]['startedEventId']
-        return _DecisionCompleted(started_by, context)
-
-    elif event_type == 'ChildWorkflowExecutionStarted':
-        CWESEA = 'childWorkflowExecutionStartedEventAttributes'
-        workflow_id = event[CWESEA]['workflowExecution']['workflowId']
-        return _ChildWorkflowStarted(workflow_id)
-
-    elif event_type == 'ChildWorkflowExecutionCompleted':
-        CWECEA = 'childWorkflowExecutionCompletedEventAttributes'
-        workflow_id = event[CWECEA]['workflowExecution']['workflowId']
-        result = event[CWECEA]['result']
-        return _ChildWorkflowCompleted(workflow_id, result)
-
-    elif event_type == 'ChildWorkflowExecutionFailed':
-        CWEFEA = 'childWorkflowExecutionFailedEventAttributes'
-        workflow_id = event[CWEFEA]['workflowExecution']['workflowId']
-        reason = event[CWEFEA]['reason']
-        return _ChildWorkflowFailed(workflow_id, reason)
-
-    elif event_type == 'ChildWorkflowExecutionTimedOut':
-        CWETOEA = 'childWorkflowExecutionTimedOutEventAttributes'
-        workflow_id = event[CWETOEA]['workflowExecution']['workflowId']
-        return _ChildWorkflowTimedout(workflow_id)
-
-    elif event_type == 'TimerStarted':
-        TSEA = 'timerStartedEventAttributes'
-        return _TimerStarted(event[TSEA]['timerId'])
-
-    elif event_type == 'TimerFired':
-        TFEA = 'timerFiredEventAttributes'
-        return _TimerFired(event[TFEA]['timerId'])
-
-
-def _decision_page(response, event_maker=_decision_event):
-    events = [event_maker(e) for e in response['events']]
-    return _DecisionPage(
-        name=response['workflowType']['name'],
-        version=response['workflowType']['version'],
-        token=response['taskToken'],
-        next_page_token=response.get('nextPageToken'),
-        last_event_id=response.get('previousStartedEventId'),
-        events=filter(None, events)
-    )
-
-
-def _repeated_poller(poller, result_klass, retries=-1, **kwargs):
-    response = {}
-    while 'taskToken' not in response or not response['taskToken']:
-        try:
-            response = poller(**kwargs)
-        except (IOError, SWFResponseError):
-            logging.warning("Unknown error when polling.", exc_info=1)
-        if retries == 0:
-            return
-        else:
-            retries = max(retries - 1, -1)
-    return result_klass(response)
-
-
-def _poll_decision_collapsed(poller):
-
-    first_page = poller()
-
-    def all_events():
-        page = first_page
-        while 1:
-            for event in page.events:
-                yield event
-            if page.next_page_token is None:
-                break
-            # If a workflow is stopped and a decision page fetching fails
-            # forever we avoid infinite loops
-            p = poller(next_page_token=page.next_page_token, retries=3)
-            if p is None:
-                return
-            assert (
-                p.name == page.name
-                and p.version == page.version
-                and p.token == page.token
-                and p.last_event_id == page.last_event_id
-            ), 'Inconsistent decision pages.'
-            page = p
-
-    return _DecisionCollapsed(name=first_page.name, version=first_page.version,
-                              all_events=all_events(), token=first_page.token,
-                              last_event_id=first_page.last_event_id)
-
-
-def _decision_response(decision_collapsed):
-    first_run = decision_collapsed.last_event_id == 0
-    if first_run:
-        # The first decision is always just after a workflow started and at
-        # this point this should also be first event in the history but it may
-        # not be the only one - there may be also be previos decisions that
-        # have timed out.
-        all_events = tuple(decision_collapsed.all_events)
-        workflow_started = all_events[-1]
-        new_events = all_events[:-1]
-        assert isinstance(workflow_started, _WorkflowStarted)
-        data = workflow_started.input
-    else:
-        # The workflow had previous decisions completed and we should search
-        # for the last one
-        new_events = []
-        for event in decision_collapsed.all_events:
-            if isinstance(event, _DecisionCompleted):
-                break
-            new_events.append(event)
-        else:
-            raise AssertionError('Last decision was not found.')
-        assert event.started_by == decision_collapsed.last_event_id
-        data = event.context
-
-    return _DecisionResponse(
-        name=decision_collapsed.name,
-        version=decision_collapsed.version,
-        token=decision_collapsed.token,
-        data=data,
-        first_run=first_run,
-        # Preserve the order in which the events happend.
-        new_events=tuple(reversed(new_events))
-    )
-
-
-def _activity_response(response):
-    return _ActivityResponse(
-        name=response['activityType']['name'],
-        version=response['activityType']['version'],
-        input=response['input'],
-        token=response['taskToken']
-    )
-
-
-_ActivityResponse = namedtuple('_ActivityResponse', 'name version input token')
-
-_DecisionPage = namedtuple('_DecisionPage',
-                           'name version events'
-                           ' next_page_token last_event_id token')
-_DecisionCollapsed = namedtuple('_DecisionCollapsed',
-                                'name version all_events last_event_id token')
-_DecisionResponse = namedtuple('_DecisionResponse',
-                               'name version new_events token data first_run')
-
-_ActivityScheduled = namedtuple('_ActivityScheduled', 'event_id call_id')
-_ActivityCompleted = namedtuple('_ActivityCompleted', 'event_id result')
-_ActivityFailed = namedtuple('_ActivityFailed', 'event_id reason')
-_ActivityTimedout = namedtuple('_ActivityTimedout', 'event_id')
-_WorkflowStarted = namedtuple('_WorkflowStarted', 'input')
-_DecisionCompleted = namedtuple('_DecisionCompleted', 'started_by context')
-
-_ChildWorkflowStarted = namedtuple('_ChildWorkflowStarted', 'workflow_id')
-_ChildWorkflowTimedout = namedtuple('_ChildWorkflowTimedout', 'workflow_id')
-_ChildWorkflowCompleted = namedtuple('_ChildWorkflowCompleted',
-                                     'workflow_id result')
-_ChildWorkflowFailed = namedtuple('_ChildWorkflowFailed',
-                                  'workflow_id reason')
-_TimerStarted = namedtuple('_TimerStarted', 'timer_id')
-_TimerFired = namedtuple('_TimerFired', 'timer_id')
 
 
 def _str_or_none(maybe_none):
     if maybe_none is not None:
         return str(maybe_none)
+    return None
 
 
 def _str_concat(str1, str2=None):
