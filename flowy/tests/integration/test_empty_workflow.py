@@ -6,7 +6,7 @@ from boto.swf.layer1 import Layer1
 import json
 
 
-@workflow_config('BlankWorkflow', 1, 'a_list', 60, 60)
+@workflow_config('BlankWorkflow', 3, 'a_list', 60, 60)
 class BlankWorkflow(Workflow):
     """
     Does nothing
@@ -14,6 +14,7 @@ class BlankWorkflow(Workflow):
     """
 
     def run(self, remote):
+        print("smt")
         return True
 
 f = open("./blank/mocks_output.txt", "rb")
@@ -31,11 +32,12 @@ class BlankWorkflowTest(unittest.TestCase):
         my_config = make_config('RolisTest')
 
         # Start a workflow
-        BlankWorkflowId = my_config.workflow_starter('BlankWorkflow', 1)
+        BlankWorkflowId = my_config.workflow_starter('BlankWorkflow', 3)
         print 'Starting: ', BlankWorkflowId()
 
         my_config.scan()
         my_config._client.dispatch_next_decision('a_list')
+        print(mock_json_values.call_count)
 
         # mock_json_values.assert_has_calls([call('StartWorkflowExecution', {'domain': 'RolisTest', 'taskList': {'name': None}, 'childPolicy': None, 'executionStartToCloseTimeout': None, 'input': '{"args": [], "kwargs": {}}', 'workflowType': {'version': '1', 'name': 'BlankWorkflow'}, 'taskStartToCloseTimeout': None, 'workflowId': '22c8d7f5-b3b6-410a-ab15-ecf48804bc69', 'tagList': None}),
         #          call('RegisterWorkflowType', {'defaultExecutionStartToCloseTimeout': '60', 'domain': 'RolisTest', 'version': '1', 'name': 'BlankWorkflow', 'defaultChildPolicy': 'TERMINATE', 'defaultTaskStartToCloseTimeout': '60', 'defaultTaskList': {'name': 'a_list'}, 'description': None}),
