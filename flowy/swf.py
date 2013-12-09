@@ -389,6 +389,7 @@ _event_factory = _make_event_factory({
     'ActivityTaskScheduled': ('ActivityScheduled', {
         'event_id': 'eventId',
         'call_id': 'activityTaskScheduledEventAttributes.activityId',
+        'context': 'activityTaskScheduledEventAttributes.control',
     }),
     'ActivityTaskCompleted': ('ActivityCompleted', {
         'event_id': 'activityTaskCompletedEventAttributes.scheduledEventId',
@@ -404,9 +405,10 @@ _event_factory = _make_event_factory({
 
     # Subworkflows
 
-    'ChildWorkflowExecutionStarted': ('SubworkflowStarted', {
-        'event_id': 'childWorkflowExecutionStartedEventAttributes'
+    'StartChildWorkflowExecution': ('SubworkflowStarted', {
+        'event_id': 'startChildWorkflowExecutionDecisionAttributes'
                     '.workflowExecution.workflowId',
+        'context': 'startChildWorkflowExecutionDecisionAttributes.control'
     }),
 
     'ChildWorkflowExecutionCompleted': ('SubworkflowCompleted', {
@@ -421,6 +423,12 @@ _event_factory = _make_event_factory({
         'reason': 'childWorkflowExecutionFailedEventAttributes.reason',
     }),
 
+    'StartChildWorkflowExecutionFailed': ('SubworkflowFailed', {
+        'event_id': 'startChildWorkflowExecutionFailed'
+                    '.workflowExecution.workflowId',
+        'reason': 'startChildWorkflowExecutionFailed.cause',
+    }),
+
     'ChildWorkflowExecutionTimedOut': ('SubworkflowTimedout', {
         'event_id': 'childWorkflowExecutionTimedOutEventAttributes'
                     '.workflowExecution.workflowId',
@@ -429,10 +437,11 @@ _event_factory = _make_event_factory({
     # Timers
 
     'TimerStarted': ('TimerStarted', {
-        'event_id': 'timerStartedEventAttributes.timerId',
+        'call_id': 'timerStartedEventAttributes.timerId',
+        'context': 'timerStartedEventAttributes.control',
     }),
     'TimerFired': ('TimerFired', {
-        'event_id': 'timerFiredEventAttributes.timerId',
+        'call_id': 'timerFiredEventAttributes.timerId',
     }),
 
     # Misc
