@@ -5,8 +5,8 @@ from flowy import make_config, workflow_config, activity_config
 from boto.swf.layer1 import Layer1
 import json
 
-@workflow_config('SimpleWorkflow', 1, 'constant_list', 60, 60)
-class SimpleWorkflow(Workflow):
+@workflow_config('DelayedWorkflow', 1, 'constant_list', 60, 60)
+class DelayedWorkflow(Workflow):
     """
     Does nothing
 
@@ -18,19 +18,20 @@ class SimpleWorkflow(Workflow):
     )
 
     def run(self, remote):
-        r = remote.div()
-        r.result()
-        return True
+        with remote.option(delay=10):
+            print("here")
+            r = remote.div()
+            r.result()
+            print("done")
 
-f = open("./simple/mocks_workflow_output.txt", "rb")
+f = open("./delayed/delayed_workflow.txt", "rb")
 responses = map(json.loads, f.readlines())
 f.close()
 
-requests = []
 def mock_json_values(self, action, data, object_hook=None):
     try:
-        requests.append((action, data))
         resp = responses.pop(0)
+        print(resp)
         return resp[1]
     except IndexError:
         return None
@@ -45,11 +46,12 @@ class SimpleWorflowTest(unittest.TestCase):
 
 
         # Start a workflow
-        SimpleWorkflowID = my_config.workflow_starter('SimpleWorkflow', 1)
-        print 'Starting: ', SimpleWorkflowID()
+        DelayedWorkflowID = my_config.workflow_starter('DelayedWorkflow', 1)
+        print 'Starting: ', DelayedWorkflowID()
 
         # Run one decision task
-        my_config.scan(ignore=["mock"])
+        my_config.scan()
         my_config._client.dispatch_next_decision(task_list='constant_list')
         my_config._client.dispatch_next_decision(task_list='constant_list')
+        # my_config._client.dispatch_next_decision(task_list='constant_list')
 
