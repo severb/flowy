@@ -16,7 +16,7 @@ class Error(object):
         self._reason = reason
 
     def result(self):
-        raise TaskError('Failed inside job: %s', self._reason)
+        raise TaskError('Failed inside job: %s' % self._reason)
 
 
 class Timeout(object):
@@ -96,7 +96,7 @@ class WorkflowExecution(object):
                 errs[0].result()
             except TaskError as e:
                 self._decision.fail(
-                    'Proxy called with error result: %s' % e.message
+                    'Proxy called with error result: %s' % e
                 )
                 return Placeholder()
         if any(isinstance(r, Placeholder) for r in a):
