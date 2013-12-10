@@ -373,7 +373,7 @@ def _make_event_factory(event_map):
             for attr_name, attr_path in attrs.items():
                 attr_value = event
                 for attr_path_part in attr_path.split('.'):
-                    attr_value = attr_value[attr_path_part]
+                    attr_value = attr_value.get(attr_path_part)
                 kwargs[attr_name] = attr_value
             event_class = tuples.get(event_class_name, lambda **k: None)
             return event_class(**kwargs)
