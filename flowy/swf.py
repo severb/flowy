@@ -711,7 +711,8 @@ class CachingDecision(object):
     def dump(self):
         return _str_concat(json.dumps((
             self._contexts,
-            self._to_call_id,
+            # json makes int keys as strings
+            list(self._to_call_id.items()),
             list(self._running),
             list(self._timedout),
             self._results,
@@ -728,7 +729,7 @@ class CachingDecision(object):
          self._results,
          self._errors,
          fired) = json.loads(json_data)
-        self._to_call_id = _int_keys(to_call_id)
+        self._to_call_id = dict(to_call_id)
         self._running = set(running)
         self._timedout = set(timedout)
         self._fired = set(fired)
@@ -929,7 +930,3 @@ def _str_deconcat(s):
     if str2 == '':
         str2 = None
     return str1, str2
-
-
-def _int_keys(d):
-    return dict((int(k), v) for k, v in d.items())
