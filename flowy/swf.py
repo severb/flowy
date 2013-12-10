@@ -564,11 +564,11 @@ class CachingDecision(object):
         self._timedout.add(call_id)
 
     def _timer_started(self, event):
-        self._running.add(event.event_id)
+        self._running.add(event.call_id)
 
     def _timer_fired(self, event):
-        self._running.remove(event.event_id)
-        self._fired.add(event.event_id)
+        self._running.remove(event.call_id)
+        self._fired.add(event.call_id)
 
     def _check_call_id(self, call_id):
         if (
