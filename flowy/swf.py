@@ -411,25 +411,21 @@ _event_factory = _make_event_factory({
         'context': '.startChildWorkflowExecutionInitiatedEventAttribute'
                    '.control'
     }),
-
     'ChildWorkflowExecutionCompleted': ('SubworkflowCompleted', {
         'event_id': 'childWorkflowExecutionCompletedEventAttributes'
                     '.workflowExecution.workflowId',
         'result': 'childWorkflowExecutionCompletedEventAttributes.result',
     }),
-
     'ChildWorkflowExecutionFailed': ('SubworkflowFailed', {
         'event_id': 'childWorkflowExecutionFailedEventAttributes'
                     '.workflowExecution.workflowId',
         'reason': 'childWorkflowExecutionFailedEventAttributes.reason',
     }),
-
     'StartChildWorkflowExecutionFailed': ('SubworkflowFailed', {
         'event_id': 'startChildWorkflowExecutionFailed'
                     '.workflowExecution.workflowId',
         'reason': 'startChildWorkflowExecutionFailed.cause',
     }),
-
     'ChildWorkflowExecutionTimedOut': ('SubworkflowTimedout', {
         'event_id': 'childWorkflowExecutionTimedOutEventAttributes'
                     '.workflowExecution.workflowId',
