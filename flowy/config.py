@@ -62,6 +62,7 @@ def workflow_config(name, version, task_list,
                 version=version,
                 task_list=task_list,
                 execution_start_to_close=execution_start_to_close,
+                task_start_to_close=task_start_to_close,
                 child_policy=child_policy,
                 descr=descr
             )
