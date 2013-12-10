@@ -6,7 +6,7 @@ from boto.swf.layer1 import Layer1
 import json
 
 
-f = open("./loopy/loopy_worflow.txt", "rb")
+f = open("./loopy/loopy_parallel.txt", "rb")
 responses = map(json.loads, f.readlines())
 print(len(responses))
 f.close()
@@ -20,7 +20,7 @@ def mock_json_values(self, action, data, object_hook=None):
         return None
 
 
-@workflow_config('LoopyWorkflow', 2, 'a_list', 60, 60)
+@workflow_config('LoopyWorkflow', 3, 'a_list', 60, 60)
 class LoopyWorkflow(Workflow):
     """
     Executes two activites. One of them returns the number of times to loop
@@ -40,8 +40,11 @@ class LoopyWorkflow(Workflow):
 
     def run(self, remote):
         r = remote.loop()
+        results = []
         for i in range(r.result()):
             res = remote.op(i)
+            results.append(res)
+        for res in results:
             res.result()
         return True
 
@@ -55,7 +58,7 @@ class LoopyWorflowTest(unittest.TestCase):
 
 
         # Start a workflow
-        LoopyWorkflowID = my_config.workflow_starter('LoopyWorkflowID', 1)
+        LoopyWorkflowID = my_config.workflow_starter('LoopyWorkflowID', 3)
         print 'Starting: ', LoopyWorkflowID()
 
         # Run one decision task
