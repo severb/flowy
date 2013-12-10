@@ -408,7 +408,7 @@ _event_factory = _make_event_factory({
     'StartChildWorkflowExecutionInitiated': ('SubworkflowStarted', {
         'event_id': 'startChildWorkflowExecutionInitiatedEventAttributes'
                     '.workflowId',
-        'context': '.startChildWorkflowExecutionInitiatedEventAttribute'
+        'context': 'startChildWorkflowExecutionInitiatedEventAttributes'
                    '.control'
     }),
     'ChildWorkflowExecutionCompleted': ('SubworkflowCompleted', {
