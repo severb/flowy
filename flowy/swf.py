@@ -722,12 +722,13 @@ class CachingDecision(object):
     def load(self, data):
         json_data, self._global_context = _str_deconcat(data)
         (self._contexts,
-         self._to_call_id,
+         to_call_id,
          running,
          timedout,
          self._results,
          self._errors,
          fired) = json.loads(json_data)
+        self._to_call_id = _int_keys(to_call_id)
         self._running = set(running)
         self._timedout = set(timedout)
         self._fired = set(fired)
@@ -928,3 +929,7 @@ def _str_deconcat(s):
     if str2 == '':
         str2 = None
     return str1, str2
+
+
+def _int_keys(d):
+    return dict((int(k), v) for k, v in d.items())
