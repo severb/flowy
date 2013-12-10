@@ -373,7 +373,7 @@ def _make_event_factory(event_map):
             for attr_name, attr_path in attrs.items():
                 attr_value = event
                 for attr_path_part in attr_path.split('.'):
-                    attr_value = attr_value[attr_path_part]
+                    attr_value = attr_value.get(attr_path_part)
                 kwargs[attr_name] = attr_value
             event_class = tuples.get(event_class_name, lambda **k: None)
             return event_class(**kwargs)
@@ -389,6 +389,7 @@ _event_factory = _make_event_factory({
     'ActivityTaskScheduled': ('ActivityScheduled', {
         'event_id': 'eventId',
         'call_id': 'activityTaskScheduledEventAttributes.activityId',
+        'context': 'activityTaskScheduledEventAttributes.control',
     }),
     'ActivityTaskCompleted': ('ActivityCompleted', {
         'event_id': 'activityTaskCompletedEventAttributes.scheduledEventId',
@@ -404,9 +405,11 @@ _event_factory = _make_event_factory({
 
     # Subworkflows
 
-    'ChildWorkflowExecutionStarted': ('SubworkflowStarted', {
-        'event_id': 'childWorkflowExecutionStartedEventAttributes'
-                    '.workflowExecution.workflowId',
+    'StartChildWorkflowExecutionInitiated': ('SubworkflowStarted', {
+        'event_id': 'startChildWorkflowExecutionInitiatedEventAttributes'
+                    '.workflowId',
+        'context': '.startChildWorkflowExecutionInitiatedEventAttribute'
+                   '.control'
     }),
 
     'ChildWorkflowExecutionCompleted': ('SubworkflowCompleted', {
@@ -421,6 +424,12 @@ _event_factory = _make_event_factory({
         'reason': 'childWorkflowExecutionFailedEventAttributes.reason',
     }),
 
+    'StartChildWorkflowExecutionFailed': ('SubworkflowFailed', {
+        'event_id': 'startChildWorkflowExecutionFailed'
+                    '.workflowExecution.workflowId',
+        'reason': 'startChildWorkflowExecutionFailed.cause',
+    }),
+
     'ChildWorkflowExecutionTimedOut': ('SubworkflowTimedout', {
         'event_id': 'childWorkflowExecutionTimedOutEventAttributes'
                     '.workflowExecution.workflowId',
@@ -429,10 +438,11 @@ _event_factory = _make_event_factory({
     # Timers
 
     'TimerStarted': ('TimerStarted', {
-        'event_id': 'timerStartedEventAttributes.timerId',
+        'call_id': 'timerStartedEventAttributes.timerId',
+        'context': 'timerStartedEventAttributes.control',
     }),
     'TimerFired': ('TimerFired', {
-        'event_id': 'timerFiredEventAttributes.timerId',
+        'call_id': 'timerFiredEventAttributes.timerId',
     }),
 
     # Misc
@@ -555,11 +565,11 @@ class CachingDecision(object):
         self._timedout.add(call_id)
 
     def _timer_started(self, event):
-        self._running.add(event.event_id)
+        self._running.add(event.call_id)
 
     def _timer_fired(self, event):
-        self._running.remove(event.event_id)
-        self._fired.add(event.event_id)
+        self._running.remove(event.call_id)
+        self._fired.add(event.call_id)
 
     def _check_call_id(self, call_id):
         if (
@@ -702,7 +712,8 @@ class CachingDecision(object):
     def dump(self):
         return _str_concat(json.dumps((
             self._contexts,
-            self._to_call_id,
+            # json makes int keys as strings
+            list(self._to_call_id.items()),
             list(self._running),
             list(self._timedout),
             self._results,
@@ -713,12 +724,13 @@ class CachingDecision(object):
     def load(self, data):
         json_data, self._global_context = _str_deconcat(data)
         (self._contexts,
-         self._to_call_id,
+         to_call_id,
          running,
          timedout,
          self._results,
          self._errors,
          fired) = json.loads(json_data)
+        self._to_call_id = dict(to_call_id)
         self._running = set(running)
         self._timedout = set(timedout)
         self._fired = set(fired)

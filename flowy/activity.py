@@ -42,7 +42,7 @@ class Activity(object):
         try:
             result = self.run(activity_task.heartbeat, *args, **kwargs)
         except Exception as e:
-            activity_task.fail(e.message)
+            activity_task.fail(str(e))
         else:
             activity_task.complete(self.serialize_activity_result(result))
 
