@@ -15,5 +15,5 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     zip_safe=False,
-    install_requires=['boto==2.17.0', 'venusian==1.0a8']
+    install_requires=['boto==2.19.0', 'venusian==1.0a8']
 )
