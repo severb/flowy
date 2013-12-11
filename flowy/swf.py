@@ -451,7 +451,7 @@ _event_factory = _make_event_factory({
         'started_by': 'decisionTaskCompletedEventAttributes.startedEventId',
     }),
     'DecisionTaskStarted': ('DecisionStarted', {
-        'event_id': 'decisionTaskStartedEventAttributes.eventId'
+        'event_id': 'eventId'
     }),
 })
 
