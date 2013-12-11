@@ -421,7 +421,7 @@ _event_factory = _make_event_factory({
                     '.workflowExecution.workflowId',
         'reason': 'childWorkflowExecutionFailedEventAttributes.reason',
     }),
-    'StartChildWorkflowExecutionFailed': ('SubworkflowFailed', {
+    'StartChildWorkflowExecutionFailed': ('SubworkflowNotFound', {
         'event_id': 'startChildWorkflowExecutionFailedEventAttributes'
                     '.workflowExecution.workflowId',
         'reason': 'startChildWorkflowExecutionFailedEventAttributes.cause',
@@ -521,6 +521,7 @@ class CachingDecision(object):
         iu.register(SubworkflowCompleted, self._job_completed)  # noqa
         iu.register(SubworkflowFailed, self._job_failed)  # noqa
         iu.register(SubworkflowTimedout, self._job_timedout)  # noqa
+        iu.register(SubworkflowNotFound, self._job_not_found)  # noqa
         iu.register(TimerStarted, self._timer_started)  # noqa
         iu.register(TimerFired, self._timer_fired)  # noqa
 
@@ -562,6 +563,15 @@ class CachingDecision(object):
         assert call_id not in self._timedout
         self._running.remove(call_id)
         self._timedout.add(call_id)
+
+    def _job_not_found(self, event):
+        call_id = self._to_call_id[event.event_id]
+        assert call_id not in self._results
+        assert call_id not in self._errors
+        assert call_id not in self._timedout
+        # When a job is not found it's not even started
+        assert call_id not in self._running
+        self._errors[call_id] = event.reason
 
     def _timer_started(self, event):
         self._running.add(event.call_id)
