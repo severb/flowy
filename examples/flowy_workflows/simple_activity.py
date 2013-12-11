@@ -9,6 +9,7 @@ class SimpleActivity(Activity):
 
     """
     def run(self, heartbeat):
+        raise Exception("Erorr")
         return 2
 
 
