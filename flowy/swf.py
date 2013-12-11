@@ -423,7 +423,7 @@ _event_factory = _make_event_factory({
     }),
     'StartChildWorkflowExecutionFailed': ('SubworkflowNotFound', {
         'event_id': 'startChildWorkflowExecutionFailedEventAttributes'
-                    '.workflowExecution.workflowId',
+                    '.workflowId',
         'reason': 'startChildWorkflowExecutionFailedEventAttributes.cause',
     }),
     'ChildWorkflowExecutionTimedOut': ('SubworkflowTimedout', {
