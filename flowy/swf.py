@@ -422,9 +422,9 @@ _event_factory = _make_event_factory({
         'reason': 'childWorkflowExecutionFailedEventAttributes.reason',
     }),
     'StartChildWorkflowExecutionFailed': ('SubworkflowFailed', {
-        'event_id': 'startChildWorkflowExecutionFailed'
+        'event_id': 'startChildWorkflowExecutionFailedEventAttributes'
                     '.workflowExecution.workflowId',
-        'reason': 'startChildWorkflowExecutionFailed.cause',
+        'reason': 'startChildWorkflowExecutionFailedEventAttributes.cause',
     }),
     'ChildWorkflowExecutionTimedOut': ('SubworkflowTimedout', {
         'event_id': 'childWorkflowExecutionTimedOutEventAttributes'
@@ -449,6 +449,9 @@ _event_factory = _make_event_factory({
     'DecisionTaskCompleted': ('DecisionCompleted', {
         'context': 'decisionTaskCompletedEventAttributes.executionContext',
         'started_by': 'decisionTaskCompletedEventAttributes.startedEventId',
+    }),
+    'DecisionTaskStarted': ('DecisionStarted', {
+        'event_id': 'decisionTaskStartedEventAttributes.eventId'
     }),
 })
 
@@ -866,15 +869,21 @@ class CachingClient(object):
             new_events = []
             try:
                 for event in decision_response.events_iter:
-                    if isinstance(event, DecisionCompleted):  # noqa
-                        break
+                    if isinstance(event, DecisionStarted):  # noqa
+                        if event.event_id == decision_response.last_event_id:
+                            break
                     new_events.append(event)
                 else:
-                    assert False, 'Last decision was not found.'
+                    assert False, 'Last decision started was not found.'
             except PageError:
                 return
-            assert event.started_by == decision_response.last_event_id
-            input, context_data = _str_deconcat(event.context)
+            for event in new_events:
+                if isinstance(event, DecisionCompleted):  # noqa
+                    assert event.started_by == decision_response.last_event_id
+                    input, context_data = _str_deconcat(event.context)
+                    break
+            else:
+                assert False, 'Last decision completed was not found.'
 
         decision = self.Decision(self._client, reversed(new_events),
                                  decision_response.token, context_data)
