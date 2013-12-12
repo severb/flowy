@@ -70,6 +70,7 @@ class SWFClient(object):
             logging.warning("Could not register workflow: %s %s",
                             name, version, exc_info=1)
             return False
+
     def register_activity(self, name, version, task_list, heartbeat=60,
                           schedule_to_close=420, schedule_to_start=120,
                           start_to_close=300, descr=None):

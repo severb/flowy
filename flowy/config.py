@@ -34,8 +34,10 @@ def activity_config(name, version, task_list,
                 descr=descr
             )
             if not result:
-                logging.critical('Activity already registered with different'
-                                 ' default values.')
+                logging.critical(
+                    'There was a problem with the activity registration.'
+                    ' Aborting execution.'
+                )
                 sys.exit(1)
         venusian.attach(wrapped, callback, category='activity')
         return wrapped
@@ -67,8 +69,10 @@ def workflow_config(name, version, task_list,
                 descr=descr
             )
             if not result:
-                logging.critical('Workflow already registered with different'
-                                 ' default values.')
+                logging.critical(
+                    'There was a problem with the workflow registration.'
+                    ' Aborting execution.'
+                )
                 sys.exit(1)
         venusian.attach(wrapped, callback, category='workflow')
         return wrapped
