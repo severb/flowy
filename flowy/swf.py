@@ -410,7 +410,7 @@ _event_factory = _make_event_factory({
         'event_id': 'activityTaskTimedOutEventAttributes.scheduledEventId',
     }),
     'ScheduleActivityTaskFailed': ('PreActivityFail', {
-        'event_id': 'ScheduleActivityTaskFailedEventAttributes.activityId',
+        'call_id': 'ScheduleActivityTaskFailedEventAttributes.activityId',
         'reason': 'ScheduleActivityTaskFailedEventAttributes.cause',
     }),
 
@@ -532,8 +532,8 @@ class CachingDecision(object):
         iu.register(SubworkflowCompleted, self._job_completed)  # noqa
         iu.register(SubworkflowFailed, self._job_failed)  # noqa
         iu.register(SubworkflowTimedout, self._job_timedout)  # noqa
-        iu.register(PreSubworkflowFail, self._job_not_found)  # noqa
-        iu.register(PreActivityFail, self._job_not_found)  # noqa
+        iu.register(PreSubworkflowFail, self._pre_subworkflow_fail)  # noqa
+        iu.register(PreActivityFail, self._pre_activity_fail)  # noqa
         iu.register(TimerStarted, self._timer_started)  # noqa
         iu.register(TimerFired, self._timer_fired)  # noqa
 
@@ -576,7 +576,7 @@ class CachingDecision(object):
         self._running.remove(call_id)
         self._timedout.add(call_id)
 
-    def _job_not_found(self, event):
+    def _pre_subworkflow_fail(self, event):
         call_id = self._to_call_id[event.event_id]
         assert call_id not in self._results
         assert call_id not in self._errors
@@ -584,6 +584,14 @@ class CachingDecision(object):
         # When a job is not found it's not even started
         assert call_id not in self._running
         self._errors[call_id] = event.reason
+
+    def _pre_activity_fail(self, event):
+        assert event.call_id not in self._results
+        assert event.call_id not in self._errors
+        assert event.call_id not in self._timedout
+        # When a job is not found it's not even started
+        assert event.call_id not in self._running
+        self._errors[event.call_id] = event.reason
 
     def _timer_started(self, event):
         self._running.add(event.call_id)
