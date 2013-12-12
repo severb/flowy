@@ -1,0 +1,6 @@
+{"domain": "RolisTest", "input": "{\"args\": [], \"kwargs\": {}}", "workflowType": {"version": "1", "name": "BlankWorkflow"}, "workflowId": "babb3749-d370-4461-9e16-471d1394eb68"}
+{"defaultExecutionStartToCloseTimeout": "60", "domain": "RolisTest", "version": "1", "name": "BlankWorkflow", "defaultChildPolicy": "TERMINATE", "defaultTaskStartToCloseTimeout": "60", "defaultTaskList": {"name": "a_list"}}
+{"domain": "RolisTest", "workflowType": {"version": "1", "name": "BlankWorkflow"}}
+{"domain": "RolisTest", "taskList": {"name": "a_list"}, "reverseOrder": true}
+{"decisions": [{"completeWorkflowExecutionDecisionAttributes": {"result": "true"}, "decisionType": "CompleteWorkflowExecution"}], "taskToken": "AAAAKgAAAAEAAAAAAAAAAlGMFJwGm+285RxpzMUDfbEDSSJNfXqXab5CR8o784gj+Kga1yeiSpANp/h9J8cu3Wndhy4cE08qz/xhm9bKqZECH/W+HCFg7yoWRtVKYKTPv6IWWlPts4viUto5eAL+U5J5rohSaMaVs6M6z5NVxUptKg3NgMYYzlnCr9me0RzpS6P6E5FOu7La3xl9hjjFQz9B2ibcPP8/ynnCzBzekSODS8DoxRbHdT6eF/+yoV4/CbAra/KUrqorC7RUaG+l6oRn++asWqzou5l8ZNBgsTnR5jCkAs4/UvAGETCmuIITp025h3cGEC9In1v1NY49hw=="}
+{"domain": "RolisTest", "taskList": {"name": "a_list"}, "reverseOrder": true}
