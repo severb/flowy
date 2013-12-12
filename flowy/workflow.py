@@ -141,6 +141,16 @@ class WorkflowExecution(object):
         self._decision.fail('A job has timed out.')
         return Placeholder()
 
+    def _replace_results(self, args, kwargs):
+        raw_args = [
+            arg.result() if isinstance(arg, Result) else arg for arg in args
+        ]
+        raw_kwargs = dict(
+            (k, v.result() if isinstance(v, Result) else v)
+            for k, v in kwargs.items()
+        )
+        return raw_args, raw_kwargs
+
     def activity_call(self, name, version, args, kwargs, transport,
                       heartbeat=None, schedule_to_close=None,
                       schedule_to_start=None, start_to_close=None,
@@ -171,11 +181,14 @@ class WorkflowExecution(object):
                 result = self._search_result(retry, transport)
                 if result is None:
                     self._is_completed = False
+                    raw_args, raw_kwargs = self._replace_results(args, kwargs)
                     self._decision.queue_activity(
                         call_id=str(self._call_id),
                         name=name,
                         version=version,
-                        input=transport.serialize_input(*args, **kwargs),
+                        input=transport.serialize_input(
+                            *raw_args, **raw_kwargs
+                        ),
                         heartbeat=opts.heartbeat,
                         schedule_to_close=opts.schedule_to_close,
                         schedule_to_start=opts.schedule_to_start,
@@ -214,11 +227,14 @@ class WorkflowExecution(object):
                 result = self._search_result(retry, transport)
                 if result is None:
                     self._is_completed = False
+                    raw_args, raw_kwargs = self._replace_results(args, kwargs)
                     self._decision.queue_subworkflow(
                         call_id=str(self._call_id),
                         name=name,
                         version=version,
-                        input=transport.serialize_input(*args, **kwargs),
+                        input=transport.serialize_input(
+                            *raw_args, **raw_kwargs
+                        ),
                         task_start_to_close=opts.task_start_to_close,
                         execution_start_to_close=opts.execution_start_to_close,
                         task_list=opts.task_list,
