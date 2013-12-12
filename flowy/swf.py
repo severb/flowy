@@ -146,7 +146,9 @@ class SWFClient(object):
             return None
         return r['runId']
 
-    def poll_decision(self, task_list):
+    def poll_decision(self, task_list, event_factory=None, page_retry=3):
+        if event_factory is None:
+            event_factory = _event_factory
         poller = partial(self._client.poll_for_decision_task,
                          task_list=task_list, domain=self._domain,
                          reverse_order=True)
@@ -163,7 +165,9 @@ class SWFClient(object):
                 # If a workflow is stopped and a decision page fetching fails
                 # forever we avoid infinite loops
                 p = _repeated_poller(
-                    poller, next_page_token=page['nextPageToken'], retries=3
+                    poller,
+                    next_page_token=page['nextPageToken'],
+                    retries=page_retry
                 )
                 if p is None:
                     raise PageError()
@@ -187,7 +191,7 @@ class SWFClient(object):
             version=first_page['workflowType']['version'],
             token=first_page['taskToken'],
             last_event_id=first_page.get('previousStartedEventId'),
-            events_iter=ifilter(None, imap(_event_factory, all_events()))
+            events_iter=ifilter(None, imap(event_factory, all_events()))
         )
 
     def poll_activity(self, task_list):
@@ -347,13 +351,17 @@ class PageError(RuntimeError):
 
 def _repeated_poller(poller, retries=-1, **kwargs):
     response = {}
+    try:
+        response = poller(**kwargs)
+    except (IOError, SWFResponseError):
+        logging.warning("Unknown error when polling.", exc_info=1)
     while 'taskToken' not in response or not response['taskToken']:
+        if retries == 0:
+            return
         try:
             response = poller(**kwargs)
         except (IOError, SWFResponseError):
             logging.warning("Unknown error when polling.", exc_info=1)
-        if retries == 0:
-            return
         retries = max(retries - 1, -1)
     return response
 
