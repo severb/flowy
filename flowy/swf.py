@@ -70,8 +70,6 @@ class SWFClient(object):
             logging.warning("Could not register workflow: %s %s",
                             name, version, exc_info=1)
             return False
-        return True
-
     def register_activity(self, name, version, task_list, heartbeat=60,
                           schedule_to_close=420, schedule_to_start=120,
                           start_to_close=300, descr=None):
@@ -410,6 +408,10 @@ _event_factory = _make_event_factory({
     'ActivityTaskTimedOut': ('ActivityTimedout', {
         'event_id': 'activityTaskTimedOutEventAttributes.scheduledEventId',
     }),
+    'ScheduleActivityTaskFailed': ('PreActivityFail', {
+        'event_id': 'ScheduleActivityTaskFailedEventAttributes.activityId',
+        'reason': 'ScheduleActivityTaskFailedEventAttributes.cause',
+    }),
 
     # Subworkflows
 
@@ -429,7 +431,7 @@ _event_factory = _make_event_factory({
                     '.workflowExecution.workflowId',
         'reason': 'childWorkflowExecutionFailedEventAttributes.reason',
     }),
-    'StartChildWorkflowExecutionFailed': ('SubworkflowNotFound', {
+    'StartChildWorkflowExecutionFailed': ('PreSubworkflowFail', {
         'event_id': 'startChildWorkflowExecutionFailedEventAttributes'
                     '.workflowId',
         'reason': 'startChildWorkflowExecutionFailedEventAttributes.cause',
@@ -529,7 +531,8 @@ class CachingDecision(object):
         iu.register(SubworkflowCompleted, self._job_completed)  # noqa
         iu.register(SubworkflowFailed, self._job_failed)  # noqa
         iu.register(SubworkflowTimedout, self._job_timedout)  # noqa
-        iu.register(SubworkflowNotFound, self._job_not_found)  # noqa
+        iu.register(PreSubworkflowFail, self._job_not_found)  # noqa
+        iu.register(PreActivityFail, self._job_not_found)  # noqa
         iu.register(TimerStarted, self._timer_started)  # noqa
         iu.register(TimerFired, self._timer_fired)  # noqa
 
