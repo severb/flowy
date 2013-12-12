@@ -2,7 +2,7 @@ from flowy import Workflow, ActivityProxy, WorkflowProxy
 from flowy import make_config, workflow_config
 
 
-@workflow_config('BlankWorkflow', 3, 'a_list', task_start_to_close=1,
+@workflow_config('BlankWorkflow', 3, 'a_list', task_start_to_close=60,
                  execution_start_to_close=60)
 class BlankWorkflow(Workflow):
     """

@@ -411,8 +411,8 @@ _event_factory = _make_event_factory({
         'event_id': 'activityTaskTimedOutEventAttributes.scheduledEventId',
     }),
     'ScheduleActivityTaskFailed': ('PreActivityFail', {
-        'call_id': 'ScheduleActivityTaskFailedEventAttributes.activityId',
-        'reason': 'ScheduleActivityTaskFailedEventAttributes.cause',
+        'event_id': 'scheduleActivityTaskFailedEventAttributes.activityId',
+        'reason': 'cause',
     }),
 
     # Subworkflows
