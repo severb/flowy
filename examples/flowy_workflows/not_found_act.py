@@ -2,7 +2,7 @@ from flowy import Workflow, ActivityProxy, WorkflowProxy
 from flowy import make_config, workflow_config
 
 
-@workflow_config('SimpleWorkflow', 2, 'constant_list', 60, 60)
+@workflow_config('SimpleWorkflow', 4, 'constant_list', 60, 5)
 class SimpleWorkflow(Workflow):
     """
     Does nothing
@@ -29,7 +29,7 @@ if __name__ == '__main__':
     # f.close()
 
     # Start a workflow
-    SimpleWorkflowID = my_config.workflow_starter('SimpleWorkflow', 2)
+    SimpleWorkflowID = my_config.workflow_starter('SimpleWorkflow', 4)
     print 'Starting: ', SimpleWorkflowID()
 
     # Start the workflow loop
