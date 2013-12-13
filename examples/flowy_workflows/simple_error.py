@@ -2,21 +2,21 @@ from flowy import Workflow, ActivityProxy, WorkflowProxy
 from flowy import make_config, workflow_config
 
 
-@workflow_config('SimpleWorkflow', 1, 'constant_list', 60, 60)
-class SimpleWorkflow(Workflow):
+@workflow_config('ErrorWorkflow', 1, 'constant_list', 30, 30)
+class ErrorWorkflow(Workflow):
     """
     Does nothing
 
     """
     div = ActivityProxy(
-        name='SimpleActivity',
+        name='ErrorActivity',
         version=1,
         task_list='constant_list',
     )
 
     def run(self, remote):
         try:
-            r = remote.div()
+            r = remote.div(True)
         except Exception:
             print("Caught exception")
         return True
@@ -31,7 +31,7 @@ if __name__ == '__main__':
     # f.close()
 
     # Start a workflow
-    SimpleWorkflowID = my_config.workflow_starter('SimpleWorkflow', 1)
+    SimpleWorkflowID = my_config.workflow_starter('ErrorWorkflow', 1)
     print 'Starting: ', SimpleWorkflowID()
 
     # Start the workflow loop

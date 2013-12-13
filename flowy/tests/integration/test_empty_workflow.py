@@ -37,12 +37,7 @@ class BlankWorkflowTest(unittest.TestCase):
 
         my_config.scan()
         my_config._client.dispatch_next_decision('a_list')
-        print(mock_json_values.call_count)
+        self.assertEqual(mock_json_values.call_count, 4)
 
-        # mock_json_values.assert_has_calls([call('StartWorkflowExecution', {'domain': 'RolisTest', 'taskList': {'name': None}, 'childPolicy': None, 'executionStartToCloseTimeout': None, 'input': '{"args": [], "kwargs": {}}', 'workflowType': {'version': '1', 'name': 'BlankWorkflow'}, 'taskStartToCloseTimeout': None, 'workflowId': '22c8d7f5-b3b6-410a-ab15-ecf48804bc69', 'tagList': None}),
-        #          call('RegisterWorkflowType', {'defaultExecutionStartToCloseTimeout': '60', 'domain': 'RolisTest', 'version': '1', 'name': 'BlankWorkflow', 'defaultChildPolicy': 'TERMINATE', 'defaultTaskStartToCloseTimeout': '60', 'defaultTaskList': {'name': 'a_list'}, 'description': None}),
-        #          call('PollForDecisionTask', {'nextPageToken': None, 'domain': 'RolisTest', 'taskList': {'name': 'a_list'}, 'reverseOrder': True, 'maximumPageSize': None, 'identity': None}),
-        #          call('RespondDecisionTaskCompleted', {'executionContext': None, 'decisions': [{'completeWorkflowExecutionDecisionAttributes': {'result': 'true'}, 'decisionType': 'CompleteWorkflowExecution'}], 'taskToken': u'AAAAKgAAAAEAAAAAAAAAAlGMFJwGm+285RxpzMUDfbEDSSJNfXqXab5CR8o784gj+Kga1yeiSpANp/h9J8cu3Wndhy4cE08qz/xhm9bKqZECH/W+HCFg7yoWRtVKYKTPv6IWWlPts4viUto5eAL+U5J5rohSaMaVs6M6z5NVxUptKg3NgMYYzlnCr9me0RzpS6P6E5FOu7La3xl9hjjFQz9B2ibcPP8/ynnCzBzekSODS8DoxRbHdT6eF/+yoV4/CbAra/KUrqorC7RUaG+l6oRn++asWqzou5l8ZNBgsTnR5jCkAs4/UvAGETCmuIITp025h3cGEC9In1v1NY49hw=='})
-        #     ])
 
 

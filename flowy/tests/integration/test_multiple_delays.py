@@ -60,7 +60,7 @@ class SimpleWorflowTest(unittest.TestCase):
             my_config._client.dispatch_next_decision(task_list='constant_list')
             my_config._client.dispatch_next_decision(task_list='constant_list')
             my_config._client.dispatch_next_decision(task_list='constant_list')
-            print(requests[-1][1]['decisions'])
+            self.assertEqual(requests[-1][1]['decisions'][0]['decisionType'], 'CompleteWorkflowExecution')
             self.assertEqual(len(requests[-1][1]['decisions']), 1)
 
     @patch.object(Layer1, 'json_request', mock_json_values)
@@ -84,4 +84,5 @@ class SimpleWorflowTest(unittest.TestCase):
             my_config._client.dispatch_next_decision(task_list='constant_list')
             my_config._client.dispatch_next_decision(task_list='constant_list')
             my_config._client.dispatch_next_decision(task_list='constant_list')
+            self.assertEqual(requests[-1][1]['decisions'][0]['decisionType'], 'CompleteWorkflowExecution')
             self.assertEqual(len(requests[-1][1]['decisions']), 1)
