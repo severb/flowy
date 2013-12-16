@@ -17,7 +17,6 @@ class BlankWorkflow(Workflow):
         return True
 
 
-@patch.object(Layer1, '__init__', lambda *args: None)
 class BlankWorkflowTest(WorkflowTestCase):
 
     @load_json_responses("blank/mocks_output.txt")

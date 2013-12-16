@@ -35,8 +35,11 @@ def load_json_responses(file_name):
     return decorator
 
 
-@patch.object(Layer1, '__init__', lambda *args: None)
 class WorkflowTestCase(unittest.TestCase):
+
+    def setUp(self):
+        self.patcher = patch.object(Layer1, '__init__', lambda *args: None)
+        self.patcher.start()
 
     def assertCompletedWorkflow(self, requests):
         self.assertEqual(requests[-1][1]['decisions'][0]['decisionType'],
@@ -47,4 +50,7 @@ class WorkflowTestCase(unittest.TestCase):
         self.assertEqual(requests[-1][1]['decisions'][0]['decisionType'],
                          'FailWorkflowExecution')
         self.assertEqual(len(requests[-1][1]['decisions']), 1)
+
+    def tearDown(self):
+        self.patcher.stop()
 

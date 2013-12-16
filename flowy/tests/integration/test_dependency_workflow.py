@@ -28,7 +28,6 @@ class LoopyWorkflow(Workflow):
         res.result()
 
 
-@patch.object(Layer1, '__init__', lambda *args: None)
 class LoopyWorflowTest(WorkflowTestCase):
 
     @load_json_responses("multiple/dependent_activity_worklow.txt")

@@ -23,7 +23,6 @@ class DelayWorkflow(Workflow):
             print(r.result())
 
 
-@patch.object(Layer1, '__init__', lambda *args: None)
 class DelayedWorkflowTest(WorkflowTestCase):
 
     @load_json_responses("delayed/delayed_workflow.txt")

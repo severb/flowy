@@ -27,7 +27,6 @@ class MultipleDelaysWf(Workflow):
         r2.result()
 
 
-@patch.object(Layer1, '__init__', lambda *args: None)
 class SimpleWorflowTest(WorkflowTestCase):
 
     @load_json_responses("sleepy/sleepy_workflow.txt")

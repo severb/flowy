@@ -32,7 +32,6 @@ class LoopyWorkflow(Workflow):
         return True
 
 
-@patch.object(Layer1, '__init__', lambda *args: None)
 class LoopyWorflowTest(WorkflowTestCase):
 
     @load_json_responses("loopy/loopy_workflow.txt")

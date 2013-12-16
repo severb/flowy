@@ -24,7 +24,6 @@ class SimpleWorkflow(Workflow):
         return True
 
 
-@patch.object(Layer1, '__init__', lambda *args: None)
 class SimpleWorflowTest(WorkflowTestCase):
 
     @load_json_responses("simple/mocks_workflow_output.txt")
