@@ -804,7 +804,7 @@ class CachingClient(object):
         """
         version = str(version)
         client = self._client_maker()
-        reg_result = client._client.register_workflow(
+        reg_result = client.register_workflow(
             name=name,
             version=version,
             task_list=task_list,
