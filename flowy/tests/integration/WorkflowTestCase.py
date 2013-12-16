@@ -1,6 +1,7 @@
 import unittest
 from boto.swf.layer1 import Layer1
 from mock import patch
+import os
 import json
 from functools import partial
 
@@ -19,7 +20,9 @@ def load_json_responses(file_name):
     """
     Patch Layer1 make_request to return the contents of file_name
     """
-    f = open(file_name, "rb")
+    base = os.path.dirname(__file__)
+    filepath = os.path.abspath(os.path.join(base, file_name))
+    f = open(filepath, "rb")
     responses = map(json.loads, f.readlines())
     f.close()
     requests = []

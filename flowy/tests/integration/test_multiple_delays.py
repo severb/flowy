@@ -1,10 +1,9 @@
 from flowy import Workflow, ActivityProxy, WorkflowProxy
-from functools import partial
+from WorkflowTestCase import WorkflowTestCase, load_json_responses
 import unittest
-from mock import create_autospec, MagicMock, patch
+from mock import patch
 from flowy import make_config, workflow_config, activity_config
 from boto.swf.layer1 import Layer1
-import json
 from flowy import make_config, workflow_config
 
 
@@ -28,61 +27,37 @@ class MultipleDelaysWf(Workflow):
         r2.result()
 
 
-def mock_json_values(action, data, object_hook=None, requests=[],
-                     responses=[]):
-    try:
-        requests.append((action, data))
-        resp = responses.pop(0)
-        return resp[1]
-    except IndexError:
-        return None
+@patch.object(Layer1, '__init__', lambda *args: None)
+class SimpleWorflowTest(WorkflowTestCase):
 
+    @load_json_responses("sleepy/sleepy_workflow.txt")
+    def test_sleepy_workflow(self, requests):
+        my_config = make_config('RolisTest')
 
-class SimpleWorflowTest(unittest.TestCase):
+        # Start a workflow
+        DelayWorkflowID = my_config.workflow_starter('MultipleDelaysWf', 1)
+        print 'Starting: ', DelayWorkflowID()
 
-    @patch.object(Layer1, '__init__', lambda *args: None)
-    def test_sleepy_workflow(self):
-        f = open("./sleepy/sleepy_workflow.txt", "rb")
-        responses = map(json.loads, f.readlines())
-        f.close()
+        # Run one decision task
+        my_config.scan(ignore=["mock"])
 
-        requests = []
-        f = partial(mock_json_values, requests=requests, responses=responses)
-        with patch.object(Layer1, 'json_request', f):
-            my_config = make_config('RolisTest')
-
-            # Start a workflow
-            DelayWorkflowID = my_config.workflow_starter('MultipleDelaysWf', 1)
-            print 'Starting: ', DelayWorkflowID()
-
-            # Run one decision task
-            my_config.scan(ignore=["mock"])
+        for _ in range(3):
             my_config._client.dispatch_next_decision(task_list='constant_list')
-            my_config._client.dispatch_next_decision(task_list='constant_list')
-            my_config._client.dispatch_next_decision(task_list='constant_list')
-            self.assertEqual(requests[-1][1]['decisions'][0]['decisionType'], 'CompleteWorkflowExecution')
-            self.assertEqual(len(requests[-1][1]['decisions']), 1)
 
-    @patch.object(Layer1, 'json_request', mock_json_values)
-    @patch.object(Layer1, '__init__', lambda *args: None)
-    def test_history_skip_workflow(self):
-        f = open("./sleepy/sleepy_skip_history.txt", "rb")
-        responses = map(json.loads, f.readlines())
-        f.close()
+        self.assertCompletedWorkflow(requests)
 
-        requests = []
-        f = partial(mock_json_values, requests=requests, responses=responses)
-        with patch.object(Layer1, 'json_request', f):
-            my_config = make_config('RolisTest')
+    @load_json_responses("sleepy/sleepy_skip_history.txt")
+    def test_history_skip_workflow(self, requests):
+        my_config = make_config('RolisTest')
 
-            # Start a workflow
-            DelayWorkflowID = my_config.workflow_starter('MultipleDelaysWf', 1)
-            print 'Starting: ', DelayWorkflowID()
+        # Start a workflow
+        DelayWorkflowID = my_config.workflow_starter('MultipleDelaysWf', 1)
+        print 'Starting: ', DelayWorkflowID()
 
-            # Run one decision task
-            my_config.scan(ignore=["mock"])
+        # Run one decision task
+        my_config.scan(ignore=["mock"])
+
+        for _ in range(3):
             my_config._client.dispatch_next_decision(task_list='constant_list')
-            my_config._client.dispatch_next_decision(task_list='constant_list')
-            my_config._client.dispatch_next_decision(task_list='constant_list')
-            self.assertEqual(requests[-1][1]['decisions'][0]['decisionType'], 'CompleteWorkflowExecution')
-            self.assertEqual(len(requests[-1][1]['decisions']), 1)
+
+        self.assertCompletedWorkflow(requests)

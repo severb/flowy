@@ -27,7 +27,7 @@ class SimpleWorkflow(Workflow):
 @patch.object(Layer1, '__init__', lambda *args: None)
 class SimpleWorflowTest(WorkflowTestCase):
 
-    @load_json_responses("./simple/mocks_workflow_output.txt")
+    @load_json_responses("simple/mocks_workflow_output.txt")
     def test_workflow(self, requests):
         my_config = make_config('RolisTest')
 
@@ -42,7 +42,7 @@ class SimpleWorflowTest(WorkflowTestCase):
         self.assertCompletedWorkflow(requests)
 
 
-    @load_json_responses("./errors/error_workflow.txt")
+    @load_json_responses("errors/error_workflow.txt")
     def test_error_workflow(self, requests):
         my_config = make_config('RolisTest')
 
