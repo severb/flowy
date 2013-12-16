@@ -778,8 +778,8 @@ class CachingClient(object):
     ActivityTask = ActivityTask
     Decision = CachingDecision
 
-    def __init__(self, client):
-        self._client = client
+    def __init__(self, client_maker):
+        self._client_maker = client_maker
         self._workflow_registry = {}
         self._activity_registry = {}
 
@@ -803,7 +803,8 @@ class CachingClient(object):
 
         """
         version = str(version)
-        reg_result = self._client.register_workflow(
+        client = self._client_maker()
+        reg_result = client._client.register_workflow(
             name=name,
             version=version,
             task_list=task_list,
@@ -836,7 +837,8 @@ class CachingClient(object):
 
         """
         version = str(version)
-        reg_result = self._client.register_activity(
+        client = self._client_maker()
+        reg_result = client.register_activity(
             name=name,
             version=version,
             task_list=task_list,
@@ -852,7 +854,8 @@ class CachingClient(object):
 
     def start_workflow(self, name, version, task_list, input,
                        workflow_id=None):
-        return self._client.start_workflow(
+        client = self._client_maker()
+        return client.start_workflow(
             name=name,
             version=version,
             task_list=task_list,
@@ -870,7 +873,8 @@ class CachingClient(object):
        ``None``.
 
         """
-        decision_response = self._client.poll_decision(task_list)
+        client = self._client_maker()
+        decision_response = client.poll_decision(task_list)
         # Polling a decision may fail if some pages are unavailable
         if decision_response is None:
             return
@@ -916,14 +920,14 @@ class CachingClient(object):
             else:
                 assert False, 'Last decision completed was not found.'
 
-        decision = self.Decision(self._client, reversed(new_events),
+        decision = self.Decision(client, reversed(new_events),
                                  decision_response.token, context_data)
 
         decision_maker(input, decision)
 
         if not decision.is_finished():
-            self._client.schedule_queued(decision_response.token,
-                                         _str_concat(input, decision.dump()))
+            client.schedule_queued(decision_response.token,
+                                   _str_concat(input, decision.dump()))
 
         return decision_maker
 
@@ -937,12 +941,12 @@ class CachingClient(object):
         or ``None``.
 
         """
-        activity_response = self._client.poll_activity(task_list)
+        client = self._client_maker()
+        activity_response = client.poll_activity(task_list)
         activity_runner_key = activity_response.name, activity_response.version
         activity_runner = self._activity_registry.get(activity_runner_key)
         if activity_runner is not None:
-            activity_task = self.ActivityTask(self._client,
-                                              activity_response.token)
+            activity_task = self.ActivityTask(client, activity_response.token)
             activity_runner(activity_response.input, activity_task)
             return activity_runner
 

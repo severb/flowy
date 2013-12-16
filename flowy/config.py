@@ -1,4 +1,5 @@
 import json
+import functools
 import logging
 import sys
 
@@ -81,7 +82,11 @@ def workflow_config(name, version, task_list,
 
 
 def make_config(domain, client=None):
-    return ClientConfig(CachingClient(SWFClient(domain, client=client)))
+    return ClientConfig(
+        CachingClient(
+            functools.partial(SWFClient, domain=domain, client=client)
+        )
+    )
 
 
 class ClientConfig(object):
