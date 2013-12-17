@@ -107,7 +107,7 @@ class WorkflowExecution(object):
         if not delay > 0:
             return
         call_id = str(self._call_id)
-        if self._decision.is_running(call_id):
+        if self._decision.is_scheduled(call_id):
             self._is_completed = False
             return Placeholder()
         if not self._decision.is_fired(call_id):
@@ -123,7 +123,7 @@ class WorkflowExecution(object):
             call_id = str(self._call_id)
             if self._decision.is_timeout(call_id):
                 continue
-            if self._decision.is_running(call_id):
+            if self._decision.is_scheduled(call_id):
                 self._is_completed = False
                 return Placeholder()
             error_message = self._decision.get_error(call_id)

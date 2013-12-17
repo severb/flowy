@@ -494,7 +494,8 @@ class ActivityTask(object):
 
         Returns a boolean indicating the success of the operation or whether
         the heartbeat exceeded the time it should have taken to report activity
-        progress. In the latter case the activity execution should be stopped.
+        progress. In the latter case the activity execution should be stopped
+        after an optional cleanup.
 
         """
         return self._client.heartbeat(token=self._token)
@@ -521,7 +522,7 @@ class CachingDecision(object):
             self.load(execution_context)
 
         self._setup_internal_dispatch()
-        self.update(new_events)
+        self._update(new_events)
 
     def _setup_internal_dispatch(self):
         iu = self._internal_update = simplegeneric(self._internal_update)
@@ -538,7 +539,7 @@ class CachingDecision(object):
         iu.register(TimerStarted, self._timer_started)  # noqa
         iu.register(TimerFired, self._timer_fired)  # noqa
 
-    def update(self, new_events):
+    def _update(self, new_events):
         for event in self._new_events:
             self._internal_update(event)
 
@@ -609,7 +610,8 @@ class CachingDecision(object):
             or call_id in self._timedout
             or call_id in self._fired
         ):
-            raise RuntimeError("call_id %s was already used." % call_id)
+            raise RuntimeError("Value %s was already used for a"
+                               " different call_id." % call_id)
 
     def queue_activity(self, call_id, name, version, input,
                        heartbeat=None,
@@ -620,25 +622,27 @@ class CachingDecision(object):
                        context=None):
         """ Queue an activity.
 
-        This will schedule a run of a previously registered activity with the
-        specified *name* and *version*. The *call_id* is used to assign a
-        custom identity to this particular queued activity run inside its own
-        workflow history. It must be unique and can only be reused for timedout
-        jobs. The queueing is done internally and all queued activities will be
-        discarded if at a later point in time any meth:`complete` or
-        meth:`fail` methods are called.
+        Schedule a run of the previously registered activity with the specified
+        *name* and *version* passing the given *input*. The *call_id* is used
+        to assign a custom identity to this particular queued activity run
+        inside its own workflow history. It must be unique among all queued
+        activities, subworkflows and timers queued in this particular workflow.
 
-        The activity will be queued in its default task list that was set when
-        it was registered, this can be changed by setting a different
-        *task_list* value.
+        The activity will be queued with its default arguments that were set
+        when it was registered - this can be changed by setting custom values
+        for *heartbeat*, *schedule_to_close*, *schedule_to_start*,
+        *start_to_close* and *task_list* arguments. The activity options
+        specified here, if any, have a higher priority than the ones used when
+        the activity was registered. For more information about the various
+        arguments see :meth:`CachingClient.register_activity`.
 
-        The activity options specified here, if any, have a higher priority
-        than the ones used when the activity was registered. For more
-        information about the various arguments see
-        :meth:`Client.register_activity`.
+        When queueing an activity a custom *context* can be set. It can be
+        retrieved later or in a future decision of the same workflow using
+        :meth:`context`.
 
-        When queueing an acctivity a custom *context* can be set. It can be
-        retrieved later in the methods used by :meth:`dispatch_events`.
+        Some of the methods like :meth:`is_scheduled`, :meth:`is_timeout`,
+        :meth:`get_result` and :meth:`get_error` can be used to query the
+        status of a particular activity run identified by *call_id*.
 
         """
         call_id = str(call_id)
@@ -662,6 +666,15 @@ class CachingDecision(object):
                           execution_start_to_close=None,
                           task_list=None,
                           context=None):
+        """ Queue a subworkflow.
+
+        Just like :meth:`queue_activity` but this method schedules an entire
+        workflow run with different options that can be overridden:
+        *task_start_to_close*, *execution_start_to_close* and *task_list*.
+        Similarly a *context* can be passed and later retrieved using
+        :meth:`context`.
+
+        """
         call_id = str(call_id)
         self._check_call_id(call_id)
         workflow_id = str(uuid.uuid4())
@@ -676,9 +689,18 @@ class CachingDecision(object):
         )
         self._to_call_id[workflow_id] = call_id
         if context is not None:
-            self._subworkflow_contexts[call_id] = str(context)
+            self._contexts[call_id] = str(context)
 
     def queue_timer(self, call_id, delay, context=None):
+        """ Queue a timer.
+
+        Start a timer identified by *call_id* that will fire after *delay*
+        seconds. The *call_id* must be a unique among all activities,
+        subworkflows and timers queued in this workflow. The state of the timer
+        can be queried by passing the *call_id* to :meth:`is_scheduled` and
+        :meth:`is_fired`.
+
+        """
         call_id = str(call_id)
         self._check_call_id(call_id)
         self._client.queue_timer(call_id=call_id, delay=delay)
@@ -688,8 +710,8 @@ class CachingDecision(object):
     def complete(self, result):
         """ Triggers the successful completion of the workflow.
 
-        Completes the workflow the *result* value. Returns a boolean indicating
-        the success of the operation.
+        Completes the workflow with the *result* value. Returns a boolean
+        indicating the success of the operation.
 
         """
         if self._is_finished:
@@ -702,11 +724,9 @@ class CachingDecision(object):
         """ Triggers the termination of the workflow.
 
         Terminate the workflow identified by *workflow_id* for the specified
-        *reason*. All the workflow activities will be abandoned and the final
-        result won't be available.
-        The *workflow_id* required here is the one obtained when
-        :meth:`start_workflow` was called.
-        Returns a boolean indicating the success of the operation.
+        *reason*. When terminating a workflow all the activities will be
+        abandoned and the final result won't be available. Returns a boolean
+        indicating the success of the operation.
 
         """
         if self._is_finished:
@@ -715,28 +735,50 @@ class CachingDecision(object):
         return self._client.fail_workflow(token=self._token,
                                           reason=str(reason))
 
+    def context(self, call_id, default=None):
+        """ Query the context of a particular activity, workflow or timer. """
+        return self._contexts.get(call_id, default)
+
     def is_finished(self):
         return self._is_finished
 
-    def is_running(self, call_id):
+    def is_scheduled(self, call_id):
+        """ Query if a particular activity, workflow or timer is scheduled.
+
+        This method returns a `True` value only as long as the queried job is
+        scheduled and not any other state like completed, fired, etc.
+
+        """
         return call_id in self._running
 
     def is_fired(self, call_id):
+        """ Query if a timer fired. """
         return call_id in self._fired
 
     def get_result(self, call_id, default=None):
+        """ Get the result for an activity or workflow if available. """
         return self._results.get(call_id, default)
 
     def get_error(self, call_id, default=None):
+        """ Get the error for an activity or workflow if available. """
         return self._errors.get(call_id, default)
 
     def is_timeout(self, call_id):
+        """ Check if an activity or workflow timedout. """
         return call_id in self._timedout
 
     def override_global_context(self, context=None):
+        """ Override the global decision context.
+
+        Similarly with setting a custom context for a specific job a global
+        context can be set and retrieved in later decisions of the same
+        workflow run using :meth:`global_context`.
+
+        """
         self._global_context = str(context)
 
     def global_context(self):
+        """ Retrieve the global decision context. """
         return self._global_context
 
     def dump(self):
