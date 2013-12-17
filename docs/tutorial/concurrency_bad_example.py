@@ -7,6 +7,7 @@ class ProcessUploadedVideoWorkflow(Workflow):
     transcode = ActivityProxy('Transcoding', 1)
     generate_thumbnails = ActivityProxy('ThumbnailGenerator', 1)
     process_metadata = ActivityProxy('MetadataProcessing', 1)
+    add_subtitles = ActivityProxy('AddSubtitles', 1)
 
     def run(self, remote, video_id, source):
         transcodings = remote.transcode(source)
@@ -14,6 +15,7 @@ class ProcessUploadedVideoWorkflow(Workflow):
         status = remote.process_metadata(video_id,
                     transcodings.result(), thumbnails.result()
         )
+        subtitles = remote.add_subtitles(video_id)
         return status.result()
 
 

@@ -21,9 +21,13 @@ multiple components, which can run as separate processes on separate computers
 and be scaled independently. The application can continue to progress if any of
 its components are running, making it highly fault tolerant.
 
-Here is one of the simplest :app:`Flowy` applications you can make:
 
-.. literalinclude:: tutorial/simple_example.py
+To make a simple :app:`Flowy` application that tests whether a number is even 
+or not, all you need are the following two files, one for the activity and one
+for the workflow:
+
+.. literalinclude:: tutorial/simple_workflow.py
+.. literalinclude:: tutorial/simple_activity.py
 
 See the :ref:`tutorial` for a full explanation on how this application
 works and how to build a complete workflow from start to finish.
