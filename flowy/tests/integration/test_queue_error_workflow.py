@@ -41,6 +41,7 @@ class SimpleWorflowTest(WorkflowTestCase):
         my_config.scan(ignore=["mock"])
         my_config._client.dispatch_next_decision(task_list='constant_list')
         my_config._client.dispatch_next_decision(task_list='constant_list')
+        my_config._client.dispatch_next_decision(task_list='constant_list')
         self.assertCompletedWorkflow(requests)
 
 
