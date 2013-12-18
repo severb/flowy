@@ -10,7 +10,7 @@ from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
 from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
 
-__all__ = ['CachingClient', 'SWFClient']
+__all__ = ['StatefulJobDispatcher', 'SWFClient']
 
 
 class SWFClient(object):
@@ -501,8 +501,8 @@ class ActivityTask(object):
         return self._client.heartbeat(token=self._token)
 
 
-class CachingDecision(object):
-    """ A workflow decision that caches its state.
+class StatefulDecision(object):
+    """ A workflow decision that can be created from a previous state.
 
     This class allows easy queueing of new activities, workflows and timers and
     at the same time it provides ways to query the history of the execution. In
@@ -791,7 +791,7 @@ class CachingDecision(object):
         """ Retrieve the global decision context. """
         return self._global_context
 
-    def dump(self):
+    def dump_state(self):
         """ Return a textual representation of the current state. """
         return _str_concat(json.dumps((
             self._contexts,
@@ -819,17 +819,20 @@ class CachingDecision(object):
         self._fired = set(fired)
 
 
-class CachingClient(object):
-    """ A simple wrapper around Boto's SWF Layer1 that provides a cleaner
-    interface and some convenience.
+class StatefulJobDispatcher(object):
+    """ Register and dispatch decisions and activities to a callable.
 
-    Initialize and bind the client to a *domain*. A custom
-    :class:`boto.swf.layer1.Layer1` instance can be sent as the *client*
-    argument and it will be used instead of the default one.
+    This dispatcher will instantiate decisions by passing only the new events
+    available in the history together with the state of the previous decision.
+    This approach is very limited by the max size of the context a workflow can
+    have, so it's only useful for short workflows composed of jobs with
+    relatively small results but minimizes a lot the amount of history
+    pagination needed.
 
     """
+
     ActivityTask = ActivityTask
-    Decision = CachingDecision
+    Decision = StatefulDecision
 
     def __init__(self, client_maker):
         self._client_maker = client_maker
@@ -842,7 +845,7 @@ class CachingClient(object):
                           child_policy='TERMINATE',
                           descr=None):
 
-        """ Register a workflow with the given configuration options.
+        """ Register *decision_maker* callable to handle this workflow type.
 
         If a workflow with the same *name* and *version* is already registered,
         this method returns a boolean indicating whether the registered
@@ -874,7 +877,7 @@ class CachingClient(object):
                           heartbeat=60, schedule_to_close=420,
                           schedule_to_start=120, start_to_close=300,
                           descr=None):
-        """ Register an activity with the given configuration options.
+        """ Register *activity_runner* callable to handle this activity type.
 
         If an activity with the same *name* and *version* is already
         registered, this method returns a boolean indicating whether the
@@ -980,7 +983,7 @@ class CachingClient(object):
 
         if not decision.is_finished():
             client.schedule_queued(decision_response.token,
-                                   _str_concat(input, decision.dump()))
+                                   _str_concat(input, decision.dump_state()))
 
         return decision_maker
 

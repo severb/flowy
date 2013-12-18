@@ -4,7 +4,7 @@ import logging
 import sys
 
 import venusian
-from .swf import CachingClient, SWFClient
+from .swf import StatefulJobDispatcher, SWFClient
 
 __all__ = ['make_config', 'ClientConfig', 'activity_config', 'workflow_config']
 
@@ -83,7 +83,7 @@ def workflow_config(name, version, task_list,
 
 def make_config(domain, client=None):
     return ClientConfig(
-        CachingClient(
+        StatefulJobDispatcher(
             functools.partial(SWFClient, domain=domain, client=client)
         )
     )
