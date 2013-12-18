@@ -40,14 +40,14 @@ Contents:
    installation
    tutorial/tutorial.rst
 
-API Documentation
-=================
+API Reference
+=============
 .. toctree::
    :maxdepth: 1
 
-   client
-   workflow
-   activity
+   api/swf
+   api/workflow
+   api/activity
 
 
 Indices and tables
