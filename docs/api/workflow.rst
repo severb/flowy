@@ -2,3 +2,8 @@
 ---------------------
 
 .. automodule:: flowy.workflow
+
+
+.. autoclass:: Workflow
+    :members:
+

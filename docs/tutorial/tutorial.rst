@@ -52,14 +52,14 @@ The activity above uses the following set of import statements:
 
 The script imports the :class:`~flowy.Activity` class from the
 :mod:`flowy` module. Our activity must inherit this class. We also
-import ``activity_config``, which we will use to decorate our
+import :func:`~flowy.config.activity_config`, which we will use to decorate our
 activity, specifying the activity's name, version, task list and, optionally, 
 several other options, such as timeouts. Activities can also be registered
-manually with the :meth:`flowy.swf.SWFClient.register_activity` method.
+manually with the :meth:`~flowy.swf.SWFClient.register_activity` method.
 
 .. seealso:: For a full list of options that can be specified when registering
    an activity using the decorator, or manually, please see
-   :meth:`flowy.swf.SWFClient.register_activity`.
+   :meth:`~flowy.swf.SWFClient.register_activity`.
 
 Defining the activity
 ~~~~~~~~~~~~~~~~~~~~~
@@ -93,10 +93,10 @@ Finally, we have:
    :lines: 16-19
 
 This starts the main activity polling loop. First we specify the domain to be 
-used, using `~flowy.config.make_config`. Only when we call
-`~flowy.config.ClientConfig.scan` do we actually contact the Amazon servers. 
-When calling `~flowy.config.ClientConfig.start_activity_loop`, we can override
-the task list  on which we listen (which we did not do).
+used, using :func:`~flowy.config.make_config`. Only when we call
+:meth:`~flowy.config.ClientConfig.scan` do we actually contact the Amazon 
+servers. When calling :meth:`~flowy.config.ClientConfig.start_activity_loop`, 
+we can override the task list  on which we listen (which we did not do).
 
 In the diagram above, we identified 3 activities that we need to define and
 implement. The activities that process the metadata and generate thumbnails can
@@ -127,8 +127,8 @@ We import the :class:`~flowy.workflow.Workflow`, from which our Workflow must
 inherit and it has to implement the :meth:`~flowy.workflow.Workflow.run` 
 method. We also import the :class:`~flowy.workflow.ActivityProxy` class which, 
 as the name suggests, is a proxy object for our previously defined activities.
-`~flowy.config.workflow_client` has a similar role to `activity_client`, which
-is to decorate the Workflow.
+:decorator:`~flowy.config.workflow_client` has a similar role to 
+``activity_client``, which is to decorate the Workflow.
 
 
 Defining the workflow
