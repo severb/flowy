@@ -474,17 +474,17 @@ class ActivityTask(object):
         self._token = token
 
     def complete(self, result):
-        """ Triggers the successful completion of the activity with *result*.
+        """ Trigger the successful completion of the activity with *result*.
 
-        Returns a boolean indicating the success of the operation.
+        Return a boolean indicating the success of the operation.
 
         """
         return self._client.complete_activity(token=self._token, result=result)
 
     def fail(self, reason):
-        """ Triggers the failure of the activity for the specified reason.
+        """ Trigger the failure of the activity for the specified reason.
 
-        Returns a boolean indicating the success of the operation.
+        Return a boolean indicating the success of the operation.
 
         """
         return self._client.fail_activity(token=self._token, reason=reason)
@@ -492,8 +492,8 @@ class ActivityTask(object):
     def heartbeat(self):
         """ Report that the activity is still making progress.
 
-        Returns a boolean indicating the success of the operation or whether
-        the heartbeat exceeded the time it should have taken to report activity
+        Return a boolean indicating the success of the operation or whether the
+        heartbeat exceeded the time it should have taken to report activity
         progress. In the latter case the activity execution should be stopped
         after an optional cleanup.
 
@@ -502,7 +502,16 @@ class ActivityTask(object):
 
 
 class CachingDecision(object):
-    def __init__(self, client, new_events, token, execution_context=None):
+    """ A workflow decision that caches its state.
+
+    This class allows easy queueing of new activities, workflows and timers and
+    at the same time it provides ways to query the history of the execution. In
+    order to recreate the execution history it only requires the *new_events*
+    and its *previous_state* if any. The *client* and *token* are used to
+    forward the actions to the right workflow instance.
+
+    """
+    def __init__(self, client, new_events, token, previous_state=None):
         self._client = client
         # Cache the events in case of an iterator because we may need to walk
         # over it multiple times
@@ -518,8 +527,8 @@ class CachingDecision(object):
         self._global_context = None
         self._is_finished = False
 
-        if execution_context is not None:
-            self.load(execution_context)
+        if previous_state is not None:
+            self._load(previous_state)
 
         self._setup_internal_dispatch()
         self._update(new_events)
@@ -708,9 +717,9 @@ class CachingDecision(object):
             self._contexts[call_id] = str(context)
 
     def complete(self, result):
-        """ Triggers the successful completion of the workflow.
+        """ Trigger the successful completion of the workflow.
 
-        Completes the workflow with the *result* value. Returns a boolean
+        Complete the workflow with the *result* value and return a boolean
         indicating the success of the operation.
 
         """
@@ -721,11 +730,11 @@ class CachingDecision(object):
                                               result=str(result))
 
     def fail(self, reason):
-        """ Triggers the termination of the workflow.
+        """ Trigger the termination of the workflow.
 
         Terminate the workflow identified by *workflow_id* for the specified
-        *reason*. When terminating a workflow all the activities will be
-        abandoned and the final result won't be available. Returns a boolean
+        *reason*. When a workflow is terminated all the activities will be
+        abandoned and the final result won't be available. Return a boolean
         indicating the success of the operation.
 
         """
@@ -740,6 +749,7 @@ class CachingDecision(object):
         return self._contexts.get(call_id, default)
 
     def is_finished(self):
+        """ Check if any of :meth:`complete` or :meth:`fail` was called. """
         return self._is_finished
 
     def is_scheduled(self, call_id):
@@ -782,6 +792,7 @@ class CachingDecision(object):
         return self._global_context
 
     def dump(self):
+        """ Return a textual representation of the current state. """
         return _str_concat(json.dumps((
             self._contexts,
             # json makes int keys as strings
@@ -793,7 +804,7 @@ class CachingDecision(object):
             list(self._fired),
         )), self._global_context)
 
-    def load(self, data):
+    def _load(self, data):
         json_data, self._global_context = _str_deconcat(data)
         (self._contexts,
          to_call_id,
