@@ -258,24 +258,24 @@ activity:
 
 1. When defining the activity, through the decorator:
 
-.. literalinclude:: tutorial/configurations.py
+.. literalinclude:: configurations.py
    :language: python
    :lines: 1-9
-   :emphasize-lines: 1,2
+   :emphasize-lines: 1,2,3
 
 2. When defining a :class:`~flowy.workflow.ActivityProxy` in the workflow:
 
-.. literalinclude:: tutorial/configurations.py
+.. literalinclude:: configurations.py
    :language: python
-   :lines: 12-24
-   :emphasize-lines: 4,5,6,7,8,9,10,11
+   :lines: 10-16
+   :emphasize-lines: 5,6,7
 
 3. When implementing the workflow itself, via a special context manager:
 
-.. literalinclude:: tutorial/configurations.py
+.. literalinclude:: configurations.py
    :language: python
-   :lines: 27-38
-   :emphasize-lines: 8,9
+   :lines: 18-27
+   :emphasize-lines: 2,3,4
 
 The 3 different scopes that are available for specifying certain activity
 options have a well defined hierarchy: options set via the third method will
