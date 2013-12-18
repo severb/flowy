@@ -35,19 +35,18 @@ works and how to build a complete workflow from start to finish.
 Contents:
 =================
 .. toctree::
-   :maxdepth: 2
+    :maxdepth: 2
 
-   installation
-   tutorial/tutorial.rst
+    installation
+    tutorial/tutorial.rst
 
 API Reference
 =============
 .. toctree::
-   :maxdepth: 1
+    :glob:
+    :maxdepth: 1
 
-   api/swf
-   api/workflow
-   api/activity
+    api/*
 
 
 Indices and tables

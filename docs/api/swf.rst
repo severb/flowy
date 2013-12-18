@@ -3,10 +3,6 @@
 
 .. automodule:: flowy.swf
 
-
-.. autoclass:: SWFClient
-   :members:
-
 .. autoclass:: CachingDecision
    :members:
 

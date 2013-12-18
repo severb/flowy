@@ -272,7 +272,7 @@ class Workflow(object):
     """
     def run(self, remote, *args, **kwargs):
         """ A subclass must implement the activity task coordination here. """
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def __call__(self, input, decision):
         """ Resumes the execution of the workflow.
