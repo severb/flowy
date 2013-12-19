@@ -3,7 +3,7 @@
 
 .. automodule:: flowy.swf
 
-.. autoclass:: CachingDecision
+.. autoclass:: StatefulDecision
    :members:
 
 .. autoclass:: ActivityTask

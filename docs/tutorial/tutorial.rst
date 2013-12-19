@@ -285,3 +285,21 @@ will also rewrite any and all settings specified with the decorator.
 
 Error handling
 --------------
+
+By default, when an error is encountered in a workflow, either because an 
+activity times out, throws an uncaught exception, or a workflow throws an
+exception, the whole workflow is stopped and no result is returned from the 
+workflow. 
+
+In many cases it is desirable to handle such errors. For example, if our 
+transcoding activity times out using a free service, we may want to try again 
+(for some videos) on a paid service. In other cases, some activities are not
+vital to the workflow, only desirable. If they fail, they shouldn't bring down
+the whole workflow with them. 
+
+To do this, we can set the ``error_handling`` option to ``True`` in 
+:meth:`~flowy.workflow.WorkflowExecution.options`.
+
+.. literalinclude:: error_handling.py
+    :language: python
+    :lines: 11-18
