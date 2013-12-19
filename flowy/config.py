@@ -110,12 +110,20 @@ class ClientConfig(object):
         self._scan(categories=('workflow',), package=package, ignore=ignore)
 
     def start_activity_loop(self, task_list):
-        while 1:
-            self._client.dispatch_next_activity(task_list)
+        try:
+            while 1:
+                self._client.dispatch_next_activity(task_list)
+        except KeyboardInterrupt:
+            logging.critical('Keyboard interrupt intercepted. Shutting down.')
+            break
 
     def start_workflow_loop(self, task_list):
-        while 1:
-            self._client.dispatch_next_decision(task_list)
+        try:
+            while 1:
+                self._client.dispatch_next_decision(task_list)
+        except KeyboardInterrupt:
+            logging.critical('Keyboard interrupt intercepted. Shutting down.')
+            break
 
     def workflow_starter(self, name, version, task_list=None):
 
