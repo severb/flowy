@@ -15,10 +15,11 @@ class ErrorWorkflow(Workflow):
     )
 
     def run(self, remote):
-        try:
-            r = remote.div(True)
-        except Exception:
-            print("Caught exception")
+        with remote.options(error_handling=True):
+            try:
+                r = remote.div(True)
+            except Exception:
+                print("Caught exception")
         return True
 
 

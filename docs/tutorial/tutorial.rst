@@ -303,3 +303,15 @@ To do this, we can set the ``error_handling`` option to ``True`` in
 .. literalinclude:: error_handling.py
     :language: python
     :lines: 11-18
+
+If the activity fails, when calling it's ``result`` method, an exception will
+be thrown. If the result of an activity is not needed (it does something that
+is optional and a side-effect only), than no error handling is necessary. 
+
+Heartbeat
+---------
+
+Some activities are long lived, such as uploading a file or transcoding a 
+video, and they may still fail. We want to know of their failure before waiting
+for the whole timeout. Th mechanism to do this with SWF is to use heartbeats.
+
