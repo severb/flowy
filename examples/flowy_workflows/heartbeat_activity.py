@@ -11,7 +11,7 @@ class HeartbeatActivity(Activity):
     """
     def run(self, heartbeat):
         for i in range(5):
-            heartbeat()
+            heartbeat(i)
             sleep(2)
         return 2
 

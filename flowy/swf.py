@@ -323,9 +323,12 @@ class SWFClient(object):
             return False
         return True
 
-    def heartbeat(self, token):
+    def heartbeat(self, token, details):
         try:
-            self._client.record_activity_task_heartbeat(task_token=token)
+            self._client.record_activity_task_heartbeat(
+                    task_token=token,
+                    details=json.dumps(details)
+            )
             logging.info("Sent activity heartbeat: %s", token)
         except SWFResponseError:
             logging.warning("Error when sending activity heartbeat: %s",
@@ -489,7 +492,7 @@ class ActivityTask(object):
         """
         return self._client.fail_activity(token=self._token, reason=reason)
 
-    def heartbeat(self):
+    def heartbeat(self, details=None):
         """ Report that the activity is still making progress.
 
         Return a boolean indicating the success of the operation or whether the
@@ -498,7 +501,7 @@ class ActivityTask(object):
         after an optional cleanup.
 
         """
-        return self._client.heartbeat(token=self._token)
+        return self._client.heartbeat(token=self._token, details=details)
 
 
 class StatefulDecision(object):
