@@ -315,3 +315,18 @@ Some activities are long lived, such as uploading a file or transcoding a
 video, and they may still fail. We want to know of their failure before waiting
 for the whole timeout. Th mechanism to do this with SWF is to use heartbeats.
 
+.. literalinclude:: heartbeat_activity.py 
+    :language: python
+    :lines: 12-16 
+
+One of the parameters that can be set for an activity is the heartbeat timeout.
+If it is greater than 0, the activity has to call the heartbeat function at
+least once every ``heartbeat_timeout`` seconds. If the activity fails to do so,
+it will timeout and Amazon will consider it invalid and won't accept any
+response from it after.
+
+The heartbeat mechanism also provides a way for the activity to send messages
+back to the workflow. The heartbeat function takes a parameter which can be 
+received by the workflow. Also, the heartbeat function returns a boolean value,
+which signifies the cancellation of the activity. If it is True, the activity
+should start cleaning up, because its response will no longer be accepted.
