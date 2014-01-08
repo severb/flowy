@@ -21,7 +21,7 @@ class Activity(object):
     def run(self, heartbeat, *args, **kwargs):
         """ The actual unit of work must be implemented here.
 
-        Gets a *heartbeat* callable as the first argument that can be usedt to
+        Gets a *heartbeat* callable as the first argument that can be used to
         send regular updates from the activity. If the heartbeat returns a
         `False` value the activity should be aborted after an optional cleanup
         since one of its timeout counters was exceeded.
