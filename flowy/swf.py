@@ -11,7 +11,7 @@ class RemoteTaskSpec(object):
 
     def bind_task_factory(self, task_factory):
         if not callable(task_factory):
-            raise ValueError('the task task_factory must be callable')
+            raise ValueError('the task factory must be callable')
         self._task_factory = task_factory
 
     def register(self, poller):
