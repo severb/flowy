@@ -54,9 +54,7 @@ class AWSActivitySpecTest(unittest.TestCase):
 
     def test_register_passes_late_bind_factory_to_poller(self):
         spec, client, factory = self._get_uut(
-            name='n',
-            version='v',
-            task_factory=None
+            name='n', version='v', task_factory=None
         )
         factory = Mock()
         poller = Mock()
@@ -119,9 +117,7 @@ class AWSActivitySpecTest(unittest.TestCase):
         }
         result = spec.register(poller)
         client.describe_activity_type.assert_called_once_with(
-            domain='d',
-            activity_name='n',
-            activity_version='v'
+            domain='d', activity_name='n', activity_version='v'
         )
         self.assertTrue(result)
 

@@ -132,8 +132,6 @@ class AWSWorkflowSpec(RemoteTaskSpec):
                 default_child_policy=self._child_policy,
                 description=self._description
             )
-        except SWFTypeAlreadyExistsError:
-            return False
         except SWFResponseError:
             return False
         return True
