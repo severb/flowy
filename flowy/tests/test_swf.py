@@ -16,16 +16,12 @@ class AWSActivitySpecTest(unittest.TestCase):
                  start_to_close=300,
                  description='descr',
                  task_factory=sentinel.sentinel):
-
         from flowy.swf import AWSActivitySpec
-
         if client is None:
             from boto.swf.layer1 import Layer1
             client = create_autospec(Layer1, instance=True)
-
         if task_factory is sentinel.sentinel:
             task_factory = Mock()
-
         return AWSActivitySpec(
             domain=domain,
             name=name,
