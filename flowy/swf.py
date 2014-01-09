@@ -1,4 +1,4 @@
-from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
+from boto.swf.exceptions import SWFResponseError
 
 
 class RemoteTaskSpec(object):
