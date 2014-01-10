@@ -5,6 +5,7 @@ class RemoteTaskSpec(object):
     def __init__(self, name, version, client=None, task_factory=None):
         self._name = str(name)
         self._version = str(version)
+        self._client = client
         self._task_factory = None
         if task_factory is not None:
             self.bind_task_factory(task_factory)
