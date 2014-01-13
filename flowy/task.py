@@ -1,46 +1,35 @@
 import json
-from functools import partial
 
 
-class Remote(object):
-    def __init__(self, decision_task, result):
-        self._decision_task = decision_task
-        self._result = result
+class SuspendTask(Exception):
+    """ Raised to suspend the task run.
 
-    def __getattr__(self, proxy_name):
-        proxy = getattr(self._decision_task, proxy_name)
-        if not callable(proxy):
-            raise AttributeError('%r is not callable' % proxy_name)
-        return partial(proxy, self)
-
-    def options(self):
-        pass
-
-    def call_remote_activity(self):
-        pass
-
-    def call_remote_subworkflow(self):
-        pass
+    This happens when a worklfow needs to wait for an activity or in case of an
+    async activity.
+    """
 
 
-class ActivityTask(object):
-    def __init__(self, input, result):
+class Task(object):
+    def __init__(self, input, result, task_runtime=None):
         self._input = input
         self._result = result
+        self._task_runtime = task_runtime
+
+    def bind_task_runtime(self, task_runtime):
+        self._task_runtime = task_runtime
 
     def __call__(self):
         try:
             args, kwargs = self.deserialize_arguments()
-            result = self._call_run(*args, **kwargs)
+            result = self.run(self._task_runtime, *args, **kwargs)
+        except SuspendTask:
+            self._result.suspend()
         except Exception as e:
             self._result.fail(str(e))
         else:
             self._result.complete(self.serialize_result(result))
 
-    def _call_run(self, *args, **kwargs):
-        self.run(self._result.heartbeat, *args, **kwargs)
-
-    def run(self, *args, **kwargs):
+    def run(self, runtime, *args, **kwargs):
         raise NotImplementedError
 
     def serialize_result(self, result):
@@ -50,10 +39,75 @@ class ActivityTask(object):
         return json.loads(self._input)
 
 
-class DecisionTask(ActivityTask):
-    def __init__(self, input, result, remote=Remote):
-        super(DecisionTask, self).__init__(input, result)
-        self._remote_factory = remote
+class TaskProxy(object):
+    def serialize_arguments(self, *args, **kwargs):
+        return json.dumps([args, kwargs])
 
-    def _call_run(self, *args, **kwargs):
-        self.run(self._remote_factory(self, self._result), *args, **kwargs)
+    def deserialize_result(self, result):
+        return json.loads(result)
+
+
+class ActivityProxy(TaskProxy):
+    def __init__(self, name, version,
+                 heartbeat=None,
+                 schedule_to_close=None,
+                 schedule_to_start=None,
+                 start_to_close=None,
+                 task_list=None,
+                 retry=3,
+                 delay=0):
+        self._name = name
+        self._version = version
+        self._heartbeat = heartbeat
+        self._schedule_to_close = schedule_to_close
+        self._schedule_to_start = schedule_to_start
+        self._stat_to_close = start_to_close
+        self._task_list = task_list
+        self._retry = retry
+        self._delay = delay
+
+    def __call__(self, runtime, *args, **kwargs):
+        arguments = self.serialize_arguments(*args, **kwargs)
+        return runtime.remote_activity(
+            name=self._name,
+            version=self._version,
+            task_list=self._task_list,
+            input=arguments,
+            heartbeat=self._heartbeat,
+            schedule_to_close=self._schedule_to_close,
+            schedule_to_start=self._schedule_to_start,
+            start_to_close=self._stat_to_close,
+            retry=self._retry,
+            delay=self._delay,
+            result_deserializer=self.deserialize_result
+        )
+
+
+class SubworkflowProxy(TaskProxy):
+    def __init__(self, name, version,
+                 decision_duration=None,
+                 workflow_duration=None,
+                 task_list=None,
+                 retry=3,
+                 delay=0):
+        self._name = name
+        self._version = version
+        self._decision_duration = decision_duration
+        self._workflow_duration = workflow_duration
+        self._task_list = task_list
+        self._retry = retry
+        self._delay = delay
+
+    def __call__(self, runtime, *args, **kwargs):
+        arguments = self.serialize_arguments(*args, **kwargs)
+        return runtime.remote_subworkflow(
+            name=self._name,
+            version=self._version,
+            task_list=self._task_list,
+            input=arguments,
+            decision_duration=self._decision_duration,
+            workflow_duration=self._workflow_duration,
+            retry=self._retry,
+            delay=self._delay,
+            result_deserializer=self.deserialize_result
+        )
