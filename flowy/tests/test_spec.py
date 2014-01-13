@@ -14,7 +14,7 @@ class SWFActivitySpecTest(unittest.TestCase):
                  name='name',
                  version='v1',
                  task_list='task_list',
-                 client=None,
+                 client=s.sentinel,
                  heartbeat=60,
                  schedule_to_close=420,
                  schedule_to_start=120,
@@ -22,7 +22,7 @@ class SWFActivitySpecTest(unittest.TestCase):
                  description='descr',
                  task_factory=s.sentinel):
         from flowy.spec import SWFActivitySpec
-        if client is None:
+        if client is s.sentinel:
             from boto.swf.layer1 import Layer1
             client = create_autospec(Layer1, instance=True)
         if task_factory is s.sentinel:
@@ -42,7 +42,11 @@ class SWFActivitySpecTest(unittest.TestCase):
         ), client, task_factory
 
     def test_register_fails_without_task_factory(self):
-        spec, client, factory = self._get_uut(task_factory=None)
+        spec, client, _ = self._get_uut(task_factory=None)
+        self.assertRaises(RuntimeError, spec.register, Mock())
+
+    def test_register_fails_without_client(self):
+        spec, _, factory = self._get_uut(client=None)
         self.assertRaises(RuntimeError, spec.register, Mock())
 
     def test_register_passes_values_to_poller(self):
@@ -65,9 +69,17 @@ class SWFActivitySpecTest(unittest.TestCase):
             name='n', version='v', task_factory=factory
         )
 
+    def test_register_uses_late_bind_client(self):
+        spec, _, factory = self._get_uut(client=None)
+        client = Mock()
+        poller = Mock()
+        spec.bind_client(client)
+        spec.register(poller)
+        self.assertTrue(client.register_activity_type.called)
+
     def test_factory_must_be_callable(self):
         spec, client, factory = self._get_uut(task_factory=None)
-        self.assertRaises(ValueError, spec.bind_task_factory, 1)
+        self.assertRaises(ValueError, spec.bind_task_factory, 'not callable')
 
     def test_remote_register_successful_as_new(self):
         spec, client, factory = self._get_uut(
@@ -231,12 +243,12 @@ class SWFWorkflowSpecTest(unittest.TestCase):
         self.assertFalse(result)
 
 
-class CollectorSpecTest(unittest.TestCase):
+class RemoteCollectorSpecTest(unittest.TestCase):
     def _get_uut(self, factory=None):
-        from flowy.spec import CollectorSpec
+        from flowy.spec import RemoteCollectorSpec
         if factory is None:
             factory = Mock()
-        return CollectorSpec(spec_factory=factory), factory
+        return RemoteCollectorSpec(spec_factory=factory), factory
 
     def test_register_empty(self):
         spec, factory = self._get_uut()
@@ -265,22 +277,27 @@ class CollectorSpecTest(unittest.TestCase):
 
     def test_register_fails(self):
         spec, factory = self._get_uut()
-        s1, s2 = Mock(), Mock()
-        s1.register.return_value, s2.register.return_value = True, False
-        factory.side_effect = s1, s2
+        factory().register.side_effect = True, False
         poller = Mock()
-        spec.detect(0, 1, a=1, b=2)
-        spec.detect(0, a=1, x=10, y=20)
+        spec.detect(s.x, a=s.a)
+        spec.detect(s.y, s.z)
         result = spec.register(poller)
         self.assertFalse(result)
 
+    def test_bind_client(self):
+        spec, factory = self._get_uut()
+        spec.detect(s.x, a=s.a)
+        spec.detect(s.y, s.z)
+        spec.bind_client(s.c)
+        factory().bind_client.assert_has_calls([call(s.c), call(s.c)])
 
-class ScannerSpecTest(unittest.TestCase):
+
+class RemoteScannerSpecTest(unittest.TestCase):
     def _get_uut(self, collector=None):
-        from flowy.spec import ScannerSpec
+        from flowy.spec import RemoteScannerSpec
         if collector is None:
             collector = Mock()
-        return ScannerSpec(collector=collector), collector
+        return RemoteScannerSpec(collector=collector), collector
 
     def test_decorator_functionality(self):
         scanner, collector = self._get_uut()
@@ -294,3 +311,8 @@ class ScannerSpecTest(unittest.TestCase):
         scanner, collector = self._get_uut()
         scanner.register(s.fact)
         collector.register.assert_called_once_with(s.fact)
+
+    def test_bind_client(self):
+        scanner, collector = self._get_uut()
+        scanner.bind_client(s.c)
+        collector.bind_client.assert_called_once_with(s.c)

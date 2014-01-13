@@ -5,6 +5,7 @@ class RemoteTaskSpec(object):
     def __init__(self, name, version, client=None, task_factory=None):
         self._name = str(name)
         self._version = str(version)
+        self._client = client
         self._task_factory = None
         if task_factory is not None:
             self.bind_task_factory(task_factory)
@@ -36,6 +37,8 @@ class RemoteTaskSpec(object):
         )
 
     def _register_remote(self):
+        if self._client is None:
+            raise RuntimeError('%s is not bound to a client' % self.__class__)
         success = True
         registered_as_new = self._try_register_remote()
         if not registered_as_new:
@@ -43,8 +46,7 @@ class RemoteTaskSpec(object):
         return success
 
     def _try_register_remote(self):
-        if self._client is None:
-            raise RuntimeError('%s is not bound to a client' % self.__class__)
+        raise NotImplementedError  # pragma: no cover
 
     def _check_if_compatible(self):
         raise NotImplementedError  # pragma: no cover
@@ -72,7 +74,6 @@ class SWFActivitySpec(RemoteTaskSpec):
             self._description = str(description)
 
     def _try_register_remote(self):
-        super(SWFActivitySpec, self)._try_register_remote()
         try:
             self._client.register_activity_type(
                 domain=self._domain,
@@ -127,7 +128,6 @@ class SWFWorkflowSpec(RemoteTaskSpec):
             self._description = str(description)
 
     def _try_register_remote(self):
-        super(SWFWorkflowSpec, self)._try_register_remote()
         try:
             workflow_duration = self._workflow_duration
             self._client.register_workflow_type(
