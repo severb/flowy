@@ -21,7 +21,7 @@ class SWFActivitySpecTest(unittest.TestCase):
                  start_to_close=300,
                  description='descr',
                  task_factory=s.sentinel):
-        from flowy.specs import SWFActivitySpec
+        from flowy.spec import SWFActivitySpec
         if client is None:
             from boto.swf.layer1 import Layer1
             client = create_autospec(Layer1, instance=True)
@@ -169,7 +169,7 @@ class SWFWorkflowSpecTest(unittest.TestCase):
                  child_policy='TERMINATE',
                  description='description',
                  task_factory=s.sentinel):
-        from flowy.specs import SWFWorkflowSpec
+        from flowy.spec import SWFWorkflowSpec
         if client is None:
             from boto.swf.layer1 import Layer1
             client = create_autospec(Layer1, instance=True)
@@ -233,7 +233,7 @@ class SWFWorkflowSpecTest(unittest.TestCase):
 
 class CollectorSpecTest(unittest.TestCase):
     def _get_uut(self, factory=None):
-        from flowy.specs import CollectorSpec
+        from flowy.spec import CollectorSpec
         if factory is None:
             factory = Mock()
         return CollectorSpec(spec_factory=factory), factory
@@ -277,7 +277,7 @@ class CollectorSpecTest(unittest.TestCase):
 
 class ScannerSpecTest(unittest.TestCase):
     def _get_uut(self, collector=None):
-        from flowy.specs import ScannerSpec
+        from flowy.spec import ScannerSpec
         if collector is None:
             collector = Mock()
         return ScannerSpec(collector=collector), collector
