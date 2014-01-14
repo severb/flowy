@@ -131,9 +131,6 @@ class ContextOptionsRuntime(object):
 
     def remote_subworkflow(self, result_deserializer,
                            heartbeat=None,
-                           schedule_to_close=None,
-                           schedule_to_start=None,
-                           start_to_close=None,
                            workflow_duration=None,
                            decision_duration=None,
                            task_list=None,
@@ -142,9 +139,9 @@ class ContextOptionsRuntime(object):
                            error_handling=False):
         options = _Options(
             heartbeat=heartbeat,
-            schedule_to_close=schedule_to_close,
-            schedule_to_start=schedule_to_start,
-            start_to_close=start_to_close,
+            schedule_to_close=None,
+            schedule_to_start=None,
+            start_to_close=None,
             workflow_duration=workflow_duration,
             decision_duration=decision_duration,
             task_list=task_list,
@@ -155,9 +152,6 @@ class ContextOptionsRuntime(object):
         self._decision_runtime.remote_subworkflow(
             result_deserializer=result_deserializer,
             heartbeat=new_options.heartbeat,
-            schedule_to_close=new_options.schedule_to_close,
-            schedule_to_start=new_options.schedule_to_start,
-            start_to_close=new_options.start_to_close,
             workflow_duration=new_options.workflow_duration,
             decision_duration=new_options.decision_duration,
             task_list=new_options.task_list,
@@ -216,9 +210,6 @@ class DecisionRuntime(object):
 
     def remote_subworkflow(self, result_deserializer,
                            heartbeat=None,
-                           schedule_to_close=None,
-                           schedule_to_start=None,
-                           start_to_close=None,
                            workflow_duration=None,
                            decision_duration=None,
                            task_list=None,
