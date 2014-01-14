@@ -129,8 +129,42 @@ class ContextOptionsRuntime(object):
             error_handling=new_options.error_handling
         )
 
-    def remote_subworkflow(self, heartbeat, result_deserializer):
-        pass
+    def remote_subworkflow(self, result_deserializer,
+                           heartbeat=None,
+                           schedule_to_close=None,
+                           schedule_to_start=None,
+                           start_to_close=None,
+                           workflow_duration=None,
+                           decision_duration=None,
+                           task_list=None,
+                           retry=3,
+                           delay=0,
+                           error_handling=False):
+        options = _Options(
+            heartbeat=heartbeat,
+            schedule_to_close=schedule_to_close,
+            schedule_to_start=schedule_to_start,
+            start_to_close=start_to_close,
+            workflow_duration=workflow_duration,
+            decision_duration=decision_duration,
+            task_list=task_list,
+            retry=retry,
+            delay=delay,
+            error_handling=error_handling)
+        new_options = options.update_with(self._options_stack[-1])
+        self._decision_runtime.remote_subworkflow(
+            result_deserializer=result_deserializer,
+            heartbeat=new_options.heartbeat,
+            schedule_to_close=new_options.schedule_to_close,
+            schedule_to_start=new_options.schedule_to_start,
+            start_to_close=new_options.start_to_close,
+            workflow_duration=new_options.workflow_duration,
+            decision_duration=new_options.decision_duration,
+            task_list=new_options.task_list,
+            retry=new_options.retry,
+            delay=new_options.delay,
+            error_handling=new_options.error_handling
+        )
 
     @contextmanager
     def options(self,
@@ -169,8 +203,26 @@ class DecisionRuntime(object):
         self._client = client
         self._token = token
 
-    def remote_activity(self, heartbeat, result_deserializer):
+    def remote_activity(self, result_deserializer,
+                        heartbeat=None,
+                        schedule_to_close=None,
+                        schedule_to_start=None,
+                        start_to_close=None,
+                        task_list=None,
+                        retry=None,
+                        delay=None,
+                        error_handling=None):
         pass
 
-    def remote_subworkflow(self, heartbeat, result_deserializer):
+    def remote_subworkflow(self, result_deserializer,
+                           heartbeat=None,
+                           schedule_to_close=None,
+                           schedule_to_start=None,
+                           start_to_close=None,
+                           workflow_duration=None,
+                           decision_duration=None,
+                           task_list=None,
+                           retry=3,
+                           delay=0,
+                           error_handling=False):
         pass
