@@ -20,6 +20,7 @@ class SWFClient(object):
         self._scheduled_activities = []
         self._scheduled_workflows = []
         self._scheduled_timers = []
+        self._scheduled_restart = None
 
     def register_workflow(self, name, version, task_list,
                           execution_start_to_close=3600,
@@ -205,6 +206,21 @@ class SWFClient(object):
             token=response['taskToken']
         )
 
+    def restart_workflow(self,
+                         task_start_to_close=None,
+                         execution_start_to_close=None,
+                         task_list=None,
+                         input=None,
+                         workflow_type_version=None):
+        if self._scheduled_restart is None:
+            self._scheduled_restart = {
+                'start_to_close_timeout': task_start_to_close,
+                'execution_start_to_close_timeout': execution_start_to_close,
+                'task_list': task_list,
+                'input': input,
+                'workflow_type_version': workflow_type_version,
+            }
+
     def queue_activity(self, call_id, name, version, input,
                        heartbeat=None,
                        schedule_to_close=None,
@@ -246,16 +262,20 @@ class SWFClient(object):
 
     def schedule_queued(self, token, context=None):
         d = Layer1Decisions()
-        for args, kwargs in self._scheduled_activities:
-            d.schedule_activity_task(*args, **kwargs)
-            name, version = args[1:]
-            logging.info("Scheduled activity: %s %s", name, version)
-        for args, kwargs in self._scheduled_workflows:
-            d.start_child_workflow_execution(*args, **kwargs)
-            name, version = args[:2]
-            logging.info("Scheduled child workflow: %s %s", name, version)
-        for args in self._scheduled_timers:
-            d.start_timer(*args)
+        if self._scheduled_restart:
+            d.continue_as_new_workflow_execution(**self._scheduled_restart)
+            logging.info("Scheduled workflow restart")
+        else:
+            for args, kwargs in self._scheduled_activities:
+                d.schedule_activity_task(*args, **kwargs)
+                name, version = args[1:]
+                logging.info("Scheduled activity: %s %s", name, version)
+            for args, kwargs in self._scheduled_workflows:
+                d.start_child_workflow_execution(*args, **kwargs)
+                name, version = args[:2]
+                logging.info("Scheduled child workflow: %s %s", name, version)
+            for args in self._scheduled_timers:
+                d.start_timer(*args)
         data = d._data
         try:
             self._client.respond_decision_task_completed(
@@ -326,8 +346,8 @@ class SWFClient(object):
     def heartbeat(self, token, details):
         try:
             self._client.record_activity_task_heartbeat(
-                    task_token=token,
-                    details=json.dumps(details)
+                task_token=token,
+                details=json.dumps(details)
             )
             logging.info("Sent activity heartbeat: %s", token)
         except SWFResponseError:
@@ -624,6 +644,20 @@ class StatefulDecision(object):
         ):
             raise RuntimeError("Value %s was already used for a"
                                " different call_id." % call_id)
+
+    def restart_workflow(self,
+                         task_start_to_close=None,
+                         execution_start_to_close=None,
+                         task_list=None,
+                         input=None,
+                         workflow_type_version=None):
+        self._client.restart_workflow(
+            task_start_to_close=task_start_to_close,
+            execution_start_to_close=execution_start_to_close,
+            task_list=task_list,
+            input=input,
+            workflow_type_version=workflow_type_version,
+        )
 
     def queue_activity(self, call_id, name, version, input,
                        heartbeat=None,

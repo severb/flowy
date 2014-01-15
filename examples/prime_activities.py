@@ -10,13 +10,6 @@ class NumberDivider(Activity):
 
     """
     def run(self, heartbeat, n, x):
-        import time
-
-        for i in range(3):
-            time.sleep(3)
-            if not heartbeat():
-                print 'cleanup'
-                return
         return n % x == 0
 
 

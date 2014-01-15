@@ -54,6 +54,17 @@ class WorkflowExecution(object):
     def is_completed(self):
         return self._is_completed
 
+    def restart(self, input):
+        o = self._current_options
+        self._is_completed = False
+        self._decision.restart_workflow(
+            task_start_to_close=o.task_start_to_close,
+            execution_start_to_close=o.execution_start_to_close,
+            task_list=o.task_list,
+            input=input,
+            workflow_type_version=None
+        )
+
     @contextmanager
     def options(self, heartbeat=None, schedule_to_close=None,
                 schedule_to_start=None, start_to_close=None,
@@ -264,6 +275,10 @@ class BoundInstance(object):
             raise AttributeError('%r is not a be callable' % task_name)
         return partial(task_proxy, self._workflow_execution)
 
+    def restart(self, *args, **kwargs):
+        input = self._workflow.restart_serialize_arguments(*args, **kwargs)
+        return self._workflow_execution.restart(input)
+
 
 class Workflow(object):
     """ The class that is inherited and needs to implement the activity task
@@ -298,6 +313,10 @@ class Workflow(object):
 
         if we.is_completed():
             decision.complete(self.serialize_workflow_result(result))
+
+    @staticmethod
+    def restart_serialize_arguments(*args, **kwargs):
+        return json.dumps({'args': args, 'kwargs': kwargs})
 
     @staticmethod
     def deserialize_workflow_input(data):
