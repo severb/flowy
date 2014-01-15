@@ -288,6 +288,7 @@ class SWFClient(object):
             self._scheduled_activities = []
             self._scheduled_workflows = []
             self._scheduled_timers = []
+            self._scheduled_restart = None
         return True
 
     def complete_workflow(self, token, result=None):
