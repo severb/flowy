@@ -18,6 +18,20 @@ class Heartbeat(object):
         return True
 
 
+class ActivityResult(object):
+    def __init__(self):
+        pass
+
+    def finish(self, result):
+        pass
+
+    def fail(self, reason):
+        pass
+
+    def suspend(self):
+        pass
+
+
 _OBase = namedtuple(
     typename='_Options',
     field_names=[
@@ -61,6 +75,7 @@ class BoundProxyRuntime(object):
                 start_to_close=None,
                 workflow_duration=None,
                 decision_duration=None,
+                child_policy=None,
                 task_list=None,
                 retry=None,
                 delay=None,
@@ -89,10 +104,11 @@ class ContextOptionsRuntime(object):
             start_to_close=None,
             workflow_duration=None,
             decision_duration=None,
+            child_policy=None,
             task_list=None,
-            retry=3,
-            delay=0,
-            error_handling=False
+            retry=None,
+            delay=None,
+            error_handling=None
         )
         self._options_stack = [default_options]
 
@@ -102,9 +118,9 @@ class ContextOptionsRuntime(object):
                         schedule_to_start=None,
                         start_to_close=None,
                         task_list=None,
-                        retry=None,
-                        delay=None,
-                        error_handling=None):
+                        retry=3,
+                        delay=0,
+                        error_handling=False):
         options = _Options(
             heartbeat=heartbeat,
             schedule_to_close=schedule_to_close,
@@ -112,10 +128,11 @@ class ContextOptionsRuntime(object):
             start_to_close=start_to_close,
             workflow_duration=None,
             decision_duration=None,
+            child_policy=None,
             task_list=task_list,
-            retry=retry,
-            delay=delay,
-            error_handling=error_handling)
+            retry=int(retry),
+            delay=int(delay),
+            error_handling=bool(error_handling))
         new_options = options.update_with(self._options_stack[-1])
         self._decision_runtime.remote_activity(
             result_deserializer=result_deserializer,
@@ -144,10 +161,11 @@ class ContextOptionsRuntime(object):
             start_to_close=None,
             workflow_duration=workflow_duration,
             decision_duration=decision_duration,
+            child_policy=None,
             task_list=task_list,
-            retry=retry,
-            delay=delay,
-            error_handling=error_handling)
+            retry=int(retry),
+            delay=int(delay),
+            error_handling=bool(error_handling))
         new_options = options.update_with(self._options_stack[-1])
         self._decision_runtime.remote_subworkflow(
             result_deserializer=result_deserializer,
@@ -216,4 +234,13 @@ class DecisionRuntime(object):
                            retry=3,
                            delay=0,
                            error_handling=False):
+        pass
+
+    def finish(self, result):
+        pass
+
+    def fail(self, reason):
+        pass
+
+    def suspend(self):
         pass
