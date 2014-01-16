@@ -262,7 +262,7 @@ class SWFClient(object):
 
     def schedule_queued(self, token, context=None):
         d = Layer1Decisions()
-        if self._scheduled_restart:
+        if self._scheduled_restart is not None:
             d.continue_as_new_workflow_execution(**self._scheduled_restart)
             logging.info("Scheduled workflow restart")
         else:
