@@ -881,7 +881,7 @@ class StatefulJobDispatcher(object):
                           execution_start_to_close=3600,
                           task_start_to_close=60,
                           child_policy='TERMINATE',
-                          descr=None):
+                          descr=None, register_remote=True):
 
         """ Register *decision_maker* callable to handle this workflow type.
 
@@ -898,15 +898,17 @@ class StatefulJobDispatcher(object):
         """
         version = str(version)
         client = self._client_maker()
-        reg_result = client.register_workflow(
-            name=name,
-            version=version,
-            task_list=task_list,
-            execution_start_to_close=execution_start_to_close,
-            task_start_to_close=task_start_to_close,
-            child_policy=child_policy,
-            descr=descr
-        )
+        reg_result = True
+        if register_remote:
+            reg_result = client.register_workflow(
+                name=name,
+                version=version,
+                task_list=task_list,
+                execution_start_to_close=execution_start_to_close,
+                task_start_to_close=task_start_to_close,
+                child_policy=child_policy,
+                descr=descr
+            )
         if reg_result:
             self._workflow_registry[(name, version)] = decision_maker
         return reg_result
@@ -914,7 +916,7 @@ class StatefulJobDispatcher(object):
     def register_activity(self, activity_runner, name, version, task_list,
                           heartbeat=60, schedule_to_close=420,
                           schedule_to_start=120, start_to_close=300,
-                          descr=None):
+                          descr=None, register_remote=True):
         """ Register *activity_runner* callable to handle this activity type.
 
         If an activity with the same *name* and *version* is already
@@ -932,16 +934,18 @@ class StatefulJobDispatcher(object):
         """
         version = str(version)
         client = self._client_maker()
-        reg_result = client.register_activity(
-            name=name,
-            version=version,
-            task_list=task_list,
-            heartbeat=heartbeat,
-            schedule_to_close=schedule_to_close,
-            schedule_to_start=schedule_to_start,
-            start_to_close=start_to_close,
-            descr=descr
-        )
+        reg_result = True
+        if self.register_remote:
+            reg_result = client.register_activity(
+                name=name,
+                version=version,
+                task_list=task_list,
+                heartbeat=heartbeat,
+                schedule_to_close=schedule_to_close,
+                schedule_to_start=schedule_to_start,
+                start_to_close=start_to_close,
+                descr=descr
+            )
         if reg_result:
             self._activity_registry[(name, version)] = activity_runner
         return reg_result

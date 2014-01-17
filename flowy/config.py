@@ -32,7 +32,8 @@ def activity_config(name, version, task_list,
                 schedule_to_close=schedule_to_close,
                 schedule_to_start=schedule_to_start,
                 start_to_close=start_to_close,
-                descr=descr
+                descr=descr,
+                register_remote=scanner.register_remote
             )
             if not result:
                 logging.critical(
@@ -67,7 +68,8 @@ def workflow_config(name, version, task_list,
                 execution_start_to_close=execution_start_to_close,
                 task_start_to_close=task_start_to_close,
                 child_policy=child_policy,
-                descr=descr
+                descr=descr,
+                register_remote=scanner.register_remote
             )
             if not result:
                 logging.critical(
@@ -93,28 +95,35 @@ class ClientConfig(object):
     def __init__(self, client):
         self._client = client
 
-    def _scan(self, categories=None, package=None, ignore=None):
-        scanner = venusian.Scanner(client=self._client)
+    def _scan(self, categories=None, package=None, ignore=None,
+              register_remote=True):
+        scanner = venusian.Scanner(client=self._client,
+                                   register_remote=register_remote)
         if package is None:
             package = caller_package(level=3)  # because of the scan call
         scanner.scan(package, categories=categories, ignore=ignore)
 
-    def scan(self, package=None, ignore=None):
+    def scan(self, package=None, ignore=None, register_remote=True):
         self._scan(categories=('activity', 'workflow'),
-                   package=package, ignore=ignore)
+                   package=package, ignore=ignore,
+                   register_remote=register_remote)
 
-    def scan_activities(self, package=None, ignore=None):
-        self._scan(categories=('activity',), package=package, ignore=ignore)
+    def scan_activities(self, package=None, ignore=None, register_remote=True):
+        self._scan(categories=('activity',), package=package, ignore=ignore,
+                   register_remote=register_remote)
 
-    def scan_workflows(self, package=None, ignore=None):
-        self._scan(categories=('workflow',), package=package, ignore=ignore)
+    def scan_workflows(self, package=None, ignore=None, register_remote=True):
+        self._scan(categories=('workflow',), package=package, ignore=ignore,
+                   register_remote=register_remote)
 
     def start_activity_loop(self, task_list):
         while 1:
             try:
                 self._client.dispatch_next_activity(task_list)
             except KeyboardInterrupt:
-                logging.critical('Keyboard interrupt intercepted. Shutting down.')
+                logging.critical(
+                    'Keyboard interrupt intercepted. Shutting down.'
+                )
                 break
 
     def start_workflow_loop(self, task_list):
@@ -122,7 +131,9 @@ class ClientConfig(object):
             try:
                 self._client.dispatch_next_decision(task_list)
             except KeyboardInterrupt:
-                logging.critical('Keyboard interrupt intercepted. Shutting down.')
+                logging.critical(
+                    'Keyboard interrupt intercepted. Shutting down.'
+                )
                 break
 
     def workflow_starter(self, name, version, task_list=None):
