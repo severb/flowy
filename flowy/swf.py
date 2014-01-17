@@ -935,7 +935,7 @@ class StatefulJobDispatcher(object):
         version = str(version)
         client = self._client_maker()
         reg_result = True
-        if self.register_remote:
+        if register_remote:
             reg_result = client.register_activity(
                 name=name,
                 version=version,
