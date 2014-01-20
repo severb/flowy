@@ -68,6 +68,9 @@ class SWFDomainBoundClient(object):
             activity_version
         )
 
+    def __getattr__(self, name):
+        return getattr(self._client, name)
+
 
 class SWFActivityPollerClient(object):
     def __init__(self, client, task_list,
@@ -93,15 +96,15 @@ class SWFActivityPollerClient(object):
                 name=name,
                 version=version,
                 input=input,
-                heartbeat=heartbeat,
-                task_result=activity_result
+                result=activity_result,
+                task_runtime=heartbeat
             )
         return task
 
     def _parse_response(self, swf_response):
         return (
-            swf_response['workflowType']['name'],
-            swf_response['workflowType']['version'],
+            swf_response['activityType']['name'],
+            swf_response['activityType']['version'],
             swf_response['input'],
             swf_response['taskToken']
         )
@@ -111,7 +114,8 @@ class SWFActivityPollerClient(object):
         while 'taskToken' not in swf_response or not swf_response['taskToken']:
             try:
                 swf_response = self._client.poll_for_activity_task(
-                    task_list=self._task_list,
+                    task_list=self._task_list
                 )
             except SWFResponseError:
                 pass  # Add a delay before retrying?
+        return swf_response

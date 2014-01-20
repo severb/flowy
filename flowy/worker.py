@@ -9,10 +9,12 @@ class SingleThreadedWorker(object):
     def poll_next_task(self):
         return self._client.poll_next_task(self)
 
-    def make_task(self, name, version, input, result, runtime):
+    def make_task(self, name, version, input, result, task_runtime):
         task_factory = self._registry.get((name, version))
         if task_factory is not None:
-            return task_factory(input=input, result=result, runtime=runtime)
+            return task_factory(
+                input=input, result=result, task_runtime=task_runtime
+            )
         return None
 
     def run_forever(self):

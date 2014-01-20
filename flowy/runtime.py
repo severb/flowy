@@ -26,7 +26,7 @@ class ActivityResult(object):
     def complete(self, result):
         try:
             self._client.respond_activity_task_completed(
-                task_token=self.token, result=result
+                task_token=self._token, result=result
             )
         except SWFResponseError:
             return False

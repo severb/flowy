@@ -10,8 +10,7 @@ class PrimeTest(Workflow):
     """
     div = ActivityProxy(
         name='NumberDivider',
-        version=4,
-        task_list='div_list',
+        version=5,
         heartbeat=5,
         start_to_close=60
     )
@@ -45,8 +44,8 @@ if __name__ == '__main__':
     my_config = make_config('SeversTest')
 
     # Start a workflow
-    PrimeMasterWF = my_config.workflow_starter('PrimeMaster', 1)
-    print 'Starting: ', PrimeMasterWF(n=22)
+    WF = my_config.workflow_starter('MyPrime', 2)
+    print 'Starting: ', WF(n=22)
 
     # Start the workflow loop
     my_config.scan()

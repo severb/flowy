@@ -189,4 +189,4 @@ class RemoteScannerSpec(object):
         self._collector.bind_client(client)
 
     def register(self, poller):
-        self._collector.register(poller)
+        return self._collector.register(poller)

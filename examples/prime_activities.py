@@ -14,7 +14,7 @@ my_activity_scanner = RemoteScannerSpec(
 
 
 @my_activity_scanner(
-    'NumberDivider', 4, 'mr_list', heartbeat=5, start_to_close=60
+    'NumberDivider', 5, 'mr_list', heartbeat=5, start_to_close=60
 )
 class NumberDivider(Task):
     """
@@ -24,11 +24,12 @@ class NumberDivider(Task):
     def run(self, heartbeat, n, x):
         import time
         for i in range(3):
-            print '.',
+            print '.' * 10
             time.sleep(3)
             if not heartbeat():
                 print 'cleanup'
                 return
+        print 'returning'
         return n % x == 0
 
 
@@ -38,5 +39,9 @@ if __name__ == '__main__':
     activity_worker = SingleThreadedWorker(
         SWFActivityPollerClient(swf_client, 'mr_list')
     )
-    my_activity_scanner.register(activity_worker)
+    all_registered = my_activity_scanner.register(activity_worker)
+    if not all_registered:
+        print 'could not register!'
+        import sys
+        sys.exit(1)
     activity_worker.run_forever()
