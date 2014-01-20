@@ -203,7 +203,7 @@ class ContextOptionsRuntime(object):
                 task_list=None,
                 retry=None,
                 delay=None,
-                error_handling=False):
+                error_handling=None):
         options = _Options(
             heartbeat=heartbeat,
             schedule_to_close=schedule_to_close,
