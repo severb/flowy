@@ -246,7 +246,7 @@ class DecisionRuntime(object):
                            task_list=None,
                            retry=3,
                            delay=0,
-                           error_handling=False):
+                           error_handling=None):
         pass
 
     def complete(self, result):
