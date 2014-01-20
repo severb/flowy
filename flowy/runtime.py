@@ -145,7 +145,8 @@ class ContextOptionsRuntime(object):
             task_list=task_list,
             retry=int(retry),
             delay=int(delay),
-            error_handling=bool(error_handling))
+            error_handling=bool(error_handling)
+        )
         new_options = options.update_with(self._options_stack[-1])
         self._decision_runtime.remote_activity(
             result_deserializer=result_deserializer,
