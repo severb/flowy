@@ -19,14 +19,27 @@ class Heartbeat(object):
 
 
 class ActivityResult(object):
-    def __init__(self):
-        pass
+    def __init__(self, client, token):
+        self._client = client
+        self._token = token
 
-    def finish(self, result):
-        pass
+    def complete(self, result):
+        try:
+            self._client.respond_activity_task_completed(
+                task_token=self.token, result=result
+            )
+        except SWFResponseError:
+            return False
+        return True
 
     def fail(self, reason):
-        pass
+        try:
+            self._client.respond_activity_task_failed(
+                task_token=self._token, reason=reason
+            )
+        except SWFResponseError:
+            return False
+        return True
 
     def suspend(self):
         pass
@@ -236,7 +249,7 @@ class DecisionRuntime(object):
                            error_handling=False):
         pass
 
-    def finish(self, result):
+    def complete(self, result):
         pass
 
     def fail(self, reason):

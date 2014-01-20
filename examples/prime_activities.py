@@ -1,18 +1,30 @@
-from flowy import make_config, Activity, activity_config
+from boto.swf.layer1 import Layer1
+
+from flowy.worker import SingleThreadedWorker
+from flowy.spec import RemoteCollectorSpec, RemoteScannerSpec, SWFActivitySpec
+from flowy.task import Task
+from flowy.client import SWFDomainBoundClient, SWFActivityPollerClient
+
+# from flowy.runtime import Heartbeat, ActivityResult
 
 
-@activity_config(
-    'NumberDivider', 4, 'div_list', heartbeat=5, start_to_close=60
+my_activity_scanner = RemoteScannerSpec(
+    RemoteCollectorSpec(spec_factory=SWFActivitySpec)
 )
-class NumberDivider(Activity):
+
+
+@my_activity_scanner(
+    'NumberDivider', 4, 'mr_list', heartbeat=5, start_to_close=60
+)
+class NumberDivider(Task):
     """
     Divide numbers.
 
     """
     def run(self, heartbeat, n, x):
         import time
-
         for i in range(3):
+            print '.',
             time.sleep(3)
             if not heartbeat():
                 print 'cleanup'
@@ -21,6 +33,10 @@ class NumberDivider(Activity):
 
 
 if __name__ == '__main__':
-    my_config = make_config(domain='SeversTest')
-    my_config.scan()
-    my_config.start_activity_loop(task_list='div_list')
+    swf_client = SWFDomainBoundClient(Layer1(), domain='SeversTest')
+    my_activity_scanner.bind_client(swf_client)
+    activity_worker = SingleThreadedWorker(
+        SWFActivityPollerClient(swf_client, 'mr_list')
+    )
+    my_activity_scanner.register(activity_worker)
+    activity_worker.run_forever()

@@ -2,13 +2,11 @@ from boto.swf.exceptions import SWFResponseError
 
 
 class RemoteTaskSpec(object):
-    def __init__(self, name, version, client=None, task_factory=None):
+    def __init__(self, name, version):
         self._name = str(name)
         self._version = str(version)
-        self._client = client
+        self._client = None
         self._task_factory = None
-        if task_factory is not None:
-            self.bind_task_factory(task_factory)
 
     def bind_task_factory(self, task_factory):
         if not callable(task_factory):
@@ -53,17 +51,14 @@ class RemoteTaskSpec(object):
 
 
 class SWFActivitySpec(RemoteTaskSpec):
-    def __init__(self, domain, name, version, task_list, client,
+    def __init__(self, name, version, task_list,
                  heartbeat=60,
                  schedule_to_close=420,
                  schedule_to_start=120,
                  start_to_close=300,
                  description=None,
                  task_factory=None):
-        super(SWFActivitySpec, self).__init__(
-            name, version, client, task_factory
-        )
-        self._domain = str(domain)
+        super(SWFActivitySpec, self).__init__(name, version)
         self._task_list = str(task_list)
         self._heartbeat = str(heartbeat)
         self._schedule_to_close = str(schedule_to_close)
@@ -76,7 +71,6 @@ class SWFActivitySpec(RemoteTaskSpec):
     def _try_register_remote(self):
         try:
             self._client.register_activity_type(
-                domain=self._domain,
                 name=self._name,
                 version=self._version,
                 task_list=self._task_list,
@@ -93,7 +87,6 @@ class SWFActivitySpec(RemoteTaskSpec):
     def _check_if_compatible(self):
         try:
             c = self._client.describe_activity_type(
-                domain=self._domain,
                 activity_name=self._name,
                 activity_version=self._version
             )['configuration']
@@ -109,16 +102,13 @@ class SWFActivitySpec(RemoteTaskSpec):
 
 
 class SWFWorkflowSpec(RemoteTaskSpec):
-    def __init__(self, domain, name, version, task_list, client,
+    def __init__(self, name, version, task_list,
                  workflow_duration=3600,
                  decision_duration=60,
                  child_policy='TERMINATE',
                  description=None,
                  task_factory=None):
-        super(SWFWorkflowSpec, self).__init__(
-            name, version, client, task_factory
-        )
-        self._domain = str(domain)
+        super(SWFWorkflowSpec, self).__init__(name, version)
         self._task_list = str(task_list)
         self._workflow_duration = str(workflow_duration)
         self._decision_duration = str(decision_duration)
@@ -131,7 +121,6 @@ class SWFWorkflowSpec(RemoteTaskSpec):
         try:
             workflow_duration = self._workflow_duration
             self._client.register_workflow_type(
-                domain=self._domain,
                 name=self._name,
                 version=self._version,
                 task_list=self._task_list,
@@ -166,13 +155,19 @@ class RemoteCollectorSpec(object):
     def __init__(self, spec_factory):
         self._spec_factory = spec_factory
         self._specs = []
+        self._client = None
 
     def register(self, poller):
-        return all(s.register(poller) for s in self._specs)
+        if self._client is None:
+            raise RuntimeError('%s is not bound to a client' % self.__class__)
+        for s in self._specs:
+            s.bind_client(self._client)
+            if not s.register(poller):
+                return False
+        return True
 
     def bind_client(self, client):
-        for s in self._specs:
-            s.bind_client(client)
+        self._client = client
 
     def detect(self, f, *args, **kwargs):
         spec = self._spec_factory(*args, **kwargs)
