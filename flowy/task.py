@@ -12,15 +12,14 @@ class SuspendTask(Exception):
 
 
 class Task(object):
-    def __init__(self, input, result, task_runtime=None):
+    def __init__(self, input, result, task_runtime):
         self._input = str(input)
         self._result = result
         self._task_runtime = task_runtime
 
-    def bind_task_runtime(self, task_runtime):
-        self._task_runtime = task_runtime
-
     def __call__(self):
+        if self._task_runtime is None:
+            raise RuntimeError('the task is not bound to a runtime')
         try:
             args, kwargs = self.deserialize_arguments()
             result = self.run(self._task_runtime, *args, **kwargs)
