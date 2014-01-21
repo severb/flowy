@@ -1,42 +1,35 @@
-from boto.swf.exceptions import SWFResponseError
+from flowy import NotNoneDict
 
 
-class RemoteTaskSpec(object):
-    def __init__(self, name, version):
-        self._name = str(name)
-        self._version = str(version)
-        self._client = None
-        self._task_factory = None
-
-    def bind_task_factory(self, task_factory):
-        if not callable(task_factory):
-            raise ValueError('the task factory must be callable')
+class TaskSpec(object):
+    def __init__(self, task_id, task_factory):
+        self._task_id = task_id
         self._task_factory = task_factory
 
-    def bind_client(self, client):
-        self._client = client
-
     def register(self, poller):
-        successfuly_registered_remote = self._register_remote()
-        if not successfuly_registered_remote:
-            return False
-        self._register_with_poller(poller)
-        return True
-
-    def _register_with_poller(self, poller):
-        if self._task_factory is None:
-            raise RuntimeError(
-                '%s is not bound to a task_factory' % self.__class__
-            )
-        poller.register(
-            name=self._name,
-            version=self._version,
+        self.poller.register(
+            task_id=self._task_id,
             task_factory=self._task_factory
         )
 
+    def __repr__(self):
+        return '%s(%r, %r)' % self.__class__, self.task_id, self.task_factory
+
+
+class RemoteTaskSpec(TaskSpec):
+    def __init__(self, task_id, task_factory, client):
+        super(RemoteTaskSpec, self).__init__(task_id, task_factory)
+        self._client = client
+
+    def register(self, poller=None):
+        successfuly_registered_remote = self._register_remote()
+        if not successfuly_registered_remote:
+            return False
+        if poller is not None:
+            super(RemoteTaskSpec, self).register(poller)
+        return True
+
     def _register_remote(self):
-        if self._client is None:
-            raise RuntimeError('%s is not bound to a client' % self.__class__)
         success = True
         registered_as_new = self._try_register_remote()
         if not registered_as_new:
@@ -50,143 +43,32 @@ class RemoteTaskSpec(object):
         raise NotImplementedError  # pragma: no cover
 
 
-class SWFActivitySpec(RemoteTaskSpec):
-    def __init__(self, name, version, task_list,
-                 heartbeat=60,
-                 schedule_to_close=420,
-                 schedule_to_start=120,
-                 start_to_close=300,
-                 description=None,
-                 task_factory=None):
-        super(SWFActivitySpec, self).__init__(name, version)
-        self._task_list = str(task_list)
-        self._heartbeat = str(heartbeat)
-        self._schedule_to_close = str(schedule_to_close)
-        self._schedule_to_start = str(schedule_to_start)
-        self._start_to_close = str(start_to_close)
-        self._description = None
-        if description is not None:
-            self._description = str(description)
-
-    def _try_register_remote(self):
-        try:
-            self._client.register_activity_type(
-                name=self._name,
-                version=self._version,
-                task_list=self._task_list,
-                default_task_heartbeat_timeout=self._heartbeat,
-                default_task_schedule_to_close_timeout=self._schedule_to_close,
-                default_task_schedule_to_start_timeout=self._schedule_to_start,
-                default_task_start_to_close_timeout=self._start_to_close,
-                description=self._description
-            )
-        except SWFResponseError:  # SWFTypeAlreadyExistsError is subclass
-            return False
-        return True
-
-    def _check_if_compatible(self):
-        try:
-            c = self._client.describe_activity_type(
-                activity_name=self._name,
-                activity_version=self._version
-            )['configuration']
-        except SWFResponseError:
-            return False
-        return all([
-            c['defaultTaskList']['name'] == self._task_list,
-            c['defaultTaskHeartbeatTimeout'] == self._heartbeat,
-            c['defaultTaskScheduleToCloseTimeout'] == self._schedule_to_close,
-            c['defaultTaskScheduleToStartTimeout'] == self._schedule_to_start,
-            c['defaultTaskStartToCloseTimeout'] == self._start_to_close
-        ])
-
-
-class SWFWorkflowSpec(RemoteTaskSpec):
-    def __init__(self, name, version, task_list,
-                 workflow_duration=3600,
-                 decision_duration=60,
-                 child_policy='TERMINATE',
-                 description=None,
-                 task_factory=None):
-        super(SWFWorkflowSpec, self).__init__(name, version)
-        self._task_list = str(task_list)
-        self._workflow_duration = str(workflow_duration)
-        self._decision_duration = str(decision_duration)
-        self._child_policy = str(child_policy)
-        self._description = None
-        if description is not None:
-            self._description = str(description)
-
-    def _try_register_remote(self):
-        try:
-            workflow_duration = self._workflow_duration
-            self._client.register_workflow_type(
-                name=self._name,
-                version=self._version,
-                task_list=self._task_list,
-                default_execution_start_to_close_timeout=workflow_duration,
-                default_task_start_to_close_timeout=self._decision_duration,
-                default_child_policy=self._child_policy,
-                description=self._description
-            )
-        except SWFResponseError:
-            return False
-        return True
-
-    def _check_if_compatible(self):
-        try:
-            c = self._client.describe_workflow_type(
-                domain=self._domain,
-                workflow_name=self._name,
-                workflow_version=self._version
-            )['configuration']
-        except SWFResponseError:
-            return False
-        workflow_duration = self._workflow_duration
-        return all([
-            c['defaultTaskList']['name'] == self._task_list,
-            c['defaultExecutionStartToCloseTimeout'] == workflow_duration,
-            c['defaultTaskStartToCloseTimeout'] == self._decision_duration,
-            c['defaultChildPolicy'] == self._child_policy
-        ])
-
-
-class RemoteCollectorSpec(object):
-    def __init__(self, spec_factory):
+class ActivitySpecCollector(object):
+    def __init__(self, spec_factory, client):
         self._spec_factory = spec_factory
-        self._specs = []
         self._client = None
+        self._specs = []
 
-    def register(self, poller):
-        if self._client is None:
-            raise RuntimeError('%s is not bound to a client' % self.__class__)
+    def register(self, poller=None):
+        unregistered_spec = []
         for s in self._specs:
-            s.bind_client(self._client)
             if not s.register(poller):
-                return False
-        return True
+                unregistered_spec.append(s)
+        return unregistered_spec
 
-    def bind_client(self, client):
-        self._client = client
-
-    def detect(self, f, *args, **kwargs):
-        spec = self._spec_factory(*args, **kwargs)
-        spec.bind_task_factory(f)
-        self._specs.append(spec)
-
-
-class RemoteScannerSpec(object):
-    def __init__(self, collector):
-        self._collector = collector
-
-    def __call__(self, *args, **kwargs):
-        def wrapper(f):
-            self._collector.detect(f, *args, **kwargs)
-            return f
-        return wrapper
-
-    def bind_client(self, client):
-        self._collector.bind_client(client)
-
-    def register(self, poller):
-        return self._collector.register(poller)
+    def collect(self, task_id, task_factory, task_list,
+                heartbeat=None,
+                schedule_to_close=None,
+                schedule_to_start=None,
+                start_to_close=None):
+        kwargs = NotNoneDict(
+            task_id=task_id,
+            task_factory=task_factory,
+            client=self._client,
+            task_list=task_list,
+            heartbeat=heartbeat,
+            schedule_to_close=schedule_to_close,
+            schedule_to_start=schedule_to_start,
+            start_to_close=start_to_close,
+        )
+        self._specs.append(self._spec_factory(**kwargs))

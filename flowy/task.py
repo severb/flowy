@@ -48,7 +48,7 @@ class TaskProxy(object):
 
 
 class ActivityProxy(TaskProxy):
-    def __init__(self, name, version,
+    def __init__(self, task_id,
                  heartbeat=None,
                  schedule_to_close=None,
                  schedule_to_start=None,
@@ -56,8 +56,7 @@ class ActivityProxy(TaskProxy):
                  task_list=None,
                  retry=3,
                  delay=0):
-        self._name = name
-        self._version = version
+        self._task_id = task_id
         self._heartbeat = heartbeat
         self._schedule_to_close = schedule_to_close
         self._schedule_to_start = schedule_to_start
@@ -69,8 +68,7 @@ class ActivityProxy(TaskProxy):
     def __call__(self, runtime, *args, **kwargs):
         arguments = self.serialize_arguments(*args, **kwargs)
         return runtime.remote_activity(
-            name=self._name,
-            version=self._version,
+            task_id=self.task_id,
             task_list=self._task_list,
             input=arguments,
             heartbeat=self._heartbeat,
@@ -84,14 +82,13 @@ class ActivityProxy(TaskProxy):
 
 
 class SubworkflowProxy(TaskProxy):
-    def __init__(self, name, version,
+    def __init__(self, task_id,
                  decision_duration=None,
                  workflow_duration=None,
                  task_list=None,
                  retry=3,
                  delay=0):
-        self._name = name
-        self._version = version
+        self._task_id = task_id
         self._decision_duration = decision_duration
         self._workflow_duration = workflow_duration
         self._task_list = task_list
@@ -101,8 +98,7 @@ class SubworkflowProxy(TaskProxy):
     def __call__(self, runtime, *args, **kwargs):
         arguments = self.serialize_arguments(*args, **kwargs)
         return runtime.remote_subworkflow(
-            name=self._name,
-            version=self._version,
+            task_id=self._task_id,
             task_list=self._task_list,
             input=arguments,
             decision_duration=self._decision_duration,

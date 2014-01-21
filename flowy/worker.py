@@ -3,14 +3,14 @@ class SingleThreadedWorker(object):
         self._client = client
         self._registry = {}
 
-    def register(self, name, version, task_factory):
-        self._registry[(name, version)] = task_factory
+    def register(self, task_id, task_factory):
+        self._registry[task_id] = task_factory
 
     def poll_next_task(self):
         return self._client.poll_next_task(self)
 
-    def make_task(self, name, version, input, result, task_runtime):
-        task_factory = self._registry.get((name, version))
+    def make_task(self, task_id, input, result, task_runtime):
+        task_factory = self._registry.get(task_id)
         if task_factory is not None:
             return task_factory(
                 input=input, result=result, task_runtime=task_runtime
