@@ -47,12 +47,9 @@ class ContextOptionsRuntime(object):
             **options
         )
 
-    def remote_subworkflow(self, result_deserializer,
-                           retry, delay, error_handling,
-                           heartbeat=None,
-                           workflow_duration=None,
-                           decision_duration=None,
-                           task_list=None):
+    def remote_subworkflow(self, result_deserializer, retry, delay,
+                           error_handling, workflow_duration,
+                           decision_duration, task_list):
         options = dict(
             workflow_duration=int_or_none(workflow_duration),
             decision_duration=int_or_none(decision_duration),
