@@ -43,10 +43,10 @@ class RemoteTaskSpec(TaskSpec):
         raise NotImplementedError  # pragma: no cover
 
 
-class RemoteActivitySpecCollector(object):
+class ActivitySpecCollector(object):
     def __init__(self, spec_factory, client):
         self._spec_factory = spec_factory
-        self._client = None
+        self._client = client
         self._specs = []
 
     def register(self, poller=None):
