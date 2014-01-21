@@ -1,5 +1,6 @@
 from boto.swf.exceptions import SWFResponseError
 
+from flowy import SWFTaskId
 from flowy.runtime import ActivityResult, Heartbeat
 
 
@@ -93,8 +94,7 @@ class SWFActivityPollerClient(object):
                 client=self._client, token=token
             )
             task = poller.make_task(
-                name=name,
-                version=version,
+                SWFTaskId(name, version),
                 input=input,
                 result=activity_result,
                 task_runtime=heartbeat
