@@ -23,3 +23,13 @@ class NotNoneDict(DictMixin, dict):
     def __setitem__(self, key, value):
         if value is not None:
             super(NotNoneDict, self).__setitem__(key, value)
+
+
+def int_or_none(i):
+    if i is not None:
+        return int(i)
+
+
+def str_or_none(s):
+    if s is not None:
+        return str(s)

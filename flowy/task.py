@@ -1,5 +1,7 @@
 import json
 
+from flowy import int_or_none, str_or_none
+
 
 class SuspendTask(Exception):
     """ Raised to suspend the task run.
@@ -11,7 +13,7 @@ class SuspendTask(Exception):
 
 class Task(object):
     def __init__(self, input, result, task_runtime=None):
-        self._input = input
+        self._input = str(input)
         self._result = result
         self._task_runtime = task_runtime
 
@@ -55,30 +57,23 @@ class ActivityProxy(TaskProxy):
                  start_to_close=None,
                  task_list=None,
                  retry=3,
-                 delay=0):
-        self._task_id = task_id
-        self._heartbeat = heartbeat
-        self._schedule_to_close = schedule_to_close
-        self._schedule_to_start = schedule_to_start
-        self._stat_to_close = start_to_close
-        self._task_list = task_list
-        self._retry = retry
-        self._delay = delay
+                 delay=0,
+                 error_handling=False):
+        self._kwargs = dict(
+            task_id=task_id,
+            heartbeat=int_or_none(heartbeat),
+            schedule_to_close=int_or_none(schedule_to_close),
+            schedule_to_start=int_or_none(schedule_to_start),
+            stat_to_close=int_or_none(start_to_close),
+            task_list=str_or_none(task_list),
+            retry=int(retry),
+            delay=int(delay),
+            error_handling=bool(error_handling)
+        )
 
     def __call__(self, runtime, *args, **kwargs):
         arguments = self.serialize_arguments(*args, **kwargs)
-        return runtime.remote_activity(
-            task_id=self.task_id,
-            task_list=self._task_list,
-            input=arguments,
-            heartbeat=self._heartbeat,
-            schedule_to_close=self._schedule_to_close,
-            schedule_to_start=self._schedule_to_start,
-            start_to_close=self._stat_to_close,
-            retry=self._retry,
-            delay=self._delay,
-            result_deserializer=self.deserialize_result
-        )
+        return runtime.remote_activity(input=arguments, **self._kwargs)
 
 
 class SubworkflowProxy(TaskProxy):
@@ -87,23 +82,18 @@ class SubworkflowProxy(TaskProxy):
                  workflow_duration=None,
                  task_list=None,
                  retry=3,
-                 delay=0):
-        self._task_id = task_id
-        self._decision_duration = decision_duration
-        self._workflow_duration = workflow_duration
-        self._task_list = task_list
-        self._retry = retry
-        self._delay = delay
+                 delay=0,
+                 error_handling=False):
+        self._kwargs = dict(
+            task_id=task_id,
+            decision_duration=int_or_none(decision_duration),
+            workflow_duration=int_or_none(workflow_duration),
+            task_list=str_or_none(task_list),
+            retry=int(retry),
+            delay=int(delay),
+            error_handling=bool(error_handling)
+        )
 
     def __call__(self, runtime, *args, **kwargs):
         arguments = self.serialize_arguments(*args, **kwargs)
-        return runtime.remote_subworkflow(
-            task_id=self._task_id,
-            task_list=self._task_list,
-            input=arguments,
-            decision_duration=self._decision_duration,
-            workflow_duration=self._workflow_duration,
-            retry=self._retry,
-            delay=self._delay,
-            result_deserializer=self.deserialize_result
-        )
+        return runtime.remote_subworkflow(input=arguments, **self._kwargs)

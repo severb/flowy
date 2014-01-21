@@ -1,73 +1,10 @@
-from collections import namedtuple
 from contextlib import contextmanager
 from functools import partial
 
-from boto.swf.exceptions import SWFResponseError
+from flowy import int_or_none, str_or_none
 
 
-class Heartbeat(object):
-    def __init__(self, client, token):
-        self._client = client
-        self._token = token
-
-    def __call__(self):
-        try:
-            self._client.record_activity_task_heartbeat(task_token=self._token)
-        except SWFResponseError:
-            return False
-        return True
-
-
-class ActivityResult(object):
-    def __init__(self, client, token):
-        self._client = client
-        self._token = token
-
-    def complete(self, result):
-        try:
-            self._client.respond_activity_task_completed(
-                task_token=self._token, result=result
-            )
-        except SWFResponseError:
-            return False
-        return True
-
-    def fail(self, reason):
-        try:
-            self._client.respond_activity_task_failed(
-                task_token=self._token, reason=reason
-            )
-        except SWFResponseError:
-            return False
-        return True
-
-    def suspend(self):
-        pass
-
-
-_OBase = namedtuple(
-    typename='_Options',
-    field_names=[
-        'heartbeat',
-        'schedule_to_close',
-        'schedule_to_start',
-        'start_to_close',
-        'workflow_duration',
-        'decision_duration',
-        'child_policy',
-        'task_list',
-        'retry',
-        'delay',
-        'error_handling'
-    ]
-)
-
-
-class _Options(_OBase):
-    def update_with(self, other):
-        t_pairs = zip(other, self)
-        updated_fields = [x if x is not None else y for x, y in t_pairs]
-        return _Options(*updated_fields)
+_sentinel = object()
 
 
 class BoundProxyRuntime(object):
@@ -81,181 +18,101 @@ class BoundProxyRuntime(object):
             raise AttributeError('%r is not callable' % proxy_name)
         return partial(proxy, self._decision_runtime)
 
-    def options(self,
-                heartbeat=None,
-                schedule_to_close=None,
-                schedule_to_start=None,
-                start_to_close=None,
-                workflow_duration=None,
-                decision_duration=None,
-                child_policy=None,
-                task_list=None,
-                retry=None,
-                delay=None,
-                error_handling=None):
-        self._decision_runtime.options(
-            heartbeat=heartbeat,
-            schedule_to_close=schedule_to_close,
-            schedule_to_start=schedule_to_start,
-            start_to_close=start_to_close,
-            workflow_duration=workflow_duration,
-            decision_duration=decision_duration,
-            task_list=task_list,
-            retry=retry,
-            delay=delay,
-            error_handling=error_handling
-        )
+    def options(self, **kwargs):
+        self._decision_runtime.options(**kwargs)
 
 
 class ContextOptionsRuntime(object):
     def __init__(self, decision_runtime):
         self._decision_runtime = decision_runtime
-        default_options = _Options(
-            heartbeat=None,
-            schedule_to_close=None,
-            schedule_to_start=None,
-            start_to_close=None,
-            workflow_duration=None,
-            decision_duration=None,
-            child_policy=None,
-            task_list=None,
-            retry=None,
-            delay=None,
-            error_handling=None
-        )
-        self._options_stack = [default_options]
+        self._activity_options_stack = [dict()]
+        self._subworkflow_options_stack = [dict()]
 
-    def remote_activity(self, result_deserializer,
-                        heartbeat=None,
-                        schedule_to_close=None,
-                        schedule_to_start=None,
-                        start_to_close=None,
-                        task_list=None,
-                        retry=3,
-                        delay=0,
-                        error_handling=False):
-        options = _Options(
-            heartbeat=heartbeat,
-            schedule_to_close=schedule_to_close,
-            schedule_to_start=schedule_to_start,
-            start_to_close=start_to_close,
-            workflow_duration=None,
-            decision_duration=None,
-            child_policy=None,
-            task_list=task_list,
+    def remote_activity(self, result_deserializer, retry, delay,
+                        error_handling, heartbeat, schedule_to_close,
+                        schedule_to_start, start_to_close, task_list):
+        options = dict(
+            heartbeat=int_or_none(heartbeat),
+            schedule_to_close=int_or_none(schedule_to_close),
+            schedule_to_start=int_or_none(schedule_to_start),
+            start_to_close=int_or_none(start_to_close),
+            task_list=str_or_none(task_list),
             retry=int(retry),
             delay=int(delay),
             error_handling=bool(error_handling)
         )
-        new_options = options.update_with(self._options_stack[-1])
+        options.update_with(self._activity_options_stack[-1])
         self._decision_runtime.remote_activity(
             result_deserializer=result_deserializer,
-            heartbeat=new_options.heartbeat,
-            schedule_to_close=new_options.schedule_to_close,
-            schedule_to_start=new_options.schedule_to_start,
-            start_to_close=new_options.start_to_close,
-            task_list=new_options.task_list,
-            retry=new_options.retry,
-            delay=new_options.delay,
-            error_handling=new_options.error_handling
+            **options
         )
 
     def remote_subworkflow(self, result_deserializer,
+                           retry, delay, error_handling,
                            heartbeat=None,
                            workflow_duration=None,
                            decision_duration=None,
-                           task_list=None,
-                           retry=3,
-                           delay=0,
-                           error_handling=False):
-        options = _Options(
-            heartbeat=heartbeat,
-            schedule_to_close=None,
-            schedule_to_start=None,
-            start_to_close=None,
-            workflow_duration=workflow_duration,
-            decision_duration=decision_duration,
-            child_policy=None,
-            task_list=task_list,
+                           task_list=None):
+        options = dict(
+            workflow_duration=int_or_none(workflow_duration),
+            decision_duration=int_or_none(decision_duration),
+            task_list=str_or_none(task_list),
             retry=int(retry),
             delay=int(delay),
             error_handling=bool(error_handling)
         )
-        new_options = options.update_with(self._options_stack[-1])
+        options.update_with(self._subworkflow_options_stack[-1])
         self._decision_runtime.remote_subworkflow(
             result_deserializer=result_deserializer,
-            heartbeat=new_options.heartbeat,
-            workflow_duration=new_options.workflow_duration,
-            decision_duration=new_options.decision_duration,
-            task_list=new_options.task_list,
-            retry=new_options.retry,
-            delay=new_options.delay,
-            error_handling=new_options.error_handling
+            **options
         )
 
     @contextmanager
     def options(self,
-                heartbeat=None,
-                schedule_to_close=None,
-                schedule_to_start=None,
-                start_to_close=None,
-                workflow_duration=None,
-                decision_duration=None,
-                child_policy=None,
-                task_list=None,
-                retry=None,
-                delay=None,
-                error_handling=None):
-        options = _Options(
-            heartbeat=heartbeat,
-            schedule_to_close=schedule_to_close,
-            schedule_to_start=schedule_to_start,
-            start_to_close=start_to_close,
-            workflow_duration=workflow_duration,
-            decision_duration=decision_duration,
-            child_policy=child_policy,
-            task_list=task_list,
-            retry=retry,
-            delay=delay,
-            error_handling=error_handling
+                heartbeat=_sentinel,
+                schedule_to_close=_sentinel,
+                schedule_to_start=_sentinel,
+                start_to_close=_sentinel,
+                workflow_duration=_sentinel,
+                decision_duration=_sentinel,
+                task_list=_sentinel,
+                retry=_sentinel,
+                delay=_sentinel,
+                error_handling=_sentinel):
+        a_options = dict()
+        s_options = dict()
+        if heartbeat is not _sentinel:
+            a_options['heartbeat'] = int_or_none(heartbeat)
+        if schedule_to_close is not _sentinel:
+            a_options['schedule_to_close'] = int_or_none(schedule_to_close)
+        if schedule_to_start is not _sentinel:
+            a_options['schedule_to_start'] = int_or_none(schedule_to_start)
+        if start_to_close is not _sentinel:
+            a_options['start_to_close'] = int_or_none(start_to_close)
+        if workflow_duration is not _sentinel:
+            s_options['workflow_duration'] = int_or_none(workflow_duration)
+        if decision_duration is not _sentinel:
+            s_options['decision_duration'] = int_or_none(decision_duration)
+        if task_list is not _sentinel:
+            a_options['task_list'] = str_or_none(task_list)
+            s_options['task_list'] = str_or_none(task_list)
+        if retry is not _sentinel:
+            a_options['retry'] = int(retry)
+            s_options['retry'] = int(retry)
+        if delay is not _sentinel:
+            a_options['delay'] = int(delay)
+            s_options['delay'] = int(delay)
+        if error_handling is not _sentinel:
+            a_options['error_handling'] = bool(error_handling)
+            s_options['error_handling'] = bool(error_handling)
+        self._activity_options_stack.append(
+            dict(self._activity_options_stack[-1])
+            .update(a_options)
         )
-        new_options = self._options_stack[-1].update_with(options)
-        self._options_stack.append(new_options)
+        self._subworkflow_options_stack.append(
+            dict(self._subworkflow_options_stack[-1])
+            .update(a_options)
+        )
         yield
-        self._options_stack.pop()
-
-
-class DecisionRuntime(object):
-    def __init__(self, client, token):
-        self._client = client
-        self._token = token
-
-    def remote_activity(self, result_deserializer,
-                        heartbeat=None,
-                        schedule_to_close=None,
-                        schedule_to_start=None,
-                        start_to_close=None,
-                        task_list=None,
-                        retry=None,
-                        delay=None,
-                        error_handling=None):
-        pass
-
-    def remote_subworkflow(self, result_deserializer,
-                           heartbeat=None,
-                           workflow_duration=None,
-                           decision_duration=None,
-                           task_list=None,
-                           retry=3,
-                           delay=0,
-                           error_handling=None):
-        pass
-
-    def complete(self, result):
-        pass
-
-    def fail(self, reason):
-        pass
-
-    def suspend(self):
-        pass
+        self._activity_options_stack.pop()
+        self._subworkflow_options_stack.pop()
