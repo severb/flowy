@@ -28,9 +28,9 @@ class ContextOptionsRuntime(object):
         self._activity_options_stack = [dict()]
         self._subworkflow_options_stack = [dict()]
 
-    def remote_activity(self, result_deserializer, retry, delay,
-                        error_handling, heartbeat, schedule_to_close,
-                        schedule_to_start, start_to_close, task_list):
+    def remote_activity(self, input, result_deserializer, heartbeat,
+                        schedule_to_close, schedule_to_start, start_to_close,
+                        task_list, retry, delay, error_handling):
         options = dict(
             heartbeat=int_or_none(heartbeat),
             schedule_to_close=int_or_none(schedule_to_close),
@@ -43,13 +43,14 @@ class ContextOptionsRuntime(object):
         )
         options.update_with(self._activity_options_stack[-1])
         self._decision_runtime.remote_activity(
+            input=str(input),
             result_deserializer=result_deserializer,
             **options
         )
 
-    def remote_subworkflow(self, result_deserializer, retry, delay,
-                           error_handling, workflow_duration,
-                           decision_duration, task_list):
+    def remote_subworkflow(self, input, result_deserializer, workflow_duration,
+                           decision_duration, task_list, retry, delay,
+                           error_handling):
         options = dict(
             workflow_duration=int_or_none(workflow_duration),
             decision_duration=int_or_none(decision_duration),
@@ -60,6 +61,7 @@ class ContextOptionsRuntime(object):
         )
         options.update_with(self._subworkflow_options_stack[-1])
         self._decision_runtime.remote_subworkflow(
+            input=str(input),
             result_deserializer=result_deserializer,
             **options
         )
