@@ -18,8 +18,6 @@ class Task(object):
         self._task_runtime = task_runtime
 
     def __call__(self):
-        if self._task_runtime is None:
-            raise RuntimeError('the task is not bound to a runtime')
         try:
             args, kwargs = self.deserialize_arguments()
             result = self.run(self._task_runtime, *args, **kwargs)
