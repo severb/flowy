@@ -7,7 +7,7 @@ from flowy import int_or_none, str_or_none
 _sentinel = object()
 
 
-class BoundProxyRuntime(object):
+class ProxyRuntime(object):
     def __init__(self, decision_runtime, decision_task):
         self._decision_runtime = decision_runtime
         self._decision_task = decision_task
@@ -22,7 +22,7 @@ class BoundProxyRuntime(object):
         self._decision_runtime.options(**kwargs)
 
 
-class ContextOptionsRuntime(object):
+class OptionsRuntime(object):
     def __init__(self, decision_runtime):
         self._decision_runtime = decision_runtime
         self._activity_options_stack = [dict()]
