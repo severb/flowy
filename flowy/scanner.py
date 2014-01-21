@@ -1,6 +1,7 @@
 import sys
 
 import venusian
+from flowy import NotNoneDict
 
 
 def activity_task(task_id, task_list,
@@ -10,14 +11,17 @@ def activity_task(task_id, task_list,
                   start_to_close=None):
     def wrapper(task_factory):
         def callback(scanner, n, obj):
-            scanner.collector.collect(
-                task_id=task_id,
-                task_factory=task_factory,
-                task_list=task_list,
+            kwargs = NotNoneDict(
                 heartbeat=heartbeat,
                 schedule_to_close=schedule_to_close,
                 schedule_to_start=schedule_to_start,
                 start_to_close=start_to_close
+            )
+            scanner.collector.collect(
+                task_id=task_id,
+                task_factory=task_factory,
+                task_list=task_list,
+                **kwargs
             )
         venusian.attach(task_factory, callback, category='activity')
 

@@ -4,27 +4,20 @@ from flowy.spec import RemoteTaskSpec
 
 
 class SWFActivitySpec(RemoteTaskSpec):
-    def __init__(self, task_id, task_factory, client, task_list,
-                 heartbeat=60,
-                 schedule_to_close=420,
-                 schedule_to_start=120,
-                 start_to_close=300,
-                 description=None):
+    def __init__(self, task_id, task_factory, client, task_list, heartbeat,
+                 schedule_to_close, schedule_to_start, start_to_close):
+        self._name = str(task_id.name)
+        self._version = str(task_id.version)
         super(SWFActivitySpec, self).__init__(
             task_id=task_id,
             task_factory=task_factory,
             client=client
         )
-        self._name = str(task_id.name)
-        self._version = str(task_id.version)
         self._task_list = str(task_list)
         self._heartbeat = str(heartbeat)
         self._schedule_to_close = str(schedule_to_close)
         self._schedule_to_start = str(schedule_to_start)
         self._start_to_close = str(start_to_close)
-        self._description = None
-        if description is not None:
-            self._description = str(description)
 
     def _try_register_remote(self):
         try:
@@ -36,7 +29,6 @@ class SWFActivitySpec(RemoteTaskSpec):
                 default_task_schedule_to_close_timeout=self._schedule_to_close,
                 default_task_schedule_to_start_timeout=self._schedule_to_start,
                 default_task_start_to_close_timeout=self._start_to_close,
-                description=self._description
             )
         except SWFResponseError:  # SWFTypeAlreadyExistsError is subclass
             return False

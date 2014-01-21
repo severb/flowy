@@ -1,6 +1,3 @@
-from flowy import NotNoneDict
-
-
 class TaskSpec(object):
     def __init__(self, task_id, task_factory):
         self._task_id = task_id
@@ -57,18 +54,16 @@ class ActivitySpecCollector(object):
         return unregistered_spec
 
     def collect(self, task_id, task_factory, task_list,
-                heartbeat=None,
-                schedule_to_close=None,
-                schedule_to_start=None,
-                start_to_close=None):
-        kwargs = NotNoneDict(
+                heartbeat=60,
+                schedule_to_close=420,
+                schedule_to_start=120,
+                start_to_close=300):
+        self._specs.append(self._spec_factory(
             task_id=task_id,
             task_factory=task_factory,
-            client=self._client,
             task_list=task_list,
             heartbeat=heartbeat,
             schedule_to_close=schedule_to_close,
             schedule_to_start=schedule_to_start,
-            start_to_close=start_to_close,
-        )
-        self._specs.append(self._spec_factory(**kwargs))
+            start_to_close=start_to_close
+        ))
