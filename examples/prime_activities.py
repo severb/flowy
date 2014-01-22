@@ -1,21 +1,10 @@
 from boto.swf.layer1 import Layer1
 
-from flowy.worker import SingleThreadedWorker
-from flowy.spec import RemoteCollectorSpec, RemoteScannerSpec, SWFActivitySpec
+from flowy.swf.scanner import activity
 from flowy.task import Task
-from flowy.client import SWFDomainBoundClient, SWFActivityPollerClient
-
-# from flowy.runtime import Heartbeat, ActivityResult
 
 
-my_activity_scanner = RemoteScannerSpec(
-    RemoteCollectorSpec(spec_factory=SWFActivitySpec)
-)
-
-
-@my_activity_scanner(
-    'NumberDivider', 5, 'mr_list', heartbeat=5, start_to_close=60
-)
+@activity('NumberDivider', 5, 'mr_list', heartbeat=5, start_to_close=60)
 class NumberDivider(Task):
     """
     Divide numbers.
@@ -34,14 +23,26 @@ class NumberDivider(Task):
 
 
 if __name__ == '__main__':
-    swf_client = SWFDomainBoundClient(Layer1(), domain='SeversTest')
-    my_activity_scanner.bind_client(swf_client)
-    activity_worker = SingleThreadedWorker(
-        SWFActivityPollerClient(swf_client, 'mr_list')
-    )
-    all_registered = my_activity_scanner.register(activity_worker)
-    if not all_registered:
+
+    from flowy.swf.spec import ActivitySpec
+    from flowy.swf.client import DomainBoundClient, ActivityPollerClient
+
+    from flowy.scanner import Scanner
+    from flowy.spec import ActivitySpecCollector
+    from flowy.worker import SingleThreadedWorker
+
+    swf_client = DomainBoundClient(Layer1(), domain='SeversTest')
+
+    scanner = Scanner(ActivitySpecCollector(ActivitySpec, swf_client))
+    scanner.scan_activities()
+
+    activity_poller = ActivityPollerClient(swf_client, 'mr_list')
+    worker = SingleThreadedWorker(activity_poller)
+
+    not_registered = scanner.register(worker)
+    if not_registered:
         print 'could not register!'
         import sys
         sys.exit(1)
-    activity_worker.run_forever()
+
+    worker.run_forever()

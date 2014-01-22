@@ -4,11 +4,11 @@ import venusian
 from flowy import NotNoneDict
 
 
-def activity_task(task_id, task_list,
-                  heartbeat=None,
-                  schedule_to_close=None,
-                  schedule_to_start=None,
-                  start_to_close=None):
+def activity(task_id, task_list,
+             heartbeat=None,
+             schedule_to_close=None,
+             schedule_to_start=None,
+             start_to_close=None):
     def wrapper(task_factory):
         def callback(scanner, n, obj):
             kwargs = NotNoneDict(
@@ -24,6 +24,28 @@ def activity_task(task_id, task_list,
                 **kwargs
             )
         venusian.attach(task_factory, callback, category='activity')
+        return task_factory
+    return wrapper
+
+
+def workflow(task_id, task_list,
+             decision_duration=None,
+             workflow_duration=None):
+    def wrapper(task_factory):
+        def callback(scanner, n, obj):
+            kwargs = NotNoneDict(
+                decision_duration=decision_duration,
+                workflow_duration=workflow_duration
+            )
+            scanner.collector.collect(
+                task_id=task_id,
+                task_factory=task_factory,
+                task_list=task_list,
+                **kwargs
+            )
+        venusian.attach(task_factory, callback, category='workflow')
+        return task_factory
+    return wrapper
 
 
 class Scanner(object):
@@ -32,6 +54,9 @@ class Scanner(object):
 
     def scan_activities(self, package=None, ignore=None):
         self._scan(categories=('activity',), package=package, ignore=ignore)
+
+    def scan_workflow(self, package=None, ignore=None):
+        self._scan(categories=('workflow',), package=package, ignore=ignore)
 
     def register(self, poller=None):
         self._collector.register(poller)

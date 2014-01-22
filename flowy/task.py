@@ -77,7 +77,7 @@ class ActivityProxy(TaskProxy):
         )
 
 
-class SubworkflowProxy(TaskProxy):
+class WorkflowProxy(TaskProxy):
     def __init__(self, task_id,
                  decision_duration=None,
                  workflow_duration=None,

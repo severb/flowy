@@ -1,10 +1,10 @@
 from boto.swf.exceptions import SWFResponseError
 
-from flowy import SWFTaskId
-from flowy.runtime import ActivityResult, Heartbeat
+from flowy.swf.runtime import ActivityResult, Heartbeat
+from flowy.swf import SWFTaskId
 
 
-class SWFDomainBoundClient(object):
+class DomainBoundClient(object):
     def __init__(self, client, domain):
         self._client = client
         self._domain = domain
@@ -73,7 +73,7 @@ class SWFDomainBoundClient(object):
         return getattr(self._client, name)
 
 
-class SWFActivityPollerClient(object):
+class ActivityPollerClient(object):
     def __init__(self, client, task_list,
                  result_factory=ActivityResult,
                  runtime_factory=Heartbeat):
