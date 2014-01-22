@@ -56,7 +56,7 @@ class WorkflowSpec(RemoteTaskSpec):
                  decision_duration, workflow_duration):
         self._name = str(task_id.name)
         self._version = str(task_id.version)
-        super(ActivitySpec, self).__init__(
+        super(WorkflowSpec, self).__init__(
             task_id=task_id,
             task_factory=task_factory,
             client=client

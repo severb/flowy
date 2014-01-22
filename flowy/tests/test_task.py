@@ -46,7 +46,7 @@ class TestTransport(unittest.TestCase):
         from flowy.task import Task, TaskProxy
         tp = TaskProxy()
         serialized_input = tp.serialize_arguments(1, 'a', x=2)
-        t = Task(input=serialized_input, result=None)
+        t = Task(input=serialized_input, result=None, task_runtime=Mock())
         a, kw = t.deserialize_arguments()
         self.assertEquals(a, [1, 'a'])
         self.assertEquals(kw, {'x': 2})
@@ -54,6 +54,6 @@ class TestTransport(unittest.TestCase):
     def test_results(self):
         from flowy.task import Task, TaskProxy
         tp = TaskProxy()
-        t = Task(None, None)
+        t = Task(None, None, Mock())
         r = tp.deserialize_result(t.serialize_result([1, 'a']))
         self.assertEquals(r, [1, 'a'])
