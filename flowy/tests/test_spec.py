@@ -21,23 +21,23 @@ class SWFActivitySpecTest(unittest.TestCase):
                  start_to_close=300,
                  description='descr',
                  task_factory=s.sentinel):
-        from flowy.spec import SWFActivitySpec
+        from flowy.swf.spec import ActivitySpec
+        from flowy.swf import SWFTaskId
         if client is s.sentinel:
             from boto.swf.layer1 import Layer1
-            client = create_autospec(Layer1, instance=True)
+            # client = create_autospec(Layer1, instance=True)
+            client = Mock()    # we're using a wrapper around Layer1 so we
+                               # don't have to pass domain everytime
         if task_factory is s.sentinel:
             task_factory = Mock()
-        return SWFActivitySpec(
-            domain=domain,
-            name=name,
-            version=version,
+        return ActivitySpec(
+            task_id=SWFTaskId(name,version),
             task_list=task_list,
             client=client,
             heartbeat=heartbeat,
             schedule_to_close=schedule_to_close,
             schedule_to_start=schedule_to_start,
             start_to_close=start_to_close,
-            description=description,
             task_factory=task_factory
         ), client, task_factory
 
@@ -83,7 +83,6 @@ class SWFActivitySpecTest(unittest.TestCase):
 
     def test_remote_register_successful_as_new(self):
         spec, client, factory = self._get_uut(
-            domain='d',
             name='n',
             version='v',
             task_list='tl',
@@ -91,12 +90,10 @@ class SWFActivitySpecTest(unittest.TestCase):
             schedule_to_close=20,
             schedule_to_start=30,
             start_to_close=40,
-            description='d'
         )
         poller = Mock()
         result = spec.register(poller)
         client.register_activity_type.assert_called_once_with(
-            domain='d',
             name='n',
             version='v',
             task_list='tl',
@@ -104,7 +101,6 @@ class SWFActivitySpecTest(unittest.TestCase):
             default_task_schedule_to_close_timeout='20',
             default_task_schedule_to_start_timeout='30',
             default_task_start_to_close_timeout='40',
-            description='d'
         )
         self.assertTrue(result)
 
@@ -133,7 +129,7 @@ class SWFActivitySpecTest(unittest.TestCase):
         }
         result = spec.register(poller)
         client.describe_activity_type.assert_called_once_with(
-            domain='d', activity_name='n', activity_version='v'
+            activity_name='n', activity_version='v'
         )
         self.assertTrue(result)
 
@@ -171,71 +167,67 @@ class SWFActivitySpecTest(unittest.TestCase):
 
 class SWFWorkflowSpecTest(unittest.TestCase):
     def _get_uut(self,
-                 domain='domain',
                  name='name',
                  version='version',
                  task_list='task_list',
                  client=None,
                  workflow_duration='1',
                  decision_duration='2',
-                 child_policy='TERMINATE',
-                 description='description',
                  task_factory=s.sentinel):
-        from flowy.spec import SWFWorkflowSpec
+        from flowy.swf.spec import WorkflowSpec
+        from flowy.swf import SWFTaskId
         if client is None:
             from boto.swf.layer1 import Layer1
-            client = create_autospec(Layer1, instance=True)
+            # client = create_autospec(Layer1, instance=True)
+            client = Mock()    # we're using a wrapper around Layer1 so we
+                               # don't have to pass domain everytime
         if task_factory is s.sentinel:
             task_factory = Mock()
-        return SWFWorkflowSpec(
-            domain=domain,
-            name=name,
-            version=version,
+        return WorkflowSpec(
+            task_id=SWFTaskId(name, version),
             task_list=task_list,
             client=client,
             workflow_duration=workflow_duration,
             decision_duration=decision_duration,
-            child_policy=child_policy,
-            description=description,
             task_factory=task_factory
         ), client, task_factory
 
     def test_remote_register(self):
         spec, client, task_factory = self._get_uut(
-            domain='d',
             name='n',
             version='v',
             task_list='tl',
             workflow_duration=10,
             decision_duration=20,
-            child_policy='T',
-            description='d',
         )
         spec.register(Mock())
         client.register_workflow_type.assert_called_once_with(
-            domain='d',
             name='n',
             version='v',
             task_list='tl',
-            default_execution_start_to_close_timeout='10',
-            default_task_start_to_close_timeout='20',
-            default_child_policy='T',
-            description='d'
+            default_execution_start_to_close_timeout=10,
+            default_task_start_to_close_timeout=20,
         )
 
     def test_remote_checks_compatibility(self):
         spec, client, task_factory = self._get_uut(
-            domain='d', name='n', version='v'
+            name='n', version='v'
         )
         client.register_workflow_type.side_effect = swf_error()
+        client.describe_workflow_type.return_value = {'configuration': {
+                'defaultTaskList': {'name':'aaa'},
+                'defaultExecutionStartToCloseTimeout': 10,
+                'defaultTaskStartToCloseTimeout': 30
+            }
+        }
         spec.register(Mock())
         client.describe_workflow_type.assert_called_once_with(
-            domain='d', workflow_name='n', workflow_version='v'
+            workflow_name='n', workflow_version='v'
         )
 
     def test_remote_check_compatibility_fails(self):
         spec, client, task_factory = self._get_uut(
-            domain='d', name='n', version='v'
+            name='n', version='v'
         )
         client.register_workflow_type.side_effect = swf_error()
         client.describe_workflow_type.side_effect = swf_error()
