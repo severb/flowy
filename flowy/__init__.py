@@ -22,7 +22,14 @@ class NotNoneDict(DictMixin, dict):
 
 
 class MagicBind(object):
-    """ Bind specific arguments of object methods.
+    """ Bind specific arguments of object methods for the lazy.
+
+    A quick example of binding a requests session to an URL::
+
+        from requests.sessions import Session
+        my_session = Session()
+        google_session = MagicBind(my_session, url='http://google.com')
+        google_session.get()
 
     >>> class Test(object):
     ...     def no_args(self):
