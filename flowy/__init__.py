@@ -1,12 +1,8 @@
-import logging
+import functools
+import inspect
+import types
+from itertools import izip_longest
 from UserDict import DictMixin
-
-# from .activity import *
-# from .config import *
-# from .workflow import *
-
-_FORMAT = '%(asctime)-15s %(levelname)-10s: %(message)s'
-logging.basicConfig(format=_FORMAT, level=logging.INFO)
 
 
 class NotNoneDict(DictMixin, dict):
@@ -23,6 +19,112 @@ class NotNoneDict(DictMixin, dict):
     def __setitem__(self, key, value):
         if value is not None:
             super(NotNoneDict, self).__setitem__(key, value)
+
+
+class MagicBind(object):
+    """ Bind specific arguments of object methods.
+
+    >>> class Test(object):
+    ...     def no_args(self):
+    ...         return self
+    ...     def two_positional(self, x, y):
+    ...         return x, y
+    ...     def defaults(self, x=1, y=2):
+    ...         return x, y
+    ...     def args_kwargs(self, x, y, *args, **kwargs):
+    ...         return x, y, args, list(sorted(kwargs.items()))
+    ...     def only_args_kwargs(self, *args, **kwargs):
+    ...         return args, list(sorted(kwargs.items()))
+
+    >>> t = Test()
+    >>> mb = MagicBind(t, x=10)
+    >>> mb.no_args() is t
+    True
+    >>> mb.two_positional(20)
+    (10, 20)
+    >>> mb.defaults(20)
+    (10, 20)
+    >>> mb.defaults()
+    (10, 2)
+    >>> mb.defaults(y=20)
+    (10, 20)
+    >>> mb.args_kwargs(20, 30, 40, z=50, w=60)
+    (10, 20, (30, 40), [('w', 60), ('z', 50)])
+    >>> mb.only_args_kwargs()
+    ((), [])
+    >>> mb.args_kwargs(20, 30, x=50, w=60) # doctest:+IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+    TypeError:
+    >>> mb.only_args_kwargs(20, 30, 40, z=50, w=60)
+    ((20, 30, 40), [('w', 60), ('z', 50)])
+    >>> mb.only_args_kwargs(10, 20, x=30, y=40)
+    ((10, 20), [('x', 30), ('y', 40)])
+
+    """
+    def __init__(self, obj, **kwargs):
+        self._obj = obj
+        self._update_with = kwargs
+
+    def __getattr__(self, name):
+        func = getattr(self._obj, name)
+        if not callable(func):
+            return func
+        args, varargs, keywords, defaults = inspect.getargspec(func)
+        if defaults is None:
+            defaults = []
+        if isinstance(func, types.MethodType):
+            args = args[1:]
+        r_avrgs, r_defaults = reversed(args), reversed(defaults)
+        sentinel = object()
+        new_args, new_defaults = [], []
+        for a, d in izip_longest(r_avrgs, r_defaults, fillvalue=sentinel):
+            if a not in self._update_with:
+                new_args.append(a)
+                if d is not sentinel:
+                    new_defaults.append(d)
+        new_args_count = len(new_args)
+        if varargs is not None:
+            new_args.append(varargs)
+        if keywords is not None:
+            new_args.append(keywords)
+
+        # clone the func and change args
+        if isinstance(func, types.MethodType):
+            code = func.im_func.func_code
+        else:
+            code = func.func_code
+        f_code = types.CodeType(
+            new_args_count,
+            code.co_nlocals,
+            code.co_stacksize,
+            code.co_flags,
+            code.co_code,
+            code.co_consts,
+            code.co_names,
+            tuple(new_args),
+            code.co_filename,
+            code.co_name,
+            code.co_firstlineno,
+            code.co_lnotab
+        )
+        f_func = types.FunctionType(f_code, {}, None, tuple(new_defaults))
+
+        @functools.wraps(func)
+        def wrapper(*positional, **named):
+            call_args = inspect.getcallargs(f_func, *positional, **named)
+            actual_args = []
+            for arg in args:
+                actual_args.append(
+                    call_args.get(arg, self._update_with.get(arg))
+                )
+            if varargs is not None:
+                actual_args += call_args[varargs]
+            actual_kwargs = {}
+            if keywords is not None:
+                actual_kwargs = call_args[keywords]
+            return func(*actual_args, **actual_kwargs)
+        setattr(self, name, wrapper)
+        return wrapper
 
 
 def int_or_none(i):
