@@ -1,25 +1,9 @@
 from contextlib import contextmanager
-from functools import partial
 
 from flowy import int_or_none, str_or_none
 
 
 _sentinel = object()
-
-
-class ProxyRuntime(object):
-    def __init__(self, decision_runtime, decision_task):
-        self._decision_runtime = decision_runtime
-        self._decision_task = decision_task
-
-    def __getattr__(self, proxy_name):
-        proxy = getattr(self._decision_task, proxy_name)
-        if not callable(proxy):
-            raise AttributeError('%r is not callable' % proxy_name)
-        return partial(proxy, self._decision_runtime)
-
-    def options(self, **kwargs):
-        self._decision_runtime.options(**kwargs)
 
 
 class OptionsRuntime(object):

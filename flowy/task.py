@@ -1,3 +1,4 @@
+import functools
 import json
 
 from flowy import int_or_none, str_or_none
@@ -12,23 +13,22 @@ class SuspendTask(Exception):
 
 
 class Task(object):
-    def __init__(self, input, result, task_runtime):
+    def __init__(self, input, runtime):
         self._input = str(input)
-        self._result = result
-        self._task_runtime = task_runtime
+        self._runtime = runtime
 
     def __call__(self):
         try:
             args, kwargs = self.deserialize_arguments()
-            result = self.run(self._task_runtime, *args, **kwargs)
+            result = self.run(*args, **kwargs)
         except SuspendTask:
-            self._result.suspend()
+            self._runtime.suspend()
         except Exception as e:
-            self._result.fail(str(e))
+            self._runtime.fail(str(e))
         else:
-            self._result.complete(self.serialize_result(result))
+            self._runtime.complete(self.serialize_result(result))
 
-    def run(self, runtime, *args, **kwargs):
+    def run(self, *args, **kwargs):
         raise NotImplementedError
 
     def serialize_result(self, result):
@@ -38,7 +38,23 @@ class Task(object):
         return json.loads(self._input)
 
 
-class TaskProxy(object):
+class Activity(Task):
+    def heartbeat(self):
+        return self._runtime.heartbeat()
+
+
+class Workflow(object):
+    def __getattribute__(self, name):
+        proxy = super(Task, self).__getattribute__(name)
+        if isinstance(proxy, TaskProxy):
+            return functools.partial(proxy, self._runtime)
+        return proxy
+
+    def options(self, **kwargs):
+        self._runtime.options(**kwargs)
+
+
+class TaskProxy(Task):
     def serialize_arguments(self, *args, **kwargs):
         return json.dumps([args, kwargs])
 
