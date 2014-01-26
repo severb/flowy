@@ -1,5 +1,5 @@
-import functools
 import json
+from functools import partial
 
 from flowy import int_or_none, str_or_none
 
@@ -19,22 +19,22 @@ class Task(object):
 
     def __call__(self):
         try:
-            args, kwargs = self.deserialize_arguments()
+            args, kwargs = self._deserialize_arguments()
             result = self.run(*args, **kwargs)
         except SuspendTask:
             self._runtime.suspend()
         except Exception as e:
             self._runtime.fail(str(e))
         else:
-            self._runtime.complete(self.serialize_result(result))
+            self._runtime.complete(self._serialize_result(result))
 
     def run(self, *args, **kwargs):
         raise NotImplementedError
 
-    def serialize_result(self, result):
+    def _serialize_result(self, result):
         return json.dumps(result)
 
-    def deserialize_arguments(self):
+    def _deserialize_arguments(self):
         return json.loads(self._input)
 
 
@@ -43,22 +43,30 @@ class Activity(Task):
         return self._runtime.heartbeat()
 
 
-class Workflow(object):
-    def __getattribute__(self, name):
-        proxy = super(Task, self).__getattribute__(name)
-        if isinstance(proxy, TaskProxy):
-            return functools.partial(proxy, self._runtime)
-        return proxy
-
+class Workflow(Task):
     def options(self, **kwargs):
         self._runtime.options(**kwargs)
 
+    def restart(self, *args, **kwargs):
+        arguments = self.serialize_restart_arguments(*args, **kwargs)
+        return self._runtime.restart(arguments)
 
-class TaskProxy(Task):
-    def serialize_arguments(self, *args, **kwargs):
+    def _serialize_restart_arguments(self, *args, **kwargs):
         return json.dumps([args, kwargs])
 
-    def deserialize_result(self, result):
+
+class TaskProxy(Task):
+    def __get__(self, obj, objtype):
+        if obj is None:
+            return self
+        if not hasattr(obj, '_runtime'):
+            raise AttributeError('no runtime bound to the task')
+        return partial(self, obj._runtime)
+
+    def _serialize_arguments(self, *args, **kwargs):
+        return json.dumps([args, kwargs])
+
+    def _deserialize_result(self, result):
         return json.loads(result)
 
 
@@ -85,10 +93,10 @@ class ActivityProxy(TaskProxy):
         )
 
     def __call__(self, runtime, *args, **kwargs):
-        arguments = self.serialize_arguments(*args, **kwargs)
+        arguments = self._serialize_arguments(*args, **kwargs)
         return runtime.remote_activity(
             input=arguments,
-            result_deserializer=self.deserialize_result,
+            result_deserializer=self._deserialize_result,
             **self._kwargs
         )
 
@@ -112,9 +120,9 @@ class WorkflowProxy(TaskProxy):
         )
 
     def __call__(self, runtime, *args, **kwargs):
-        arguments = self.serialize_arguments(*args, **kwargs)
+        arguments = self._serialize_arguments(*args, **kwargs)
         return runtime.remote_subworkflow(
             input=arguments,
-            result_deserializer=self.deserialize_result,
+            result_deserializer=self._deserialize_result,
             **self._kwargs
         )
