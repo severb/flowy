@@ -12,9 +12,15 @@ class OptionsRuntime(object):
         self._activity_options_stack = [dict()]
         self._subworkflow_options_stack = [dict()]
 
-    def remote_activity(self, input, result_deserializer, heartbeat,
-                        schedule_to_close, schedule_to_start, start_to_close,
-                        task_list, retry, delay, error_handling):
+    def remote_activity(self, input, result_deserializer,
+                        heartbeat=None,
+                        schedule_to_close=None,
+                        schedule_to_start=None,
+                        start_to_close=None,
+                        task_list=None,
+                        retry=3,
+                        delay=0,
+                        error_handling=None):
         options = dict(
             heartbeat=int_or_none(heartbeat),
             schedule_to_close=int_or_none(schedule_to_close),
@@ -25,16 +31,21 @@ class OptionsRuntime(object):
             delay=int(delay),
             error_handling=bool(error_handling)
         )
-        options.update_with(self._activity_options_stack[-1])
+        print(self._activity_options_stack)
+        options.update(self._activity_options_stack[-1])
         self._decision_runtime.remote_activity(
             input=str(input),
             result_deserializer=result_deserializer,
             **options
         )
 
-    def remote_subworkflow(self, input, result_deserializer, workflow_duration,
-                           decision_duration, task_list, retry, delay,
-                           error_handling):
+    def remote_subworkflow(self, input, result_deserializer,
+                           workflow_duration=None,
+                           decision_duration=None,
+                           task_list=None,
+                           retry=3,
+                           delay=0,
+                           error_handling=None):
         options = dict(
             workflow_duration=int_or_none(workflow_duration),
             decision_duration=int_or_none(decision_duration),
@@ -43,7 +54,7 @@ class OptionsRuntime(object):
             delay=int(delay),
             error_handling=bool(error_handling)
         )
-        options.update_with(self._subworkflow_options_stack[-1])
+        options.update(self._subworkflow_options_stack[-1])
         self._decision_runtime.remote_subworkflow(
             input=str(input),
             result_deserializer=result_deserializer,
@@ -89,12 +100,10 @@ class OptionsRuntime(object):
             a_options['error_handling'] = bool(error_handling)
             s_options['error_handling'] = bool(error_handling)
         self._activity_options_stack.append(
-            dict(self._activity_options_stack[-1])
-            .update(a_options)
+            dict(self._activity_options_stack[-1], **a_options)
         )
         self._subworkflow_options_stack.append(
-            dict(self._subworkflow_options_stack[-1])
-            .update(a_options)
+            dict(self._subworkflow_options_stack[-1], **a_options)
         )
         yield
         self._activity_options_stack.pop()
