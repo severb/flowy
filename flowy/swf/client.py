@@ -62,10 +62,28 @@ class DecisionPollerClient(object):
         task = None
         while task is None:
             first_page = self._poll_response_first_page()
-            task_id, input, token, events = self._parse_response(first_page)
-            runtime = self._runtime_factory(
-                client=self._client, token=token, events=events
+            task_id = SWFTaskId(
+                name=first_page['workflowType']['name'],
+                version=first_page['workflowType']['version']
             )
+            token = first_page['taskToken']
+
+            all_events = self._events(first_page)
+
+            wes = all_events.next()
+            assert wes['eventType'] == 'WorkflowExecutionStarted'
+            input = wes['workflowExecutionStartedEventAttributes']['input']
+
+            parsed_events = self._parse_events(all_events)
+            if parsed_events is None:
+                continue
+            running, timedout, results, errors = parsed_events
+
+            runtime = self._runtime_factory(
+                client=self._client, token=token, running=running,
+                timedout=timedout, results=results, errors=errors
+            )
+
             task = poller.make_task(
                 task_id=task_id,
                 input=input,
@@ -73,8 +91,31 @@ class DecisionPollerClient(object):
             )
         return task
 
-    def _parse_response(self, first_page):
-        pass
+    def _events(self, first_page):
+        page = first_page
+        while 1:
+            for event in page['events']:
+                yield event
+            if not page.get('nextPageToken'):
+                break
+            # If a workflow is stopped and a decision page fetching fails
+            # forever we avoid infinite loops
+            next_p = self._poll_response_page(page_token=page['nextPageToken'])
+            if next_p is None:
+                raise ValueError('pagination error')
+            assert (
+                next_p['taskToken'] == page['taskToken']
+                and (
+                    next_p['workflowType']['name']
+                    == page['workflowType']['name'])
+                and (
+                    next_p['workflowType']['version']
+                    == page['workflowType']['version'])
+                and (
+                    next_p.get('previousStartedEventId')
+                    == page.get('previousStartedEventId'))
+            ), 'Inconsistent decision pages.'
+            page = next_p
 
     def _poll_response_first_page(self):
         swf_response = {}
