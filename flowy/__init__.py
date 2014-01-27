@@ -36,8 +36,10 @@ class MagicBind(object):
     ...         return self
     ...     def two_positional(self, x, y):
     ...         return x, y
-    ...     def defaults(self, x=1, y=2):
-    ...         return x, y
+    ...     def three_positional(self, x, y, z):
+    ...         return x, y, z
+    ...     def defaults(self, x=1, y=2, z=3):
+    ...         return x, y, z
     ...     def args_kwargs(self, x, y, *args, **kwargs):
     ...         return x, y, args, list(sorted(kwargs.items()))
     ...     def only_args_kwargs(self, *args, **kwargs):
@@ -49,12 +51,14 @@ class MagicBind(object):
     True
     >>> mb.two_positional(20)
     (10, 20)
+    >>> mb.three_positional(20, 30)
+    (10, 20, 30)
     >>> mb.defaults(20)
-    (10, 20)
+    (10, 20, 3)
     >>> mb.defaults()
-    (10, 2)
+    (10, 2, 3)
     >>> mb.defaults(y=20)
-    (10, 20)
+    (10, 20, 3)
     >>> mb.args_kwargs(20, 30, 40, z=50, w=60)
     (10, 20, (30, 40), [('w', 60), ('z', 50)])
     >>> mb.only_args_kwargs()
@@ -84,7 +88,9 @@ class MagicBind(object):
         r_avrgs, r_defaults = reversed(args), reversed(defaults)
         sentinel = object()
         new_args, new_defaults = [], []
-        for a, d in izip_longest(r_avrgs, r_defaults, fillvalue=sentinel):
+        for a, d in reversed(list(
+            izip_longest(r_avrgs, r_defaults, fillvalue=sentinel)
+        )):
             if a not in self._update_with:
                 new_args.append(a)
                 if d is not sentinel:

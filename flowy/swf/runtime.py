@@ -2,26 +2,31 @@ from boto.swf.exceptions import SWFResponseError
 
 
 class ActivityRuntime(object):
-    def __init__(self, client):
+    def __init__(self, client, token):
         self._client = client
+        self._token = token
 
     def heartbeat(self):
         try:
-            self._client.record_activity_task_heartbeat()
+            self._client.record_activity_task_heartbeat(token=self._token)
         except SWFResponseError:
             return False
         return True
 
     def complete(self, result):
         try:
-            self._client.respond_activity_task_completed(result=result)
+            self._client.respond_activity_task_completed(
+                result=result, token=self._token
+            )
         except SWFResponseError:
             return False
         return True
 
     def fail(self, reason):
         try:
-            self._client.respond_activity_task_failed(reason=reason)
+            self._client.respond_activity_task_failed(
+                reason=reason, token=self._token
+            )
         except SWFResponseError:
             return False
         return True
@@ -31,8 +36,9 @@ class ActivityRuntime(object):
 
 
 class DecisionRuntime(object):
-    def __init__(self, client):
+    def __init__(self, client, token):
         self._client = client
+        self._token = token
 
     def remote_activity(self, result_deserializer,
                         heartbeat=None,
