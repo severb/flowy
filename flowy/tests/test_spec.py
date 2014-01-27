@@ -50,11 +50,12 @@ class SWFActivitySpecTest(unittest.TestCase):
         self.assertRaises(RuntimeError, spec.register, Mock())
 
     def test_register_passes_values_to_poller(self):
+        from flowy.swf import SWFTaskId
         spec, client, factory = self._get_uut(name='n', version='v')
         poller = Mock()
         spec.register(poller)
         poller.register.assert_called_once_with(
-            name='n', version='v', task_factory=factory
+            task_id=SWFTaskId(name='n', version='v'), task_factory=factory
         )
 
     def test_register_passes_late_bind_factory_to_poller(self):
