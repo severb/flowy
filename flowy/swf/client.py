@@ -5,6 +5,10 @@ from flowy.swf import SWFTaskId
 from flowy.swf.runtime import ActivityRuntime, DecisionRuntime
 
 
+class _PaginationError(RuntimeError):
+    """ A page of the history is unavailable. """
+
+
 class ActivityPollerClient(object):
     def __init__(self, client, task_list, runtime_factory=ActivityRuntime):
         self._client = client
@@ -67,23 +71,24 @@ class DecisionPollerClient(object):
                 version=first_page['workflowType']['version']
             )
             token = first_page['taskToken']
-
             all_events = self._events(first_page)
-
             wes = all_events.next()
             assert wes['eventType'] == 'WorkflowExecutionStarted'
             input = wes['workflowExecutionStartedEventAttributes']['input']
-
-            parsed_events = self._parse_events(all_events)
-            if parsed_events is None:
+            try:
+                running, timedout, results, errors = self._parse_events(
+                    all_events
+                )
+            except _PaginationError:
                 continue
-            running, timedout, results, errors = parsed_events
-
             runtime = self._runtime_factory(
-                client=self._client, token=token, running=running,
-                timedout=timedout, results=results, errors=errors
+                client=self._client,
+                token=token,
+                running=running,
+                timedout=timedout,
+                results=results,
+                errors=errors
             )
-
             task = poller.make_task(
                 task_id=task_id,
                 input=input,
@@ -101,8 +106,6 @@ class DecisionPollerClient(object):
             # If a workflow is stopped and a decision page fetching fails
             # forever we avoid infinite loops
             next_p = self._poll_response_page(page_token=page['nextPageToken'])
-            if next_p is None:
-                raise ValueError('pagination error')
             assert (
                 next_p['taskToken'] == page['taskToken']
                 and (
@@ -138,4 +141,6 @@ class DecisionPollerClient(object):
                 break
             except SWFResponseError:
                 pass
+        else:
+            raise _PaginationError()
         return swf_response
