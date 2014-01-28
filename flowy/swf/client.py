@@ -134,7 +134,6 @@ class DecisionPollerClient(object):
         event2call = {}
         for e in events:
             e_type = e.get('eventType')
-            # Activities
             if e_type == 'ActivityTaskScheduled':
                 id = e['activityTaskScheduledEventAttributes']['activityId']
                 event2call[e['eventId']] = id
@@ -182,11 +181,6 @@ class DecisionPollerClient(object):
                 reason = e[CWEFEA]['reason']
                 running.remove(id)
                 errors[id] = reason
-            elif e_type == 'StartChildWorkflowExecutionFailed':
-                SCWEFEA = 'startChildWorkflowExecutionFailedEventAttributes'
-                id = _subworkflow_id(e[SCWEFEA]['workflowId'])
-                reason = e[SCWEIEA]['cause']
-                errors[id] = reason
             elif e_type == 'ChildWorkflowExecutionTimedOut':
                 CWETOEA = 'childWorkflowExecutionTimedOutEventAttributes'
                 id = _subworkflow_id(
@@ -194,6 +188,11 @@ class DecisionPollerClient(object):
                 )
                 running.remove(id)
                 timedout.add(id)
+            elif e_type == 'StartChildWorkflowExecutionFailed':
+                SCWEFEA = 'startChildWorkflowExecutionFailedEventAttributes'
+                id = _subworkflow_id(e[SCWEFEA]['workflowId'])
+                reason = e[SCWEIEA]['cause']
+                errors[id] = reason
             elif e_type == 'TimerStarted':
                 id = e['timerStartedEventAttributes']['timerId']
                 self.running.add(id)
