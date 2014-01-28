@@ -106,8 +106,6 @@ class DecisionPollerClient(object):
                 yield event
             if not page.get('nextPageToken'):
                 break
-            # If a workflow is stopped and a decision page fetching fails
-            # forever we avoid infinite loops
             next_p = self._poll_response_page(page_token=page['nextPageToken'])
             assert (
                 next_p['taskToken'] == page['taskToken']
