@@ -52,8 +52,16 @@ class ActivityPollerClient(object):
         return swf_response
 
 
-def decision_runtime(client, events):
-    return OptionsRuntime(DecisionRuntime(client, events))
+def decision_runtime(client, running, timedout, results, errors):
+    return OptionsRuntime(
+        DecisionRuntime(
+            client=client,
+            running=running,
+            timedout=timedout,
+            results=results,
+            errors=errors
+        )
+    )
 
 
 class DecisionPollerClient(object):
