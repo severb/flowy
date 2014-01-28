@@ -41,14 +41,6 @@ class SWFActivitySpecTest(unittest.TestCase):
             task_factory=task_factory
         ), client, task_factory
 
-    def test_register_fails_without_task_factory(self):
-        spec, client, _ = self._get_uut(task_factory=None)
-        self.assertRaises(RuntimeError, spec.register, Mock())
-
-    def test_register_fails_without_client(self):
-        spec, _, factory = self._get_uut(client=None)
-        self.assertRaises(RuntimeError, spec.register, Mock())
-
     def test_register_passes_values_to_poller(self):
         from flowy.swf import SWFTaskId
         spec, client, factory = self._get_uut(name='n', version='v')
@@ -57,30 +49,6 @@ class SWFActivitySpecTest(unittest.TestCase):
         poller.register.assert_called_once_with(
             task_id=SWFTaskId(name='n', version='v'), task_factory=factory
         )
-
-    def test_register_passes_late_bind_factory_to_poller(self):
-        spec, client, factory = self._get_uut(
-            name='n', version='v', task_factory=None
-        )
-        factory = Mock()
-        poller = Mock()
-        spec.bind_task_factory(factory)
-        spec.register(poller)
-        poller.register.assert_called_once_with(
-            name='n', version='v', task_factory=factory
-        )
-
-    def test_register_uses_late_bind_client(self):
-        spec, _, factory = self._get_uut(client=None)
-        client = Mock()
-        poller = Mock()
-        spec.bind_client(client)
-        spec.register(poller)
-        self.assertTrue(client.register_activity_type.called)
-
-    def test_factory_must_be_callable(self):
-        spec, client, factory = self._get_uut(task_factory=None)
-        self.assertRaises(ValueError, spec.bind_task_factory, 'not callable')
 
     def test_remote_register_successful_as_new(self):
         spec, client, factory = self._get_uut(
@@ -236,76 +204,29 @@ class SWFWorkflowSpecTest(unittest.TestCase):
         self.assertFalse(result)
 
 
-class RemoteCollectorSpecTest(unittest.TestCase):
-    def _get_uut(self, factory=None):
-        from flowy.spec import RemoteCollectorSpec
+class ActivitySpecCollector(unittest.TestCase):
+    def _get_uut(self, factory=None, client=s.client):
+        from flowy.spec import ActivitySpecCollector
         if factory is None:
             factory = Mock()
-        return RemoteCollectorSpec(spec_factory=factory), factory
+        return ActivitySpecCollector(factory, client), factory
 
     def test_register_empty(self):
         spec, factory = self._get_uut()
         poller = Mock()
         result = spec.register(poller)
-        self.assertTrue(result)
+        self.assertEquals(result, [])
         self.assertFalse(poller.register.called)
-
-    def test_register_detected(self):
-        spec, factory = self._get_uut()
-        poller = Mock()
-        spec.detect(s.f1, s.x, a=s.a, b=s.b)
-        spec.detect(s.f2, s.y, s.z, aa=s.aa, bb=s.bb)
-        factory.assert_has_calls([
-            call(s.x, a=s.a, b=s.b),
-            call().bind_task_factory(s.f1),
-            call(s.y, s.z, aa=s.aa, bb=s.bb),
-            call().bind_task_factory(s.f2),
-        ])
-        result = spec.register(poller)
-        self.assertTrue(result)
-        factory.assert_has_calls([
-            call().register(poller),
-            call().register(poller)
-        ])
-
-    def test_register_fails(self):
-        spec, factory = self._get_uut()
-        factory().register.side_effect = True, False
-        poller = Mock()
-        spec.detect(s.x, a=s.a)
-        spec.detect(s.y, s.z)
-        result = spec.register(poller)
-        self.assertFalse(result)
-
-    def test_bind_client(self):
-        spec, factory = self._get_uut()
-        spec.detect(s.x, a=s.a)
-        spec.detect(s.y, s.z)
-        spec.bind_client(s.c)
-        factory().bind_client.assert_has_calls([call(s.c), call(s.c)])
 
 
 class RemoteScannerSpecTest(unittest.TestCase):
     def _get_uut(self, collector=None):
-        from flowy.spec import RemoteScannerSpec
+        from flowy.scanner import Scanner
         if collector is None:
             collector = Mock()
-        return RemoteScannerSpec(collector=collector), collector
-
-    def test_decorator_functionality(self):
-        scanner, collector = self._get_uut()
-        wrapped = scanner(s.x, s.y, kw1=s.a, kw2=s.b)(s.fact)
-        self.assertIs(wrapped, s.fact)
-        collector.detect.assert_called_once_with(
-            s.fact, s.x, s.y, kw1=s.a, kw2=s.b
-        )
+        return Scanner(collector=collector), collector
 
     def test_forward_register_call(self):
         scanner, collector = self._get_uut()
         scanner.register(s.fact)
         collector.register.assert_called_once_with(s.fact)
-
-    def test_bind_client(self):
-        scanner, collector = self._get_uut()
-        scanner.bind_client(s.c)
-        collector.bind_client.assert_called_once_with(s.c)
