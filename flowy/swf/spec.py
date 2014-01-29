@@ -62,8 +62,8 @@ class WorkflowSpec(RemoteTaskSpec):
             client=client
         )
         self._task_list = str(task_list)
-        self._decision_duration = decision_duration
-        self._workflow_duration = workflow_duration
+        self._decision_duration = str(decision_duration)
+        self._workflow_duration = str(workflow_duration)
 
     def _try_register_remote(self):
         workflow_duration = self._workflow_duration
