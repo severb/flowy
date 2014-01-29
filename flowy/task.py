@@ -67,7 +67,7 @@ class Workflow(Task):
         return json.dumps([args, kwargs])
 
 
-class TaskProxy(Task):
+class TaskProxy(object):
     def __get__(self, obj, objtype):
         if obj is None:
             return self

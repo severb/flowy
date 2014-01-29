@@ -58,12 +58,11 @@ class DecisionRuntime(object):
                         delay=None,
                         error_handling=None):
         initial_call_id = self._call_id
-        if (not self._deps_in_args(args, kwargs) and
+        if (not self._deps_in_args(args, kwargs, error_handling) and
             not self._timer_not_done(delay) and
             not self._search_result(retry,
                                     transport.result_deserializer,
-                                    error_handling)
-           ):
+                                    error_handling)):
             self._is_completed = False
             raw_args, raw_kwargs = self._replace_results(args, kwargs)
             self._decision.queue_activity(  # XXX: implement
