@@ -48,10 +48,11 @@ class DecisionRuntime(object):
         self._call_id = 0
         self._is_completed = not running
 
-    def remote_activity(self, name, version, input, result_deserializer,
+    def remote_activity(self, task_id, input, result_deserializer,
                         heartbeat, schedule_to_close,
                         schedule_to_start, start_to_close,
                         task_list, retry, delay, error_handling):
+        name, version = task_id
         initial_call_id = self._call_id
         result = self._timer_result(delay)
         if result is not None:

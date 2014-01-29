@@ -13,7 +13,7 @@ class OptionsRuntime(object):
         self._activity_options_stack = [dict()]
         self._subworkflow_options_stack = [dict()]
 
-    def remote_activity(self, name, version, args, kwargs,
+    def remote_activity(self, task_id, args, kwargs,
                         args_serializer, result_deserializer,
                         heartbeat=None,
                         schedule_to_close=None,
@@ -33,17 +33,15 @@ class OptionsRuntime(object):
             delay=max(int(delay), 0),
             error_handling=bool(error_handling)
         )
-        print(self._activity_options_stack)
         options.update(self._activity_options_stack[-1])
         self._decision_runtime.remote_activity(
-            name=name,
-            version=version,
+            task_id=task_id,
             args_serializer=args_serializer,
             result_deserializer=result_deserializer,
             **options
         )
 
-    def remote_subworkflow(self, name, version, args, kwargs,
+    def remote_subworkflow(self, task_id, args, kwargs,
                            args_serializer, result_deserializer,
                            workflow_duration=None,
                            decision_duration=None,
@@ -61,8 +59,7 @@ class OptionsRuntime(object):
         )
         options.update(self._subworkflow_options_stack[-1])
         self._decision_runtime.remote_subworkflow(
-            name=name,
-            version=version,
+            task_id=task_id,
             args_serializer=args_serializer,
             result_deserializer=result_deserializer,
             **options
@@ -121,7 +118,7 @@ class ArgsDependencyRuntime(object):
     def __init__(self, decision_runtime):
         self._decision_runtime = decision_runtime
 
-    def remote_activity(self, name, version, args, kwargs,
+    def remote_activity(self, task_id, args, kwargs,
                         args_serializer, result_deserializer,
                         heartbeat=None,
                         schedule_to_close=None,
@@ -135,8 +132,7 @@ class ArgsDependencyRuntime(object):
         if result is not None:
             return result
         return self._decision_runtime.remote_activity(
-            name=name,
-            version=version,
+            task_id=task_id,
             input=self._serialize_args(args, kwargs, args_serializer),
             result_deserializer=result_deserializer,
             heartbeat=heartbeat,
@@ -149,7 +145,7 @@ class ArgsDependencyRuntime(object):
             error_handling=error_handling
         )
 
-    def remote_subworkflow(self, name, version, args, kwargs,
+    def remote_subworkflow(self, task_id, args, kwargs,
                            args_serializer, result_deserializer,
                            workflow_duration=None,
                            decision_duration=None,
@@ -161,8 +157,7 @@ class ArgsDependencyRuntime(object):
         if result is not None:
             return result
         return self._decision_runtime.remote_subworkflow(
-            name=name,
-            version=version,
+            taks_id=task_id,
             input=self._serialize_args(args, kwargs, args_serializer),
             result_deserializer=result_deserializer,
             workflow_duration=workflow_duration,
