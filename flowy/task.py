@@ -12,6 +12,18 @@ class SuspendTask(Exception):
     """
 
 
+class TaskError(Exception):
+    """ Raised from an activity or subworkflow task if error handling is
+    enabled and the task fails.
+    """
+
+
+class TaskTimedout(TaskError):
+    """ Raised from an activity or subworkflow task if any of its timeout
+    timers were exceeded.
+    """
+
+
 class Task(object):
     def __init__(self, input, runtime):
         self._input = str(input)

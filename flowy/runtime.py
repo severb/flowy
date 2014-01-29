@@ -27,8 +27,8 @@ class OptionsRuntime(object):
             schedule_to_start=int_or_none(schedule_to_start),
             start_to_close=int_or_none(start_to_close),
             task_list=str_or_none(task_list),
-            retry=int(retry),
-            delay=int(delay),
+            retry=max(int(retry), 0),
+            delay=max(int(delay), 0),
             error_handling=bool(error_handling)
         )
         print(self._activity_options_stack)
@@ -50,8 +50,8 @@ class OptionsRuntime(object):
             workflow_duration=int_or_none(workflow_duration),
             decision_duration=int_or_none(decision_duration),
             task_list=str_or_none(task_list),
-            retry=int(retry),
-            delay=int(delay),
+            retry=max(int(retry), 0),
+            delay=max(int(delay), 0),
             error_handling=bool(error_handling)
         )
         options.update(self._subworkflow_options_stack[-1])
@@ -91,11 +91,11 @@ class OptionsRuntime(object):
             a_options['task_list'] = str_or_none(task_list)
             s_options['task_list'] = str_or_none(task_list)
         if retry is not _sentinel:
-            a_options['retry'] = int(retry)
-            s_options['retry'] = int(retry)
+            a_options['retry'] = max(int(retry), 0)
+            s_options['retry'] = max(int(retry), 0)
         if delay is not _sentinel:
-            a_options['delay'] = int(delay)
-            s_options['delay'] = int(delay)
+            a_options['delay'] = max(int(delay), 0)
+            s_options['delay'] = max(int(delay), 0)
         if error_handling is not _sentinel:
             a_options['error_handling'] = bool(error_handling)
             s_options['error_handling'] = bool(error_handling)

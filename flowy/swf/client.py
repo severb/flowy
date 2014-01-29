@@ -15,7 +15,7 @@ class ActivityPollerClient(object):
         self._task_list = task_list
         self._runtime_factory = runtime_factory
 
-    def poll_next_task(self, poller):
+    def poll_next_task(self, worker):
         task = None
         while task is None:
             swf_response = self._poll_response()
@@ -23,7 +23,7 @@ class ActivityPollerClient(object):
             runtime = self._runtime_factory(
                 client=self._client, token=token
             )
-            task = poller.make_task(
+            task = worker.make_task(
                 task_id=task_id,
                 input=input,
                 runtime=runtime
@@ -70,7 +70,7 @@ class DecisionPollerClient(object):
         self._task_list = task_list
         self._runtime_factory = runtime_factory
 
-    def poll_next_task(self, poller):
+    def poll_next_task(self, worker):
         task = None
         while task is None:
             first_page = self._poll_response_first_page()
@@ -100,7 +100,7 @@ class DecisionPollerClient(object):
                 results=results,
                 errors=errors
             )
-            task = poller.make_task(
+            task = worker.make_task(
                 task_id=task_id,
                 input=input,
                 runtime=runtime
@@ -200,6 +200,10 @@ class DecisionPollerClient(object):
                 id = e['timerStartedEventAttributes']['timerId']
                 running.remove(id)
                 results[id] = None
+        running = set(map(int, running))
+        timedout = set(map(int, timedout))
+        results = dict((int(k), v) for k, v in results.items())
+        errors = dict((int(k), v) for k, v in errors.items())
         return running, timedout, results, errors
 
     def _poll_response_first_page(self):
