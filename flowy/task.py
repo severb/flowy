@@ -105,9 +105,9 @@ class ActivityProxy(TaskProxy):
         )
 
     def __call__(self, runtime, *args, **kwargs):
-        arguments = self._serialize_arguments(*args, **kwargs)
         return runtime.remote_activity(
-            input=arguments,
+            args=args, kwargs=kwargs,
+            args_serializer=self._serialize_arguments,
             result_deserializer=self._deserialize_result,
             **self._kwargs
         )
@@ -132,9 +132,9 @@ class WorkflowProxy(TaskProxy):
         )
 
     def __call__(self, runtime, *args, **kwargs):
-        arguments = self._serialize_arguments(*args, **kwargs)
         return runtime.remote_subworkflow(
-            input=arguments,
+            args=args, kwargs=kwargs,
+            args_serializer=self._serialize_arguments,
             result_deserializer=self._deserialize_result,
             **self._kwargs
         )

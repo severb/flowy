@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 
 from flowy import int_or_none, str_or_none
+from flowy.respons import Placeholder, Error, Result
 
 
 _sentinel = object()
@@ -12,7 +13,8 @@ class OptionsRuntime(object):
         self._activity_options_stack = [dict()]
         self._subworkflow_options_stack = [dict()]
 
-    def remote_activity(self, input, result_deserializer,
+    def remote_activity(self, name, version, args, kwargs,
+                        args_serializer, result_deserializer,
                         heartbeat=None,
                         schedule_to_close=None,
                         schedule_to_start=None,
@@ -34,12 +36,15 @@ class OptionsRuntime(object):
         print(self._activity_options_stack)
         options.update(self._activity_options_stack[-1])
         self._decision_runtime.remote_activity(
-            input=str(input),
+            name=name,
+            version=version,
+            args_serializer=args_serializer,
             result_deserializer=result_deserializer,
             **options
         )
 
-    def remote_subworkflow(self, input, result_deserializer,
+    def remote_subworkflow(self, name, version, args, kwargs,
+                           args_serializer, result_deserializer,
                            workflow_duration=None,
                            decision_duration=None,
                            task_list=None,
@@ -56,7 +61,9 @@ class OptionsRuntime(object):
         )
         options.update(self._subworkflow_options_stack[-1])
         self._decision_runtime.remote_subworkflow(
-            input=str(input),
+            name=name,
+            version=version,
+            args_serializer=args_serializer,
             result_deserializer=result_deserializer,
             **options
         )
@@ -108,3 +115,89 @@ class OptionsRuntime(object):
         yield
         self._activity_options_stack.pop()
         self._subworkflow_options_stack.pop()
+
+
+class ArgsDependencyRuntime(object):
+    def __init__(self, decision_runtime):
+        self._decision_runtime = decision_runtime
+
+    def remote_activity(self, name, version, args, kwargs,
+                        args_serializer, result_deserializer,
+                        heartbeat=None,
+                        schedule_to_close=None,
+                        schedule_to_start=None,
+                        start_to_close=None,
+                        task_list=None,
+                        retry=3,
+                        delay=0,
+                        error_handling=None):
+        result = self._args_based_result(args, kwargs, error_handling)
+        if result is not None:
+            return result
+        return self._decision_runtime.remote_activity(
+            name=name,
+            version=version,
+            input=self._serialize_args(args, kwargs, args_serializer),
+            result_deserializer=result_deserializer,
+            heartbeat=heartbeat,
+            schedule_to_close=schedule_to_close,
+            schedule_to_start=schedule_to_start,
+            start_to_close=start_to_close,
+            task_list=task_list,
+            retry=retry,
+            delay=delay,
+            error_handling=error_handling
+        )
+
+    def remote_subworkflow(self, name, version, args, kwargs,
+                           args_serializer, result_deserializer,
+                           workflow_duration=None,
+                           decision_duration=None,
+                           task_list=None,
+                           retry=3,
+                           delay=0,
+                           error_handling=None):
+        result = self._args_based_result(args, kwargs, error_handling)
+        if result is not None:
+            return result
+        return self._decision_runtime.remote_subworkflow(
+            name=name,
+            version=version,
+            input=self._serialize_args(args, kwargs, args_serializer),
+            result_deserializer=result_deserializer,
+            workflow_duration=workflow_duration,
+            decision_duration=decision_duration,
+            task_list=task_list,
+            retry=retry,
+            delay=delay,
+            error_handling=error_handling
+        )
+
+    def _args_based_result(self, args, kwargs, error_handling):
+        args = tuple(args) + tuple(kwargs.items())
+        if self._deps_in_args(args):
+            return Placeholder()
+        errs = self._errs_in_args(args)
+        if errs:
+            composed_err = "\n".join(e._reason for e in errs)
+            if error_handling:
+                return Error(composed_err)
+            else:
+                self._decision_runtime.fail(composed_err)
+                return Placeholder()
+
+    def _deps_in_args(self, args):
+        return any(isinstance(r, Placeholder) for r in args)
+
+    def _errs_in_args(self, args):
+        return list(filter(lambda x: isinstance(x, Error), args))
+
+    def _serialize_args(self, args, kwargs, args_serializer):
+        raw_args = [
+            arg.result() if isinstance(arg, Result) else arg for arg in args
+        ]
+        raw_kwargs = dict(
+            (k, v.result() if isinstance(v, Result) else v)
+            for k, v in kwargs.items()
+        )
+        return args_serializer(raw_args, raw_kwargs)
