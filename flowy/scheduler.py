@@ -1,6 +1,6 @@
 from contextlib import contextmanager
 
-from flowy import str_or_none, posint_or_none, posint
+from flowy import str_or_none, posint_or_none
 from flowy.result import Placeholder, Error, Result
 
 
@@ -29,8 +29,8 @@ class OptionsScheduler(object):
             schedule_to_start=posint_or_none(schedule_to_start),
             start_to_close=posint_or_none(start_to_close),
             task_list=str_or_none(task_list),
-            retry=posint(retry),
-            delay=posint(delay),
+            retry=max(int(retry), 0),
+            delay=max(int(delay), 0),
             error_handling=bool(error_handling)
         )
         options.update(self._activity_options_stack[-1])
@@ -53,8 +53,8 @@ class OptionsScheduler(object):
             workflow_duration=posint_or_none(workflow_duration),
             decision_duration=posint_or_none(decision_duration),
             task_list=str_or_none(task_list),
-            retry=posint(retry),
-            delay=posint(delay),
+            retry=max(int(retry), 0),
+            delay=max(int(delay), 0),
             error_handling=bool(error_handling)
         )
         options.update(self._subworkflow_options_stack[-1])

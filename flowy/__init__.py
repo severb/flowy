@@ -145,10 +145,6 @@ def posint_or_none(i):
         return int(i)
 
 
-def posint(i):
-    return max(int(i), 0)
-
-
 def str_or_none(s):
     if s is not None:
         return str(s)
