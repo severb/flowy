@@ -1,5 +1,9 @@
-from boto.swf.exceptions import SWFResponseError
+import uuid
 
+from boto.swf.exceptions import SWFResponseError
+from boto.swf.layer1_decisions import Layer1Decisions
+
+from flowy import str_or_none
 from flowy.result import Error, Placeholder, Result, Timeout
 
 
@@ -46,13 +50,12 @@ class DecisionRuntime(object):
         self._results = results
         self._errors = errors
         self._call_id = 0
-        self._is_completed = not running
+        self._decisions = Layer1Decisions()
 
     def remote_activity(self, task_id, input, result_deserializer,
                         heartbeat, schedule_to_close,
                         schedule_to_start, start_to_close,
                         task_list, retry, delay, error_handling):
-        name, version = task_id
         initial_call_id = self._call_id
         result = self._timer_result(delay)
         if result is not None:
@@ -64,29 +67,65 @@ class DecisionRuntime(object):
         )
         if result is not None:
             return result
-        self._is_completed = False
-        self._decision.queue_activity(  # XXX: implement
-            call_id=self._call_id,
-            name=name,
-            version=version,
-            input=input,
-            heartbeat=heartbeat,
-            schedule_to_close=schedule_to_close,
-            schedule_to_start=schedule_to_start,
-            start_to_close=start_to_close,
-            task_list=task_list,
+        name, version = task_id
+        self._decisions.schedule_activity_task(
+            str(self._call_id), str(name), str(version),
+            heartbeat_timeout=str_or_none(heartbeat),
+            schedule_to_close_timeout=str_or_none(schedule_to_close),
+            schedule_to_start_timeout=str_or_none(schedule_to_start),
+            start_to_close_timeout=str_or_none(start_to_close),
+            task_list=str_or_none(task_list),
+            input=str(input)
+        )
+        self._reserve_call_ids(initial_call_id, delay, retry)
+        return Placeholder()
+
+    def remote_subworkflow(self, task_id, input, result_deserializer,
+                           workflow_duration, decision_duration,
+                           task_list, retry, delay, error_handling):
+        initial_call_id = self._call_id
+        result = self._timer_result(delay)
+        if result is not None:
+            return result
+        result = self._search_result(
+            retry=retry,
+            result_deserializer=result_deserializer,
+            error_handling=error_handling
+        )
+        if result is not None:
+            return result
+        name, version = task_id
+        subworkflow_id = '%s-%s' % (uuid.uuid4(), self._call_id)
+        self._decisions.start_child_workflow_execution(
+            subworkflow_id, str(name), str(version),
+            execution_start_to_close_timeout=str_or_none(workflow_duration),
+            task_start_to_close_timeout=str_or_none(decision_duration),
+            task_list=str_or_none(task_list),
+            input=str(input)
         )
         self._reserve_call_ids(initial_call_id, delay, retry)
         return Placeholder()
 
     def complete(self, result):
-        pass
+        if not self._running and not self._decisions._data:
+            self._decisions.complete_workflow_execution(result=result)
+        return self.suspend()
 
     def fail(self, reason):
-        pass
+        d = self._decisions = Layer1Decisions()
+        d.fail_workflow_execution(reason=reason[:256])
+        return self.suspend()
 
     def suspend(self):
-        pass
+        try:
+            self._client.respond_decision_task_completed(
+                task_token=self._token, decisions=self._decisions._data
+            )
+            return True
+        except SWFResponseError:
+            return False
+        finally:
+            self._decisions = Layer1Decisions()
 
     def _reserve_call_ids(self, call_id, delay, retry):
         self._call_id = (
