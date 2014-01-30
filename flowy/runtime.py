@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 
 from flowy import int_or_none, str_or_none
-from flowy.respons import Placeholder, Error, Result
+from flowy.result import Placeholder, Error, Result
 
 
 _sentinel = object()
