@@ -1,15 +1,15 @@
 from contextlib import contextmanager
 
-from flowy import int_or_none, str_or_none
+from flowy import str_or_none, posint_or_none, posint
 from flowy.result import Placeholder, Error, Result
 
 
 _sentinel = object()
 
 
-class OptionsRuntime(object):
-    def __init__(self, decision_runtime):
-        self._decision_runtime = decision_runtime
+class OptionsScheduler(object):
+    def __init__(self, scheduler):
+        self._scheduler = scheduler
         self._activity_options_stack = [dict()]
         self._subworkflow_options_stack = [dict()]
 
@@ -22,20 +22,20 @@ class OptionsRuntime(object):
                         task_list=None,
                         retry=3,
                         delay=0,
-                        error_handling=None):
+                        error_handling=False):
         options = dict(
-            heartbeat=int_or_none(heartbeat),
-            schedule_to_close=int_or_none(schedule_to_close),
-            schedule_to_start=int_or_none(schedule_to_start),
-            start_to_close=int_or_none(start_to_close),
+            heartbeat=posint_or_none(heartbeat),
+            schedule_to_close=posint_or_none(schedule_to_close),
+            schedule_to_start=posint_or_none(schedule_to_start),
+            start_to_close=posint_or_none(start_to_close),
             task_list=str_or_none(task_list),
-            retry=max(int(retry), 0),
-            delay=max(int(delay), 0),
+            retry=posint(retry),
+            delay=posint(delay),
             error_handling=bool(error_handling)
         )
         options.update(self._activity_options_stack[-1])
-        self._decision_runtime.remote_activity(
-            task_id=task_id,
+        self._scheduler.remote_activity(
+            task_id=task_id, args=args, kwargs=kwargs,
             args_serializer=args_serializer,
             result_deserializer=result_deserializer,
             **options
@@ -48,18 +48,18 @@ class OptionsRuntime(object):
                            task_list=None,
                            retry=3,
                            delay=0,
-                           error_handling=None):
+                           error_handling=False):
         options = dict(
-            workflow_duration=int_or_none(workflow_duration),
-            decision_duration=int_or_none(decision_duration),
+            workflow_duration=posint_or_none(workflow_duration),
+            decision_duration=posint_or_none(decision_duration),
             task_list=str_or_none(task_list),
-            retry=max(int(retry), 0),
-            delay=max(int(delay), 0),
+            retry=posint(retry),
+            delay=posint(delay),
             error_handling=bool(error_handling)
         )
         options.update(self._subworkflow_options_stack[-1])
-        self._decision_runtime.remote_subworkflow(
-            task_id=task_id,
+        self._scheduler.remote_subworkflow(
+            task_id=task_id, args=args, kwargs=kwargs,
             args_serializer=args_serializer,
             result_deserializer=result_deserializer,
             **options
@@ -80,17 +80,17 @@ class OptionsRuntime(object):
         a_options = dict()
         s_options = dict()
         if heartbeat is not _sentinel:
-            a_options['heartbeat'] = int_or_none(heartbeat)
+            a_options['heartbeat'] = posint_or_none(heartbeat)
         if schedule_to_close is not _sentinel:
-            a_options['schedule_to_close'] = int_or_none(schedule_to_close)
+            a_options['schedule_to_close'] = posint_or_none(schedule_to_close)
         if schedule_to_start is not _sentinel:
-            a_options['schedule_to_start'] = int_or_none(schedule_to_start)
+            a_options['schedule_to_start'] = posint_or_none(schedule_to_start)
         if start_to_close is not _sentinel:
-            a_options['start_to_close'] = int_or_none(start_to_close)
+            a_options['start_to_close'] = posint_or_none(start_to_close)
         if workflow_duration is not _sentinel:
-            s_options['workflow_duration'] = int_or_none(workflow_duration)
+            s_options['workflow_duration'] = posint_or_none(workflow_duration)
         if decision_duration is not _sentinel:
-            s_options['decision_duration'] = int_or_none(decision_duration)
+            s_options['decision_duration'] = posint_or_none(decision_duration)
         if task_list is not _sentinel:
             a_options['task_list'] = str_or_none(task_list)
             s_options['task_list'] = str_or_none(task_list)
@@ -107,16 +107,16 @@ class OptionsRuntime(object):
             dict(self._activity_options_stack[-1], **a_options)
         )
         self._subworkflow_options_stack.append(
-            dict(self._subworkflow_options_stack[-1], **a_options)
+            dict(self._subworkflow_options_stack[-1], **s_options)
         )
         yield
         self._activity_options_stack.pop()
         self._subworkflow_options_stack.pop()
 
 
-class ArgsDependencyRuntime(object):
-    def __init__(self, decision_runtime):
-        self._decision_runtime = decision_runtime
+class ArgsDependencyScheduler(object):
+    def __init__(self, scheduler):
+        self._scheduler = scheduler
 
     def remote_activity(self, task_id, args, kwargs,
                         args_serializer, result_deserializer,
@@ -127,11 +127,11 @@ class ArgsDependencyRuntime(object):
                         task_list=None,
                         retry=3,
                         delay=0,
-                        error_handling=None):
+                        error_handling=False):
         result = self._args_based_result(args, kwargs, error_handling)
         if result is not None:
             return result
-        return self._decision_runtime.remote_activity(
+        return self._scheduler.remote_activity(
             task_id=task_id,
             input=self._serialize_args(args, kwargs, args_serializer),
             result_deserializer=result_deserializer,
@@ -152,12 +152,12 @@ class ArgsDependencyRuntime(object):
                            task_list=None,
                            retry=3,
                            delay=0,
-                           error_handling=None):
+                           error_handling=False):
         result = self._args_based_result(args, kwargs, error_handling)
         if result is not None:
             return result
-        return self._decision_runtime.remote_subworkflow(
-            taks_id=task_id,
+        return self._scheduler.remote_subworkflow(
+            task_id=task_id,
             input=self._serialize_args(args, kwargs, args_serializer),
             result_deserializer=result_deserializer,
             workflow_duration=workflow_duration,
@@ -169,7 +169,7 @@ class ArgsDependencyRuntime(object):
         )
 
     def _args_based_result(self, args, kwargs, error_handling):
-        args = tuple(args) + tuple(kwargs.items())
+        args = tuple(args) + tuple(kwargs.values())
         if self._deps_in_args(args):
             return Placeholder()
         errs = self._errs_in_args(args)
@@ -178,7 +178,7 @@ class ArgsDependencyRuntime(object):
             if error_handling:
                 return Error(composed_err)
             else:
-                self._decision_runtime.fail(composed_err)
+                self._scheduler.fail(reason=composed_err)
                 return Placeholder()
 
     def _deps_in_args(self, args):

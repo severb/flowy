@@ -140,11 +140,20 @@ class MagicBind(object):
         return wrapper
 
 
-def int_or_none(i):
-    if i is not None:
+def posint_or_none(i):
+    if i is not None and int(i) > 0:
         return int(i)
+
+
+def posint(i):
+    return max(int(i), 0)
 
 
 def str_or_none(s):
     if s is not None:
         return str(s)
+
+
+def int_or_none(i):
+    if i is not None:
+        return int(i)
