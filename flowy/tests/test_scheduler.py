@@ -191,7 +191,11 @@ class TestOptionsScheduler(unittest.TestCase):
 class TestArgsDependencyScheduler(unittest.TestCase):
     defaults = dict(
         task_id=s.id,
-        result_deserializer=s.des
+        result_deserializer=s.des,
+        task_list=s.task_list,
+        retry=s.retry,
+        delay=s.delay,
+        error_handling=s.error_handling,
     )
 
     def _get_uut(self):
@@ -207,18 +211,18 @@ class TestArgsDependencyScheduler(unittest.TestCase):
             args=[1, 2],
             kwargs=dict(x=1, y=2),
             args_serializer=serializer,
+            heartbeat=s.heartbeat,
+            schedule_to_close=s.schedule_to_close,
+            schedule_to_start=s.schedule_to_start,
+            start_to_close=s.start_to_close,
             **self.defaults
         )
         scheduler.remote_activity.assert_called_once_with(
             input=serializer([1, 2], dict(x=1, y=2)),
-            heartbeat=None,
-            schedule_to_close=None,
-            schedule_to_start=None,
-            start_to_close=None,
-            task_list=None,
-            retry=3,
-            delay=0,
-            error_handling=False,
+            heartbeat=s.heartbeat,
+            schedule_to_close=s.schedule_to_close,
+            schedule_to_start=s.schedule_to_start,
+            start_to_close=s.start_to_close,
             **self.defaults
         )
         self.assertEquals(result, s.sched_value)
@@ -231,16 +235,14 @@ class TestArgsDependencyScheduler(unittest.TestCase):
             args=[1, 2],
             kwargs=dict(x=1, y=2),
             args_serializer=serializer,
+            workflow_duration=s.workflow_duration,
+            decision_duration=s.decision_duration,
             **self.defaults
         )
         scheduler.remote_subworkflow.assert_called_once_with(
             input=serializer([1, 2], dict(x=1, y=2)),
-            workflow_duration=None,
-            decision_duration=None,
-            task_list=None,
-            retry=3,
-            delay=0,
-            error_handling=False,
+            workflow_duration=s.workflow_duration,
+            decision_duration=s.decision_duration,
             **self.defaults
         )
         self.assertEquals(result, s.sched_value)
@@ -248,10 +250,12 @@ class TestArgsDependencyScheduler(unittest.TestCase):
     def test_placeholder_in_args(self):
         from flowy.result import Placeholder
         uut, scheduler = self._get_uut()
-        result = uut.remote_activity(
+        result = uut.remote_subworkflow(
             args=[Placeholder(), 2],
             kwargs=dict(x=1, y=2),
             args_serializer=Mock(),
+            workflow_duration=s.workflow_duration,
+            decision_duration=s.decision_duration,
             **self.defaults
         )
         self.assertIsInstance(result, Placeholder)
@@ -263,6 +267,8 @@ class TestArgsDependencyScheduler(unittest.TestCase):
             args=[1, 2],
             kwargs=dict(x=Placeholder(), y=2),
             args_serializer=Mock(),
+            workflow_duration=s.workflow_duration,
+            decision_duration=s.decision_duration,
             **self.defaults
         )
         self.assertIsInstance(result, Placeholder)
@@ -270,12 +276,15 @@ class TestArgsDependencyScheduler(unittest.TestCase):
     def test_error_without_handling(self):
         from flowy.result import Error, Placeholder
         uut, scheduler = self._get_uut()
+        defaults = dict(self.defaults)
+        defaults['error_handling'] = False
         result = uut.remote_subworkflow(
             args=[1, Error('error')],
             kwargs=dict(x=Error('msg'), y=2),
             args_serializer=Mock(),
-            error_handling=False,
-            **self.defaults
+            workflow_duration=s.workflow_duration,
+            decision_duration=s.decision_duration,
+            **defaults
         )
         self.assertIsInstance(result, Placeholder)
         scheduler.fail.assert_called_once_with(reason='error\nmsg')
@@ -283,11 +292,14 @@ class TestArgsDependencyScheduler(unittest.TestCase):
     def test_error_with_handling(self):
         from flowy.result import Error
         uut, scheduler = self._get_uut()
+        defaults = dict(self.defaults)
+        defaults['error_handling'] = True
         result = uut.remote_subworkflow(
             args=[1, Error('error')],
             kwargs=dict(x=Error('msg'), y=2),
             args_serializer=Mock(),
-            error_handling=True,
-            **self.defaults
+            workflow_duration=s.workflow_duration,
+            decision_duration=s.decision_duration,
+            **defaults
         )
         self.assertIsInstance(result, Error)

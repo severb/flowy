@@ -120,14 +120,9 @@ class ArgsDependencyScheduler(object):
 
     def remote_activity(self, task_id, args, kwargs,
                         args_serializer, result_deserializer,
-                        heartbeat=None,
-                        schedule_to_close=None,
-                        schedule_to_start=None,
-                        start_to_close=None,
-                        task_list=None,
-                        retry=3,
-                        delay=0,
-                        error_handling=False):
+                        heartbeat, schedule_to_close,
+                        schedule_to_start, start_to_close,
+                        task_list, retry, delay, error_handling):
         result = self._args_based_result(args, kwargs, error_handling)
         if result is not None:
             return result
@@ -147,12 +142,8 @@ class ArgsDependencyScheduler(object):
 
     def remote_subworkflow(self, task_id, args, kwargs,
                            args_serializer, result_deserializer,
-                           workflow_duration=None,
-                           decision_duration=None,
-                           task_list=None,
-                           retry=3,
-                           delay=0,
-                           error_handling=False):
+                           workflow_duration, decision_duration,
+                           task_list, retry, delay, error_handling):
         result = self._args_based_result(args, kwargs, error_handling)
         if result is not None:
             return result
