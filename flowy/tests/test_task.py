@@ -37,19 +37,31 @@ class TestTask(unittest.TestCase):
         task.run.assert_called_once_with()
 
 
-class TestTransport(unittest.TestCase):
-    def test_arguments(self):
+class TestTaskProxy(unittest.TestCase):
+    def _get_uut(self, runtime=s.runtime,  args=[], kwargs={}):
         from flowy.task import Task, TaskProxy
-        tp = TaskProxy(None, None)
-        serialized_input = tp._serialize_arguments(1, 'a', x=2)
-        t = Task(input=serialized_input, runtime=Mock())
+        if runtime == s.runtime:
+            runtime = Mock()
+        tp = TaskProxy()
+        input = tp._serialize_arguments(*args, **kwargs)
+        t = Task(input=input, runtime=runtime)
+        return tp, t
+
+    def test_arguments(self):
+        tp, t = self._get_uut(args=[1, 'a'], kwargs={'x': 2})
         a, kw = t._deserialize_arguments()
         self.assertEquals(a, [1, 'a'])
         self.assertEquals(kw, {'x': 2})
 
     def test_results(self):
-        from flowy.task import Task, TaskProxy
-        tp = TaskProxy(None, None)
-        t = Task(None, None)
+        tp, t = self._get_uut()
         r = tp._deserialize_result(t._serialize_result([1, 'a']))
         self.assertEquals(r, [1, 'a'])
+
+    def test_runtime(self):
+        from flowy.task import TaskProxy, Task
+        class A(Task):
+            tp = TaskProxy()
+        x = A.tp
+        print(x)
+        self.assertTrue(False)
