@@ -148,8 +148,3 @@ def posint_or_none(i):
 def str_or_none(s):
     if s is not None:
         return str(s)
-
-
-def int_or_none(i):
-    if i is not None:
-        return int(i)

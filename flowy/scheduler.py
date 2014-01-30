@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 
-from flowy import str_or_none, posint_or_none
-from flowy.result import Placeholder, Error, Result
+from flowy import posint_or_none, str_or_none
+from flowy.result import Error, Placeholder, Result
 
 
 _sentinel = object()
@@ -15,23 +15,18 @@ class OptionsScheduler(object):
 
     def remote_activity(self, task_id, args, kwargs,
                         args_serializer, result_deserializer,
-                        heartbeat=None,
-                        schedule_to_close=None,
-                        schedule_to_start=None,
-                        start_to_close=None,
-                        task_list=None,
-                        retry=3,
-                        delay=0,
-                        error_handling=False):
+                        heartbeat, schedule_to_close,
+                        schedule_to_start, start_to_close,
+                        task_list, retry, delay, error_handling):
         options = dict(
-            heartbeat=posint_or_none(heartbeat),
-            schedule_to_close=posint_or_none(schedule_to_close),
-            schedule_to_start=posint_or_none(schedule_to_start),
-            start_to_close=posint_or_none(start_to_close),
-            task_list=str_or_none(task_list),
-            retry=max(int(retry), 0),
-            delay=max(int(delay), 0),
-            error_handling=bool(error_handling)
+            heartbeat=heartbeat,
+            schedule_to_close=schedule_to_close,
+            schedule_to_start=schedule_to_start,
+            start_to_close=start_to_close,
+            task_list=task_list,
+            retry=retry,
+            delay=delay,
+            error_handling=error_handling
         )
         options.update(self._activity_options_stack[-1])
         self._scheduler.remote_activity(
@@ -43,19 +38,15 @@ class OptionsScheduler(object):
 
     def remote_subworkflow(self, task_id, args, kwargs,
                            args_serializer, result_deserializer,
-                           workflow_duration=None,
-                           decision_duration=None,
-                           task_list=None,
-                           retry=3,
-                           delay=0,
-                           error_handling=False):
+                           workflow_duration, decision_duration,
+                           task_list, retry, delay, error_handling):
         options = dict(
-            workflow_duration=posint_or_none(workflow_duration),
-            decision_duration=posint_or_none(decision_duration),
-            task_list=str_or_none(task_list),
-            retry=max(int(retry), 0),
-            delay=max(int(delay), 0),
-            error_handling=bool(error_handling)
+            workflow_duration=workflow_duration,
+            decision_duration=decision_duration,
+            task_list=task_list,
+            retry=retry,
+            delay=delay,
+            error_handling=error_handling
         )
         options.update(self._subworkflow_options_stack[-1])
         self._scheduler.remote_subworkflow(

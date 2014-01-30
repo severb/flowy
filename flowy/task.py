@@ -1,7 +1,7 @@
 import json
 from functools import partial
 
-from flowy import int_or_none, str_or_none
+from flowy import posint_or_none, str_or_none
 
 
 class SuspendTask(Exception):
@@ -94,13 +94,13 @@ class ActivityProxy(TaskProxy):
                  error_handling=False):
         self._kwargs = dict(
             task_id=task_id,
-            heartbeat=int_or_none(heartbeat),
-            schedule_to_close=int_or_none(schedule_to_close),
-            schedule_to_start=int_or_none(schedule_to_start),
-            stat_to_close=int_or_none(start_to_close),
+            heartbeat=posint_or_none(heartbeat),
+            schedule_to_close=posint_or_none(schedule_to_close),
+            schedule_to_start=posint_or_none(schedule_to_start),
+            stat_to_close=posint_or_none(start_to_close),
             task_list=str_or_none(task_list),
-            retry=int(retry),
-            delay=int(delay),
+            retry=max(int(retry), 0),
+            delay=max(int(delay), 0),
             error_handling=bool(error_handling)
         )
 
@@ -123,11 +123,11 @@ class WorkflowProxy(TaskProxy):
                  error_handling=False):
         self._kwargs = dict(
             task_id=task_id,
-            decision_duration=int_or_none(decision_duration),
-            workflow_duration=int_or_none(workflow_duration),
+            decision_duration=posint_or_none(decision_duration),
+            workflow_duration=posint_or_none(workflow_duration),
             task_list=str_or_none(task_list),
-            retry=int(retry),
-            delay=int(delay),
+            retry=max(int(retry), 0),
+            delay=max(int(delay), 0),
             error_handling=bool(error_handling)
         )
 

@@ -19,77 +19,49 @@ class TestOptionsScheduler(unittest.TestCase):
             decision_runtime = Mock()
         return OptionsScheduler(decision_runtime), decision_runtime
 
-    def test_remote_activity_defaults(self):
-        uut, scheduler = self._get_uut()
-        uut.remote_activity(**self.defaults)
-        scheduler.remote_activity.assert_called_once_with(
-            heartbeat=None,
-            schedule_to_close=None,
-            schedule_to_start=None,
-            start_to_close=None,
-            task_list=None,
-            retry=3,
-            delay=0,
-            error_handling=False,
-            **self.defaults
-        )
-
-    def test_remote_workflow_defaults(self):
-        uut, scheduler = self._get_uut()
-        uut.remote_subworkflow(**self.defaults)
-        scheduler.remote_subworkflow.assert_called_once_with(
-            workflow_duration=None,
-            decision_duration=None,
-            task_list=None,
-            retry=3,
-            delay=0,
-            error_handling=False,
-            **self.defaults
-        )
-
     def test_remote_activity_other_values(self):
         uut, scheduler = self._get_uut()
         uut.remote_activity(
-            heartbeat=-5,
-            schedule_to_close='10',
-            schedule_to_start=15,
-            start_to_close=20.1,
-            task_list='list',
-            retry=-5,
-            delay='10',
-            error_handling=1,
+            heartbeat=s.heartbeat,
+            schedule_to_close=s.schedule_to_close,
+            schedule_to_start=s.schedule_to_start,
+            start_to_close=s.start_to_close,
+            task_list=s.task_list,
+            retry=s.retry,
+            delay=s.delay,
+            error_handling=s.error_handling,
             **self.defaults
         )
         scheduler.remote_activity.assert_called_once_with(
-            heartbeat=None,
-            schedule_to_close=10,
-            schedule_to_start=15,
-            start_to_close=20,
-            task_list='list',
-            retry=0,
-            delay=10,
-            error_handling=True,
+            heartbeat=s.heartbeat,
+            schedule_to_close=s.schedule_to_close,
+            schedule_to_start=s.schedule_to_start,
+            start_to_close=s.start_to_close,
+            task_list=s.task_list,
+            retry=s.retry,
+            delay=s.delay,
+            error_handling=s.error_handling,
             **self.defaults
         )
 
     def test_remote_workflow_other_values(self):
         uut, scheduler = self._get_uut()
         uut.remote_subworkflow(
-            workflow_duration=-1,
-            decision_duration='100',
-            task_list='list',
-            retry=-5,
-            delay='10',
-            error_handling=1,
+            workflow_duration=s.workflow_duration,
+            decision_duration=s.decision_duration,
+            task_list=s.task_list,
+            retry=s.retry,
+            delay=s.delay,
+            error_handling=s.error_handling,
             **self.defaults
         )
         scheduler.remote_subworkflow.assert_called_once_with(
-            workflow_duration=None,
-            decision_duration=100,
-            task_list='list',
-            retry=0,
-            delay=10,
-            error_handling=True,
+            workflow_duration=s.workflow_duration,
+            decision_duration=s.decision_duration,
+            task_list=s.task_list,
+            retry=s.retry,
+            delay=s.delay,
+            error_handling=s.error_handling,
             **self.defaults
         )
 
@@ -107,19 +79,74 @@ class TestOptionsScheduler(unittest.TestCase):
             delay='10',
             error_handling=1,
         ):
-            uut.remote_activity(**self.defaults)
-            uut.remote_subworkflow(**self.defaults)
+            uut.remote_activity(
+                heartbeat=None,
+                schedule_to_close=None,
+                schedule_to_start=None,
+                start_to_close=None,
+                task_list=None,
+                retry=None,
+                delay=None,
+                error_handling=True,
+                **self.defaults
+            )
+            uut.remote_subworkflow(
+                workflow_duration=None,
+                decision_duration=None,
+                task_list=None,
+                retry=None,
+                delay=None,
+                error_handling=True,
+                **self.defaults
+            )
             with uut.options(
                 retry=15,
                 task_list='list2',
                 heartbeat='5',
                 decision_duration=None
             ):
-                uut.remote_activity(retry=2, task_list='t', **self.defaults)
-                uut.remote_subworkflow(retry=2, task_list='t', **self.defaults)
-            uut.remote_activity(retry=2, task_list='t', **self.defaults)
-        uut.remote_activity(retry=2, task_list='t', **self.defaults)
-
+                uut.remote_activity(
+                    heartbeat=None,
+                    schedule_to_close=None,
+                    schedule_to_start=None,
+                    start_to_close=None,
+                    task_list=None,
+                    retry=None,
+                    delay=None,
+                    error_handling=True,
+                    **self.defaults
+                )
+                uut.remote_subworkflow(
+                    workflow_duration=None,
+                    decision_duration=None,
+                    task_list=None,
+                    retry=None,
+                    delay=None,
+                    error_handling=True,
+                    **self.defaults
+                )
+            uut.remote_activity(
+                heartbeat=None,
+                schedule_to_close=None,
+                schedule_to_start=None,
+                start_to_close=None,
+                task_list=None,
+                retry=None,
+                delay=None,
+                error_handling=True,
+                **self.defaults
+            )
+        uut.remote_activity(
+            heartbeat=s.heartbeat,
+            schedule_to_close=s.schedule_to_close,
+            schedule_to_start=s.schedule_to_start,
+            start_to_close=s.start_to_close,
+            task_list=s.task_list,
+            retry=s.retry,
+            delay=s.delay,
+            error_handling=s.error_handling,
+            **self.defaults
+        )
         scheduler.remote_activity.assert_has_calls([
             call(
                 heartbeat=None,
@@ -155,14 +182,14 @@ class TestOptionsScheduler(unittest.TestCase):
                 **self.defaults
             ),
             call(
-                heartbeat=None,
-                schedule_to_close=None,
-                schedule_to_start=None,
-                start_to_close=None,
-                task_list='t',
-                retry=2,
-                delay=0,
-                error_handling=False,
+                heartbeat=s.heartbeat,
+                schedule_to_close=s.schedule_to_close,
+                schedule_to_start=s.schedule_to_start,
+                start_to_close=s.start_to_close,
+                task_list=s.task_list,
+                retry=s.retry,
+                delay=s.delay,
+                error_handling=s.error_handling,
                 **self.defaults
             ),
         ])
