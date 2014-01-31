@@ -72,12 +72,12 @@ class ActivitySpecCollector(object):
 
 class WorkflowSpecCollector(ActivitySpecCollector):
     def collect(self, task_id, task_factory, task_list,
-                decision_duration, workflow_duration):
+                workflow_duration, decision_duration):
         self._specs.append(self._spec_factory(
             task_id=task_id,
             task_factory=task_factory,
             client=self._client,
             task_list=task_list,
-            decision_duration=decision_duration,
-            workflow_duration=workflow_duration
+            workflow_duration=workflow_duration,
+            decision_duration=decision_duration
         ))
