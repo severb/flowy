@@ -39,6 +39,15 @@ class TestTask(unittest.TestCase):
         scheduler.fail.assert_called_once_with('err')
 
 
+class TestHeartbeat(unittest.TestCase):
+
+    def test_heartbeat(self):
+        from flowy.task import Activity
+        scheduler = Mock()
+        a = Activity(input=s.input, scheduler=scheduler)
+        a.heartbeat()
+        scheduler.heartbeat.assert_called_once_with()
+
 class TestWorkflow(unittest.TestCase):
     def _get_uut(self):
         from flowy.task import Workflow
@@ -49,6 +58,11 @@ class TestWorkflow(unittest.TestCase):
         uut, scheduler = self._get_uut()
         uut.restart(1, 2, a=1, b=2)
         scheduler.restart.assert_called_once_with('[[1, 2], {"a": 1, "b": 2}]')
+
+    def test_options(self):
+        uut, scheduler = self._get_uut()
+        uut.options(x=1, y=2, z='abc')
+        scheduler.options.assert_called_once_with(x=1, y=2, z='abc')
 
 
 class TestTaskProxy(unittest.TestCase):
@@ -104,6 +118,13 @@ class TestActivityProxy(unittest.TestCase):
             delay=10,
             error_handling=True
         )
+
+    def test_no_scheduler(self):
+        class X(object):
+            a = self._get_uut()
+
+        x = X()
+        self.assertRaises(AttributeError, lambda: x.a())
 
 
 class TestWorkflowProxy(unittest.TestCase):
