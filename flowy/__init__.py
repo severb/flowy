@@ -2,23 +2,6 @@ import functools
 import inspect
 import types
 from itertools import izip_longest
-from UserDict import DictMixin
-
-
-class NotNoneDict(DictMixin, dict):
-    def __init__(self, d=None, **kwargs):
-        super(NotNoneDict, self).__init__()
-        if d is not None:
-            for k, v in d.items():
-                if v is not None:
-                    self[k] = v
-        for k, v in kwargs.items():
-            if v is not None:
-                self[k] = v
-
-    def __setitem__(self, key, value):
-        if value is not None:
-            super(NotNoneDict, self).__setitem__(key, value)
 
 
 class MagicBind(object):
