@@ -1,27 +1,38 @@
 import sys
 
 import venusian
-from flowy import NotNoneDict
 
 
 def activity(task_id, task_list,
-             heartbeat=None,
-             schedule_to_close=None,
-             schedule_to_start=None,
-             start_to_close=None):
+             heartbeat=60,
+             schedule_to_close=420,
+             schedule_to_start=120,
+             start_to_close=300):
+
+    task_list = str(task_list)
+    heartbeat = int(heartbeat)
+    if heartbeat <= 0:
+        raise ValueError('heartbeat must be positive')
+    schedule_to_close = int(schedule_to_close)
+    if schedule_to_close <= 0:
+        raise ValueError('schedule_to_close must be positive')
+    schedule_to_start = int(schedule_to_start)
+    if schedule_to_start <= 0:
+        raise ValueError('schedule_to_start must be positive')
+    start_to_close = int(start_to_close)
+    if start_to_close <= 0:
+        raise ValueError('start_to_close must be positive')
+
     def wrapper(task_factory):
         def callback(scanner, n, obj):
-            kwargs = NotNoneDict(
-                heartbeat=heartbeat,
-                schedule_to_close=schedule_to_close,
-                schedule_to_start=schedule_to_start,
-                start_to_close=start_to_close
-            )
             scanner.collector.collect(
                 task_id=task_id,
                 task_factory=task_factory,
                 task_list=task_list,
-                **kwargs
+                heartbeat=heartbeat,
+                schedule_to_close=schedule_to_close,
+                schedule_to_start=schedule_to_start,
+                start_to_close=start_to_close,
             )
         venusian.attach(task_factory, callback, category='activity')
         return task_factory
@@ -29,19 +40,25 @@ def activity(task_id, task_list,
 
 
 def workflow(task_id, task_list,
-             decision_duration=None,
-             workflow_duration=None):
+             workflow_duration=3600,
+             decision_duration=60):
+
+    task_list = str(task_list)
+    workflow_duration = int(workflow_duration)
+    if workflow_duration <= 0:
+        raise ValueError('workflow_duration must be positive')
+    decision_duration = int(decision_duration)
+    if decision_duration <= 0:
+        raise ValueError('decision_duration must be positive')
+
     def wrapper(task_factory):
         def callback(scanner, n, obj):
-            kwargs = NotNoneDict(
-                decision_duration=decision_duration,
-                workflow_duration=workflow_duration
-            )
             scanner.collector.collect(
                 task_id=task_id,
                 task_factory=task_factory,
                 task_list=task_list,
-                **kwargs
+                workflow_duration=workflow_duration,
+                decision_duration=decision_duration
             )
         venusian.attach(task_factory, callback, category='workflow')
         return task_factory
