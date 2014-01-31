@@ -13,11 +13,11 @@ class TestOptionsScheduler(unittest.TestCase):
         result_deserializer=s.result_deserializer,
     )
 
-    def _get_uut(self, decision_runtime=None):
+    def _get_uut(self, scheduler=None):
         from flowy.scheduler import OptionsScheduler
-        if decision_runtime is None:
-            decision_runtime = Mock()
-        return OptionsScheduler(decision_runtime), decision_runtime
+        if scheduler is None:
+            scheduler = Mock()
+        return OptionsScheduler(scheduler), scheduler
 
     def test_remote_activity_other_values(self):
         uut, scheduler = self._get_uut()

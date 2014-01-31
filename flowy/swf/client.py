@@ -1,6 +1,6 @@
 from boto.swf.exceptions import SWFResponseError
 
-from flowy.runtime import OptionsRuntime
+from flowy.scheduler import OptionsScheduler
 from flowy.swf import SWFTaskId
 from flowy.swf.runtime import ActivityRuntime, DecisionRuntime
 
@@ -53,7 +53,7 @@ class ActivityPollerClient(object):
 
 
 def decision_runtime(client, running, timedout, results, errors):
-    return OptionsRuntime(
+    return OptionsScheduler(
         DecisionRuntime(
             client=client,
             running=running,
