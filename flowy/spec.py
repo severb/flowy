@@ -10,7 +10,9 @@ class TaskSpec(object):
         )
 
     def __repr__(self):
-        return '%s(%r, %r)' % self.__class__, self.task_id, self.task_factory
+        return '%s(%r, %r)' % (
+            self.__class__.__name__, self._task_id, self._task_factory
+        )
 
 
 class RemoteTaskSpec(TaskSpec):
@@ -54,10 +56,8 @@ class ActivitySpecCollector(object):
         return unregistered_spec
 
     def collect(self, task_id, task_factory, task_list,
-                heartbeat=60,
-                schedule_to_close=420,
-                schedule_to_start=120,
-                start_to_close=300):
+                heartbeat, schedule_to_close,
+                schedule_to_start, start_to_close):
         self._specs.append(self._spec_factory(
             task_id=task_id,
             task_factory=task_factory,
@@ -72,8 +72,7 @@ class ActivitySpecCollector(object):
 
 class WorkflowSpecCollector(ActivitySpecCollector):
     def collect(self, task_id, task_factory, task_list,
-                decision_duration=60,
-                workflow_duration=3600):
+                decision_duration, workflow_duration):
         self._specs.append(self._spec_factory(
             task_id=task_id,
             task_factory=task_factory,
