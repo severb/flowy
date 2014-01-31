@@ -25,23 +25,23 @@ class TaskTimedout(TaskError):
 
 
 class Task(object):
-    def __init__(self, input, runtime):
+    def __init__(self, input, scheduler):
         self._input = str(input)
-        self._runtime = runtime
+        self._scheduler = scheduler
 
     def __call__(self):
         try:
             args, kwargs = self._deserialize_arguments()
             result = self.run(*args, **kwargs)
         except SuspendTask:
-            self._runtime.suspend()
+            self._scheduler.suspend()
         except Exception as e:
-            self._runtime.fail(str(e))
+            self._scheduler.fail(str(e))
         else:
-            self._runtime.complete(self._serialize_result(result))
+            self._scheduler.complete(self._serialize_result(result))
 
     def run(self, *args, **kwargs):
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     def _serialize_result(self, result):
         return json.dumps(result)
@@ -52,16 +52,16 @@ class Task(object):
 
 class Activity(Task):
     def heartbeat(self):
-        return self._runtime.heartbeat()
+        return self._scheduler.heartbeat()
 
 
 class Workflow(Task):
     def options(self, **kwargs):
-        self._runtime.options(**kwargs)
+        self._scheduler.options(**kwargs)
 
     def restart(self, *args, **kwargs):
-        arguments = self.serialize_restart_arguments(*args, **kwargs)
-        return self._runtime.restart(arguments)
+        arguments = self._serialize_restart_arguments(*args, **kwargs)
+        return self._scheduler.restart(arguments)
 
     def _serialize_restart_arguments(self, *args, **kwargs):
         return json.dumps([args, kwargs])
@@ -71,9 +71,9 @@ class TaskProxy(object):
     def __get__(self, obj, objtype):
         if obj is None:
             return self
-        if not hasattr(obj, '_runtime'):
-            raise AttributeError('no runtime bound to the task')
-        return partial(self, obj._runtime)
+        if not hasattr(obj, '_scheduler'):
+            raise AttributeError('no scheduler bound to the task')
+        return partial(self, obj._scheduler)
 
     def _serialize_arguments(self, *args, **kwargs):
         return json.dumps([args, kwargs])
@@ -97,15 +97,15 @@ class ActivityProxy(TaskProxy):
             heartbeat=posint_or_none(heartbeat),
             schedule_to_close=posint_or_none(schedule_to_close),
             schedule_to_start=posint_or_none(schedule_to_start),
-            stat_to_close=posint_or_none(start_to_close),
+            start_to_close=posint_or_none(start_to_close),
             task_list=str_or_none(task_list),
             retry=max(int(retry), 0),
             delay=max(int(delay), 0),
             error_handling=bool(error_handling)
         )
 
-    def __call__(self, runtime, *args, **kwargs):
-        return runtime.remote_activity(
+    def __call__(self, scheduler, *args, **kwargs):
+        return scheduler.remote_activity(
             args=args, kwargs=kwargs,
             args_serializer=self._serialize_arguments,
             result_deserializer=self._deserialize_result,
@@ -131,8 +131,8 @@ class WorkflowProxy(TaskProxy):
             error_handling=bool(error_handling)
         )
 
-    def __call__(self, runtime, *args, **kwargs):
-        return runtime.remote_subworkflow(
+    def __call__(self, scheduler, *args, **kwargs):
+        return scheduler.remote_subworkflow(
             args=args, kwargs=kwargs,
             args_serializer=self._serialize_arguments,
             result_deserializer=self._deserialize_result,

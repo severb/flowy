@@ -5,63 +5,139 @@ from mock import Mock
 
 
 class TestTask(unittest.TestCase):
-
-    def _get_uut(self, input='[[], {}]', runtime=None):
+    def _get_uut(self, input='[[], {}]', scheduler=None):
         from flowy.task import Task
-        if runtime is None:
-            runtime = Mock()
-        return Task(input, runtime), runtime
+        if scheduler is None:
+            scheduler = Mock()
+        return Task(input, scheduler), scheduler
 
     def test_successful_run(self):
-        task, runtime = self._get_uut(
+        task, scheduler = self._get_uut(
             input='[[1, "a"], {"x": 2, "y": "y"}]',
         )
         task.run = Mock()
         task.run.return_value = [1, 2, 'a']
         task()
         task.run.assert_called_once_with(1, 'a', x=2, y='y')
+        scheduler.complete.assert_called_once_with('[1, 2, "a"]')
 
     def test_suspend_task(self):
-        task, runtime = self._get_uut()
+        task, scheduler = self._get_uut()
         task.run = Mock()
         from flowy.task import SuspendTask
         task.run.side_effect = SuspendTask()
         task()
         task.run.assert_called_once_with()
+        scheduler.suspend.assert_called_once_with()
 
     def test_fail_task(self):
-        task, runtime = self._get_uut()
+        task, scheduler = self._get_uut()
         task.run = Mock()
         task.run.side_effect = RuntimeError('err')
         task()
         task.run.assert_called_once_with()
+        scheduler.fail.assert_called_once_with('err')
+
+
+class TestWorkflow(unittest.TestCase):
+    def _get_uut(self):
+        from flowy.task import Workflow
+        scheduler = Mock()
+        return Workflow(input=s.input, scheduler=scheduler), scheduler
+
+    def test_restart(self):
+        uut, scheduler = self._get_uut()
+        uut.restart(1, 2, a=1, b=2)
+        scheduler.restart.assert_called_once_with('[[1, 2], {"a": 1, "b": 2}]')
 
 
 class TestTaskProxy(unittest.TestCase):
-    def _get_uut(self, runtime=s.runtime,  args=[], kwargs={}):
+    def _get_uut(self, args=[], kwargs={}):
         from flowy.task import Task, TaskProxy
-        if runtime == s.runtime:
-            runtime = Mock()
         tp = TaskProxy()
         input = tp._serialize_arguments(*args, **kwargs)
-        t = Task(input=input, runtime=runtime)
+        t = Task(input=input, scheduler=Mock())
         return tp, t
-
-    def test_arguments(self):
-        tp, t = self._get_uut(args=[1, 'a'], kwargs={'x': 2})
-        a, kw = t._deserialize_arguments()
-        self.assertEquals(a, [1, 'a'])
-        self.assertEquals(kw, {'x': 2})
 
     def test_results(self):
         tp, t = self._get_uut()
         r = tp._deserialize_result(t._serialize_result([1, 'a']))
         self.assertEquals(r, [1, 'a'])
 
-    def test_runtime(self):
-        from flowy.task import TaskProxy, Task
-        class A(Task):
-            tp = TaskProxy()
-        x = A.tp
-        print(x)
-        self.assertTrue(False)
+
+class TestActivityProxy(unittest.TestCase):
+    def _get_uut(self):
+        from flowy.task import ActivityProxy
+        return ActivityProxy(
+            task_id=s.task_id,
+            heartbeat=-10,
+            schedule_to_close='100',
+            schedule_to_start=20,
+            start_to_close=20.2,
+            task_list=s.task_list,
+            retry=-3,
+            delay='10',
+            error_handling=s.error_handling
+        )
+
+    def test_binding(self):
+
+        class X(object):
+            _scheduler = Mock()
+            a = self._get_uut()
+
+        x = X()
+        x.a(1, 2, a=1, b=2)
+
+        X._scheduler.remote_activity.assert_called_once_with(
+            args=(1, 2),
+            kwargs=dict(a=1, b=2),
+            args_serializer=X.a._serialize_arguments,
+            result_deserializer=X.a._deserialize_result,
+            task_id=s.task_id,
+            heartbeat=None,
+            schedule_to_close=100,
+            schedule_to_start=20,
+            start_to_close=20,
+            task_list='sentinel.task_list',
+            retry=0,
+            delay=10,
+            error_handling=True
+        )
+
+
+class TestWorkflowProxy(unittest.TestCase):
+    def _get_uut(self):
+        from flowy.task import WorkflowProxy
+        return WorkflowProxy(
+            task_id=s.task_id,
+            workflow_duration=-10,
+            decision_duration='100',
+            task_list=s.task_list,
+            retry=-3,
+            delay='10',
+            error_handling=s.error_handling
+        )
+
+    def test_binding(self):
+
+        class X(object):
+            _scheduler = Mock()
+            a = self._get_uut()
+
+        x = X()
+        x.a(1, 2, a=1, b=2)
+
+        X._scheduler.remote_subworkflow.assert_called_once_with(
+            args=(1, 2),
+            kwargs=dict(a=1, b=2),
+            args_serializer=X.a._serialize_arguments,
+            result_deserializer=X.a._deserialize_result,
+            task_id=s.task_id,
+            workflow_duration=None,
+            decision_duration=100,
+            task_list='sentinel.task_list',
+            retry=0,
+            delay=10,
+            error_handling=True
+        )
