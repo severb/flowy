@@ -3,27 +3,13 @@ from flowy.scanner import workflow as w
 from flowy.swf import SWFTaskId
 
 
-def activity(name, version, task_list,
-             heartbeat=None,
-             schedule_to_close=None,
-             schedule_to_start=None,
-             start_to_close=None):
+def activity(name, version, task_list, **kwargs):
     return a(
-        task_id=SWFTaskId(name=str(name), version=str(version)),
-        task_list=task_list,
-        heartbeat=heartbeat,
-        schedule_to_close=schedule_to_close,
-        schedule_to_start=schedule_to_start,
-        start_to_close=start_to_close
+        task_id=SWFTaskId(name=str(name), version=str(version)), **kwargs
     )
 
 
-def workflow(name, version, task_list,
-             decision_duration=None,
-             workflow_duration=None):
+def workflow(name, version, task_list, **kwargs):
     return w(
-        task_id=SWFTaskId(name=str(name), version=str(version)),
-        task_list=task_list,
-        decision_duration=decision_duration,
-        workflow_duration=workflow_duration,
+        task_id=SWFTaskId(name=str(name), version=str(version)), **kwargs
     )
