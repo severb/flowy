@@ -6,14 +6,15 @@ from flowy.spec import RemoteTaskSpec
 class ActivitySpec(RemoteTaskSpec):
     def __init__(self, task_id, task_factory, client, task_list, heartbeat,
                  schedule_to_close, schedule_to_start, start_to_close):
-        self._name = str(task_id.name)
-        self._version = str(task_id.version)
+        self._name = task_id.name
+        self._version = task_id.version
         super(ActivitySpec, self).__init__(
             task_id=task_id,
             task_factory=task_factory,
             client=client
         )
-        self._task_list = str(task_list)
+        self._task_list = task_list
+        # Amazon SWF expects these values to be strings
         self._heartbeat = str(heartbeat)
         self._schedule_to_close = str(schedule_to_close)
         self._schedule_to_start = str(schedule_to_start)
@@ -54,14 +55,15 @@ class ActivitySpec(RemoteTaskSpec):
 class WorkflowSpec(RemoteTaskSpec):
     def __init__(self, task_id, task_factory, client, task_list,
                  decision_duration, workflow_duration):
-        self._name = str(task_id.name)
-        self._version = str(task_id.version)
+        self._name = task_id.name
+        self._version = task_id.version
         super(WorkflowSpec, self).__init__(
             task_id=task_id,
             task_factory=task_factory,
             client=client
         )
-        self._task_list = str(task_list)
+        # Amazon SWF expects these values to be strings
+        self._task_list = task_list
         self._decision_duration = str(decision_duration)
         self._workflow_duration = str(workflow_duration)
 
