@@ -191,7 +191,7 @@ class DecisionPoller(object):
             elif e_type == 'StartChildWorkflowExecutionFailed':
                 SCWEFEA = 'startChildWorkflowExecutionFailedEventAttributes'
                 id = _subworkflow_id(e[SCWEFEA]['workflowId'])
-                reason = e[SCWEIEA]['cause']
+                reason = e[SCWEFEA]['cause']
                 errors[id] = reason
             elif e_type == 'TimerStarted':
                 id = e['timerStartedEventAttributes']['timerId']

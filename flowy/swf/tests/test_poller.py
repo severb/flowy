@@ -168,3 +168,86 @@ class TestDecisionPoller(unittest.TestCase):
             scheduler=scheduler()
         )
         self.assertEquals(result, worker.make_task())
+
+
+    def test_workflow_event_parsing(self):
+        from flowy.swf import SWFTaskId
+
+        response = self.no_events_response
+        response['events'] = list(self.no_events_response['events'])
+        response['events'].extend([
+            {
+                'eventType': 'StartChildWorkflowExecutionInitiated',
+                'startChildWorkflowExecutionInitiatedEventAttributes': {
+                    'workflowId': 'a-1'
+                },
+            },
+            {
+                'eventType': 'StartChildWorkflowExecutionInitiated',
+                'startChildWorkflowExecutionInitiatedEventAttributes': {
+                    'workflowId': 'a-2'
+                },
+            },
+            {
+                'eventType': 'StartChildWorkflowExecutionInitiated',
+                'startChildWorkflowExecutionInitiatedEventAttributes': {
+                    'workflowId': 'a-3'
+                },
+            },
+            {
+                'eventType': 'StartChildWorkflowExecutionInitiated',
+                'startChildWorkflowExecutionInitiatedEventAttributes': {
+                    'workflowId': 'a-4'
+                },
+            },
+            {
+                'eventType': 'ChildWorkflowExecutionCompleted',
+                'childWorkflowExecutionCompletedEventAttributes': {
+                    'workflowExecution': {
+                        'workflowId': 'a-2'
+                    },
+                    'result': 'result'
+                }
+            },
+            {
+                'eventType': 'ChildWorkflowExecutionFailed',
+                'childWorkflowExecutionFailedEventAttributes': {
+                    'workflowExecution': {
+                        'workflowId': 'a-3'
+                    },
+                    'reason': 'reason'
+                }
+            },
+            {
+                'eventType': 'ChildWorkflowExecutionTimedOut',
+                'childWorkflowExecutionTimedOutEventAttributes': {
+                    'workflowExecution': {
+                        'workflowId': 'a-4'
+                    },
+                }
+            },
+            {
+                'eventType': 'StartChildWorkflowExecutionFailed',
+                'startChildWorkflowExecutionFailedEventAttributes': {
+                    'workflowId': 'a-0', 'cause': 'cause'
+                }
+            }
+        ])
+        uut, client, scheduler = self._get_uut()
+        client.poll_for_decision_task.return_value = response
+        worker = Mock()
+        result = uut.poll_next_task(worker)
+        scheduler.assert_called_once_with(
+            client=client,
+            token='token1',
+            running=set([1]),
+            timedout=set([4]),
+            results={2: 'result'},
+            errors={3: 'reason', 0: 'cause'},
+        )
+        worker.make_task.assert_called_once_with(
+            task_id=SWFTaskId('n', 'v1'),
+            input='in',
+            scheduler=scheduler()
+        )
+        self.assertEquals(result, worker.make_task())
