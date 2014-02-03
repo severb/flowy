@@ -38,7 +38,7 @@ class ActivityScheduler(object):
         return True
 
     def suspend(self):
-        pass
+        pass  # pragma: no cover
 
 
 class DecisionScheduler(object):

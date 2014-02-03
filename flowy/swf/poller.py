@@ -9,18 +9,18 @@ class _PaginationError(RuntimeError):
     """ A page of the history is unavailable. """
 
 
-class ActivityPollerClient(object):
-    def __init__(self, client, task_list, runtime_factory=ActivityScheduler):
+class ActivityPoller(object):
+    def __init__(self, client, task_list, scheduler=ActivityScheduler):
         self._client = client
         self._task_list = task_list
-        self._runtime_factory = runtime_factory
+        self._scheduler = scheduler
 
     def poll_next_task(self, worker):
         task = None
         while task is None:
             swf_response = self._poll_response()
             task_id, input, token = self._parse_response(swf_response)
-            runtime = self._runtime_factory(
+            runtime = self._scheduler(
                 client=self._client, token=token
             )
             task = worker.make_task(
@@ -64,11 +64,11 @@ def decision_runtime(client, running, timedout, results, errors):
     )
 
 
-class DecisionPollerClient(object):
-    def __init__(self, client, task_list, runtime_factory=decision_runtime):
+class DecisionPoller(object):
+    def __init__(self, client, task_list, scheduler=decision_runtime):
         self._client = client
         self._task_list = task_list
-        self._runtime_factory = runtime_factory
+        self._scheduler = scheduler
 
     def poll_next_task(self, worker):
         task = None
@@ -92,7 +92,7 @@ class DecisionPollerClient(object):
                 )
             except _PaginationError:
                 continue
-            runtime = self._runtime_factory(
+            runtime = self._scheduler(
                 client=self._client,
                 token=token,
                 running=running,
