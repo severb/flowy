@@ -7,7 +7,7 @@ from flowy import str_or_none
 from flowy.result import Error, Placeholder, Result, Timeout
 
 
-class ActivityRuntime(object):
+class ActivityScheduler(object):
     def __init__(self, client, token):
         self._client = client
         self._token = token
@@ -41,7 +41,7 @@ class ActivityRuntime(object):
         pass
 
 
-class DecisionRuntime(object):
+class DecisionScheduler(object):
     def __init__(self, client, token, running, timedout, results, errors):
         self._client = client
         self._token = token

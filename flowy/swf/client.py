@@ -2,7 +2,7 @@ from boto.swf.exceptions import SWFResponseError
 
 from flowy.scheduler import OptionsScheduler
 from flowy.swf import SWFTaskId
-from flowy.swf.runtime import ActivityRuntime, DecisionRuntime
+from flowy.swf.scheduler import ActivityScheduler, DecisionScheduler
 
 
 class _PaginationError(RuntimeError):
@@ -10,7 +10,7 @@ class _PaginationError(RuntimeError):
 
 
 class ActivityPollerClient(object):
-    def __init__(self, client, task_list, runtime_factory=ActivityRuntime):
+    def __init__(self, client, task_list, runtime_factory=ActivityScheduler):
         self._client = client
         self._task_list = task_list
         self._runtime_factory = runtime_factory
@@ -54,7 +54,7 @@ class ActivityPollerClient(object):
 
 def decision_runtime(client, running, timedout, results, errors):
     return OptionsScheduler(
-        DecisionRuntime(
+        DecisionScheduler(
             client=client,
             running=running,
             timedout=timedout,
