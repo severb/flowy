@@ -15,6 +15,7 @@ class MagicBind(object):
         google_session.get()
 
     >>> class Test(object):
+    ...     a = 100
     ...     def no_args(self):
     ...         return self
     ...     def two_positional(self, x, y):
@@ -27,9 +28,14 @@ class MagicBind(object):
     ...         return x, y, args, list(sorted(kwargs.items()))
     ...     def only_args_kwargs(self, *args, **kwargs):
     ...         return args, list(sorted(kwargs.items()))
+    ...     @staticmethod
+    ...     def static(x, y, z):
+    ...         return x, y, z
 
     >>> t = Test()
     >>> mb = MagicBind(t, x=10)
+    >>> mb.a
+    100
     >>> mb.no_args() is t
     True
     >>> mb.two_positional(20)
@@ -53,6 +59,8 @@ class MagicBind(object):
     ((20, 30, 40), [('w', 60), ('z', 50)])
     >>> mb.only_args_kwargs(10, 20, x=30, y=40)
     ((10, 20), [('x', 30), ('y', 40)])
+    >>> mb.static(20, 30)
+    (10, 20, 30)
 
     """
     def __init__(self, obj, **kwargs):

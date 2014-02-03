@@ -1,5 +1,5 @@
 import unittest
-from mock import create_autospec, Mock, call
+from mock import Mock
 from mock import sentinel as s
 
 
@@ -24,14 +24,11 @@ class SWFActivitySpecTest(unittest.TestCase):
         from flowy.swf.spec import ActivitySpec
         from flowy.swf import SWFTaskId
         if client is s.sentinel:
-            from boto.swf.layer1 import Layer1
-            # client = create_autospec(Layer1, instance=True)
-            client = Mock()    # we're using a wrapper around Layer1 so we
-                               # don't have to pass domain everytime
+            client = Mock()
         if task_factory is s.sentinel:
             task_factory = Mock()
         return ActivitySpec(
-            task_id=SWFTaskId(name,version),
+            task_id=SWFTaskId(name, version),
             task_list=task_list,
             client=client,
             heartbeat=heartbeat,
@@ -48,6 +45,19 @@ class SWFActivitySpecTest(unittest.TestCase):
         spec.register(poller)
         poller.register.assert_called_once_with(
             task_id=SWFTaskId(name='n', version='v'), task_factory=factory
+        )
+
+    def test_register_skip_worker_registration(self):
+        spec, client, factory = self._get_uut(name='n', version='v')
+        spec.register(worker=None)
+        client.register_activity_type.assert_called_once_with(
+            name='n',
+            version='v',
+            task_list='task_list',
+            default_task_heartbeat_timeout='60',
+            default_task_schedule_to_close_timeout='420',
+            default_task_schedule_to_start_timeout='120',
+            default_task_start_to_close_timeout='300',
         )
 
     def test_remote_register_successful_as_new(self):
@@ -146,10 +156,7 @@ class SWFWorkflowSpecTest(unittest.TestCase):
         from flowy.swf.spec import WorkflowSpec
         from flowy.swf import SWFTaskId
         if client is None:
-            from boto.swf.layer1 import Layer1
-            # client = create_autospec(Layer1, instance=True)
-            client = Mock()    # we're using a wrapper around Layer1 so we
-                               # don't have to pass domain everytime
+            client = Mock()
         if task_factory is s.sentinel:
             task_factory = Mock()
         return WorkflowSpec(
@@ -183,8 +190,9 @@ class SWFWorkflowSpecTest(unittest.TestCase):
             name='n', version='v'
         )
         client.register_workflow_type.side_effect = swf_error()
-        client.describe_workflow_type.return_value = {'configuration': {
-                'defaultTaskList': {'name':'aaa'},
+        client.describe_workflow_type.return_value = {
+            'configuration': {
+                'defaultTaskList': {'name': 'aaa'},
                 'defaultExecutionStartToCloseTimeout': 10,
                 'defaultTaskStartToCloseTimeout': 30
             }

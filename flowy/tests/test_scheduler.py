@@ -90,18 +90,19 @@ class TestOptionsScheduler(unittest.TestCase):
                 error_handling=True,
                 **self.defaults
             )
-            uut.remote_subworkflow(
-                workflow_duration=None,
-                decision_duration=None,
-                task_list=None,
-                retry=None,
-                delay=None,
-                error_handling=True,
-                **self.defaults
-            )
+            with uut.options():
+                uut.remote_subworkflow(
+                    workflow_duration=None,
+                    decision_duration=None,
+                    task_list=None,
+                    retry=None,
+                    delay=None,
+                    error_handling=True,
+                    **self.defaults
+                )
             with uut.options(
                 retry=15,
-                task_list='list2',
+                task_list=None,
                 heartbeat='5',
                 decision_duration=None
             ):
@@ -164,7 +165,7 @@ class TestOptionsScheduler(unittest.TestCase):
                 schedule_to_close=10,
                 schedule_to_start=15,
                 start_to_close=20,
-                task_list='list2',
+                task_list=None,
                 retry=15,
                 delay=10,
                 error_handling=True,
@@ -206,7 +207,7 @@ class TestOptionsScheduler(unittest.TestCase):
             call(
                 workflow_duration=None,
                 decision_duration=None,
-                task_list='list2',
+                task_list=None,
                 retry=15,
                 delay=10,
                 error_handling=True,
@@ -321,12 +322,14 @@ class TestArgsDependencyScheduler(unittest.TestCase):
         uut, scheduler = self._get_uut()
         defaults = dict(self.defaults)
         defaults['error_handling'] = True
-        result = uut.remote_subworkflow(
+        result = uut.remote_activity(
             args=[1, Error('error')],
             kwargs=dict(x=Error('msg'), y=2),
             args_serializer=Mock(),
-            workflow_duration=s.workflow_duration,
-            decision_duration=s.decision_duration,
+            heartbeat=s.heartbeat,
+            schedule_to_close=s.schedule_to_close,
+            schedule_to_start=s.schedule_to_start,
+            start_to_close=s.start_to_close,
             **defaults
         )
         self.assertIsInstance(result, Error)

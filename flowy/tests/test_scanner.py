@@ -1,7 +1,7 @@
 import unittest
 
 from mock import sentinel as s
-from mock import Mock, call
+from mock import Mock, call, patch
 
 
 class TestRegistrationDecorators(unittest.TestCase):
@@ -75,3 +75,11 @@ class TestRegistrationDecorators(unittest.TestCase):
         self.assertRaises(ValueError, workflow, s.id, s.tl,
                           workflow_duration=-1)
 
+    @patch('venusian.Scanner')
+    def test_default_package(self, mock_scanner):
+        import flowy.tests
+        uut, _ = self._get_uut()
+        uut.scan_activities()
+        mock_scanner().scan.assert_called_once_with(
+            flowy.tests, categories=('activity',), ignore=None
+        )
