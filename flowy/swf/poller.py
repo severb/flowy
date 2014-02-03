@@ -20,13 +20,13 @@ class ActivityPoller(object):
         while task is None:
             swf_response = self._poll_response()
             task_id, input, token = self._parse_response(swf_response)
-            runtime = self._scheduler(
+            scheduler = self._scheduler(
                 client=self._client, token=token
             )
             task = worker.make_task(
                 task_id=task_id,
                 input=input,
-                runtime=runtime
+                scheduler=scheduler
             )
         return task
 
@@ -48,11 +48,11 @@ class ActivityPoller(object):
                     task_list=self._task_list
                 )
             except SWFResponseError:
-                pass  # Add a delay before retrying?
+                pass  # add a delay before retrying?
         return swf_response
 
 
-def decision_runtime(client, running, timedout, results, errors):
+def decision_scheduler(client, running, timedout, results, errors):
     return OptionsScheduler(
         DecisionScheduler(
             client=client,
@@ -65,7 +65,7 @@ def decision_runtime(client, running, timedout, results, errors):
 
 
 class DecisionPoller(object):
-    def __init__(self, client, task_list, scheduler=decision_runtime):
+    def __init__(self, client, task_list, scheduler=decision_scheduler):
         self._client = client
         self._task_list = task_list
         self._scheduler = scheduler
@@ -92,7 +92,7 @@ class DecisionPoller(object):
                 )
             except _PaginationError:
                 continue
-            runtime = self._scheduler(
+            scheduler = self._scheduler(
                 client=self._client,
                 token=token,
                 running=running,
@@ -103,7 +103,7 @@ class DecisionPoller(object):
             task = worker.make_task(
                 task_id=task_id,
                 input=input,
-                runtime=runtime
+                scheduler=scheduler
             )
         return task
 
@@ -221,7 +221,7 @@ class DecisionPoller(object):
         swf_response = None
         for _ in range(7):  # give up after a limited number of retries
             try:
-                swf_response = self._client.poll_for_activity_task(
+                swf_response = self._client.poll_for_decision_task(
                     task_list=self._task_list, next_page_token=page_token
                 )
                 break
