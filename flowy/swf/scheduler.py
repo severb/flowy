@@ -57,54 +57,45 @@ class DecisionScheduler(object):
                         schedule_to_start, start_to_close,
                         task_list, retry, delay, error_handling):
         initial_call_id = self._call_id
-        result = self._timer_result(delay)
-        if result is not None:
-            return result
-        result = self._search_result(
-            retry=retry,
-            result_deserializer=result_deserializer,
-            error_handling=error_handling
+        result = self._get_existing_result(
+            delay, retry, result_deserializer, error_handling
         )
-        if result:
-            return result
-        name, version = task_id
-        self._decisions.schedule_activity_task(
-            str(self._call_id), name, version,
-            heartbeat_timeout=str_or_none(heartbeat),
-            schedule_to_close_timeout=str_or_none(schedule_to_close),
-            schedule_to_start_timeout=str_or_none(schedule_to_start),
-            start_to_close_timeout=str_or_none(start_to_close),
-            task_list=str_or_none(task_list),
-            input=str(input)
-        )
+        if result is None:
+            name, version = task_id
+            self._decisions.schedule_activity_task(
+                str(self._call_id), name, version,
+                heartbeat_timeout=str_or_none(heartbeat),
+                schedule_to_close_timeout=str_or_none(schedule_to_close),
+                schedule_to_start_timeout=str_or_none(schedule_to_start),
+                start_to_close_timeout=str_or_none(start_to_close),
+                task_list=str_or_none(task_list),
+                input=str(input)
+            )
+            result = Placeholder()
         self._reserve_call_ids(initial_call_id, delay, retry)
-        return Placeholder()
+        return result
 
     def remote_subworkflow(self, task_id, input, result_deserializer,
                            workflow_duration, decision_duration,
                            task_list, retry, delay, error_handling):
         initial_call_id = self._call_id
-        result = self._timer_result(delay)
-        if result is not None:
-            return result
-        result = self._search_result(
-            retry=retry,
-            result_deserializer=result_deserializer,
-            error_handling=error_handling
+        result = self._get_existing_result(
+            delay, retry, result_deserializer, error_handling
         )
-        if result:
-            return result
-        name, version = task_id
-        subworkflow_id = '%s-%s' % (uuid.uuid4(), self._call_id)
-        self._decisions.start_child_workflow_execution(
-            subworkflow_id, name, version,
-            execution_start_to_close_timeout=str_or_none(workflow_duration),
-            task_start_to_close_timeout=str_or_none(decision_duration),
-            task_list=str_or_none(task_list),
-            input=str(input)
-        )
+        if result is None:
+            name, version = task_id
+            subworkflow_id = '%s-%s' % (uuid.uuid4(), self._call_id)
+            wf_duration = workflow_duration
+            self._decisions.start_child_workflow_execution(
+                subworkflow_id, name, version,
+                execution_start_to_close_timeout=str_or_none(wf_duration),
+                task_start_to_close_timeout=str_or_none(decision_duration),
+                task_list=str_or_none(task_list),
+                input=str(input)
+            )
+            result = Placeholder()
         self._reserve_call_ids(initial_call_id, delay, retry)
-        return Placeholder()
+        return result
 
     def complete(self, result):
         if not self._running and not self._decisions._data:
@@ -127,6 +118,19 @@ class DecisionScheduler(object):
         finally:
             self._decisions = Layer1Decisions()
 
+    def _get_existing_result(self, delay, retry, result_deserializer,
+                             error_handling):
+        result = self._timer_result(delay)
+        if result is not None:
+            return result
+        result = self._search_result(
+            retry=retry,
+            result_deserializer=result_deserializer,
+            error_handling=error_handling
+        )
+        if result:
+            return result
+
     def _reserve_call_ids(self, call_id, delay, retry):
         self._call_id = (
             1 + call_id         # one for the first call
@@ -139,7 +143,9 @@ class DecisionScheduler(object):
             if self._call_id in self._running:
                 return Placeholder()
             if self._call_id not in self._results:
-                #XXX: queue timer
+                self._decisions.start_timer(
+                    start_to_fire_timeout=delay, timer_id=str(self._call_id)
+                )
                 return Placeholder()
             self._call_id += 1
 
@@ -159,7 +165,8 @@ class DecisionScheduler(object):
                 result = self._results[self._call_id]
                 return Result(result_deserializer(result))
             return False  # There is nothing we could find about this call
-        if self._error_handling:
+        if error_handling:
             return Timeout()
-        self._decision.fail('A job has timed out.')  # XXX: Improve this msg
+        # XXX: Improve this msg
+        self._decisions.fail_workflow_execution('A job has timed out.')
         return Placeholder()
