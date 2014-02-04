@@ -69,7 +69,7 @@ class DecisionScheduler(object):
             return result
         name, version = task_id
         self._decisions.schedule_activity_task(
-            str(self._call_id), str(name), str(version),
+            str(self._call_id), name, version,
             heartbeat_timeout=str_or_none(heartbeat),
             schedule_to_close_timeout=str_or_none(schedule_to_close),
             schedule_to_start_timeout=str_or_none(schedule_to_start),
@@ -97,7 +97,7 @@ class DecisionScheduler(object):
         name, version = task_id
         subworkflow_id = '%s-%s' % (uuid.uuid4(), self._call_id)
         self._decisions.start_child_workflow_execution(
-            subworkflow_id, str(name), str(version),
+            subworkflow_id, name, version,
             execution_start_to_close_timeout=str_or_none(workflow_duration),
             task_start_to_close_timeout=str_or_none(decision_duration),
             task_list=str_or_none(task_list),

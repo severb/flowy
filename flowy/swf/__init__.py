@@ -1,4 +1,7 @@
 from collections import namedtuple
 
 
-SWFTaskId = namedtuple('SWFTaskId', 'name version')
+def SWFTaskId(name, version):
+    return _SWFTaskId(str(name), str(version))
+
+_SWFTaskId = namedtuple('_SWFTaskId', 'name version')

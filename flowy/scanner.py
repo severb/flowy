@@ -100,7 +100,7 @@ def caller_package(level=2, caller_module=caller_module):
     f = getattr(module, '__file__', '')
     if (('__init__.py' in f) or ('__init__$py' in f)):  # empty at >>>
         # Module is a package
-        return module
+        return module  # pragma: no cover
     # Go up one level to get package
     package_name = module.__name__.rsplit('.', 1)[0]
     return sys.modules[package_name]
