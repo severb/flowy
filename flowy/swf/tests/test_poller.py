@@ -1,4 +1,5 @@
 import unittest
+from copy import deepcopy
 
 from mock import Mock
 
@@ -102,8 +103,7 @@ class TestDecisionPoller(unittest.TestCase):
     def test_activity_events_parsing(self):
         from flowy.swf import SWFTaskId
 
-        response = self.no_events_response
-        response['events'] = list(self.no_events_response['events'])
+        response = deepcopy(self.no_events_response)
         response['events'].extend([
             {
                 'eventType': 'ActivityTaskScheduled',
@@ -169,11 +169,10 @@ class TestDecisionPoller(unittest.TestCase):
         )
         self.assertEquals(result, worker.make_task())
 
-
     def test_workflow_event_parsing(self):
         from flowy.swf import SWFTaskId
 
-        response = self.no_events_response
+        response = deepcopy(self.no_events_response)
         response['events'] = list(self.no_events_response['events'])
         response['events'].extend([
             {
@@ -251,3 +250,224 @@ class TestDecisionPoller(unittest.TestCase):
             scheduler=scheduler()
         )
         self.assertEquals(result, worker.make_task())
+
+    def test_timer_event_parsing(self):
+        from flowy.swf import SWFTaskId
+
+        response = deepcopy(self.no_events_response)
+        response['events'] = list(self.no_events_response['events'])
+        response['events'].extend([
+            {
+                'eventType': 'TimerStarted',
+                'timerStartedEventAttributes': {'timerId': '1'}
+            },
+            {
+                'eventType': 'TimerStarted',
+                'timerStartedEventAttributes': {'timerId': '2'}
+            },
+            {
+                'eventType': 'TimerFired',
+                'timerStartedEventAttributes': {'timerId': '1'}
+            }
+        ])
+        uut, client, scheduler = self._get_uut()
+        client.poll_for_decision_task.return_value = response
+        worker = Mock()
+        result = uut.poll_next_task(worker)
+        scheduler.assert_called_once_with(
+            client=client,
+            token='token1',
+            running=set([2]),
+            timedout=set(),
+            results={1: None},
+            errors={},
+        )
+        worker.make_task.assert_called_once_with(
+            task_id=SWFTaskId('n', 'v1'),
+            input='in',
+            scheduler=scheduler()
+        )
+        self.assertEquals(result, worker.make_task())
+
+    def test_multiple_pages(self):
+        from flowy.swf import SWFTaskId
+
+        response = deepcopy(self.no_events_response)
+        response['nextPageToken'] = 'whatever'
+        response['events'].extend([
+            {
+                'eventType': 'TimerStarted',
+                'timerStartedEventAttributes': {'timerId': '1'}
+            },
+        ])
+        response2 = deepcopy(self.no_events_response)
+        response2['nextPageToken'] = 'whatever2'
+        response2['events'].extend([
+            {
+                'eventType': 'TimerStarted',
+                'timerStartedEventAttributes': {'timerId': '2'}
+            },
+        ])
+        response3 = deepcopy(self.no_events_response)
+        response3['events'].extend([
+            {
+                'eventType': 'TimerFired',
+                'timerStartedEventAttributes': {'timerId': '1'}
+            },
+        ])
+        uut, client, scheduler = self._get_uut()
+        client.poll_for_decision_task.side_effect = [
+            response,
+            response2,
+            response3
+        ]
+        worker = Mock()
+        result = uut.poll_next_task(worker)
+        scheduler.assert_called_once_with(
+            client=client,
+            token='token1',
+            running=set([2]),
+            timedout=set(),
+            results={1: None},
+            errors={},
+        )
+        worker.make_task.assert_called_once_with(
+            task_id=SWFTaskId('n', 'v1'),
+            input='in',
+            scheduler=scheduler()
+        )
+        self.assertEquals(result, worker.make_task())
+
+    def test_first_page_error(self):
+        from flowy.swf import SWFTaskId
+        from boto.swf.exceptions import SWFResponseError
+
+        response = deepcopy(self.no_events_response)
+        response['events'].extend([
+            {
+                'eventType': 'TimerStarted',
+                'timerStartedEventAttributes': {'timerId': '1'}
+            },
+        ])
+        uut, client, scheduler = self._get_uut()
+        client.poll_for_decision_task.side_effect = [
+            SWFResponseError("Error", "Something"),
+            response
+        ]
+        worker = Mock()
+        result = uut.poll_next_task(worker)
+        scheduler.assert_called_once_with(
+            client=client,
+            token='token1',
+            running=set([1]),
+            timedout=set(),
+            results={},
+            errors={},
+        )
+        worker.make_task.assert_called_once_with(
+            task_id=SWFTaskId('n', 'v1'),
+            input='in',
+            scheduler=scheduler()
+        )
+        self.assertEquals(result, worker.make_task())
+
+    def test_other_pages_one_error(self):
+        from flowy.swf import SWFTaskId
+        from boto.swf.exceptions import SWFResponseError
+
+        response = deepcopy(self.no_events_response)
+        response['nextPageToken'] = 'whatever'
+        response['events'].extend([
+            {
+                'eventType': 'TimerStarted',
+                'timerStartedEventAttributes': {'timerId': '1'}
+            },
+        ])
+        response2 = deepcopy(self.no_events_response)
+        response2['events'].extend([
+            {
+                'eventType': 'TimerStarted',
+                'timerStartedEventAttributes': {'timerId': '2'}
+            },
+        ])
+
+        uut, client, scheduler = self._get_uut()
+        client.poll_for_decision_task.side_effect = [
+            response,
+            SWFResponseError("Error", "Something"),
+            SWFResponseError("Error", "Something"),
+            response2
+        ]
+        worker = Mock()
+        result = uut.poll_next_task(worker)
+        scheduler.assert_called_once_with(
+            client=client,
+            token='token1',
+            running=set([1, 2]),
+            timedout=set(),
+            results={},
+            errors={},
+        )
+        worker.make_task.assert_called_once_with(
+            task_id=SWFTaskId('n', 'v1'),
+            input='in',
+            scheduler=scheduler()
+        )
+        self.assertEquals(result, worker.make_task())
+
+    def test_other_pages_time_out(self):
+        from flowy.swf import SWFTaskId
+        from boto.swf.exceptions import SWFResponseError
+
+        response = deepcopy(self.no_events_response)
+        response['nextPageToken'] = 'whatever'
+        response['events'].extend([
+            {
+                'eventType': 'TimerStarted',
+                'timerStartedEventAttributes': {'timerId': '1'}
+            },
+        ])
+
+        uut, client, scheduler = self._get_uut()
+        client.poll_for_decision_task.side_effect = [
+            response,
+            SWFResponseError("Error", "Something"),
+            SWFResponseError("Error", "Something"),
+            SWFResponseError("Error", "Something"),
+            SWFResponseError("Error", "Something"),
+            SWFResponseError("Error", "Something"),
+            SWFResponseError("Error", "Something"),
+            SWFResponseError("Error", "Something"),
+            response
+        ]
+        worker = Mock()
+        result = uut.poll_next_task(worker)
+        scheduler.assert_called_once_with(
+            client=client,
+            token='token1',
+            running=set([1]),
+            timedout=set(),
+            results={},
+            errors={},
+        )
+        worker.make_task.assert_called_once_with(
+            task_id=SWFTaskId('n', 'v1'),
+            input='in',
+            scheduler=scheduler()
+        )
+        self.assertEquals(result, worker.make_task())
+
+
+class DecisionSchedulerTest(unittest.TestCase):
+
+    def test_decision_scheduler(self):
+        from flowy.swf.poller import decision_scheduler
+        from flowy.scheduler import OptionsScheduler
+        from flowy.swf.scheduler import DecisionScheduler
+
+        d_s = decision_scheduler(Mock(), Mock(), Mock(), Mock(), Mock(),
+                                 Mock())
+
+        self.assertIsInstance(d_s, OptionsScheduler)
+        self.assertIsInstance(d_s._scheduler, DecisionScheduler)
+

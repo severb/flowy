@@ -52,10 +52,11 @@ class ActivityPoller(object):
         return swf_response
 
 
-def decision_scheduler(client, running, timedout, results, errors):
+def decision_scheduler(client, token, running, timedout, results, errors):
     return OptionsScheduler(
         DecisionScheduler(
             client=client,
+            token=token,
             running=running,
             timedout=timedout,
             results=results,
@@ -195,7 +196,7 @@ class DecisionPoller(object):
                 errors[id] = reason
             elif e_type == 'TimerStarted':
                 id = e['timerStartedEventAttributes']['timerId']
-                self.running.add(id)
+                running.add(id)
             elif e_type == 'TimerFired':
                 id = e['timerStartedEventAttributes']['timerId']
                 running.remove(id)
