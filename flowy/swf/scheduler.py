@@ -65,7 +65,7 @@ class DecisionScheduler(object):
             result_deserializer=result_deserializer,
             error_handling=error_handling
         )
-        if result is not None:
+        if result:
             return result
         name, version = task_id
         self._decisions.schedule_activity_task(
@@ -92,7 +92,7 @@ class DecisionScheduler(object):
             result_deserializer=result_deserializer,
             error_handling=error_handling
         )
-        if result is not None:
+        if result:
             return result
         name, version = task_id
         subworkflow_id = '%s-%s' % (uuid.uuid4(), self._call_id)
