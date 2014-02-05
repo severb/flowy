@@ -72,7 +72,7 @@ class Scanner(object):
     def scan_activities(self, package=None, ignore=None):
         self._scan(categories=('activity',), package=package, ignore=ignore)
 
-    def scan_workflow(self, package=None, ignore=None):
+    def scan_workflows(self, package=None, ignore=None):
         self._scan(categories=('workflow',), package=package, ignore=ignore)
 
     def register(self, poller=None):

@@ -463,11 +463,10 @@ class DecisionSchedulerTest(unittest.TestCase):
     def test_decision_scheduler(self):
         from flowy.swf.poller import decision_scheduler
         from flowy.scheduler import OptionsScheduler
-        from flowy.swf.scheduler import DecisionScheduler
+        from flowy.scheduler import ArgsDependencyScheduler
 
         d_s = decision_scheduler(Mock(), Mock(), Mock(), Mock(), Mock(),
                                  Mock())
 
         self.assertIsInstance(d_s, OptionsScheduler)
-        self.assertIsInstance(d_s._scheduler, DecisionScheduler)
-
+        self.assertIsInstance(d_s._scheduler, ArgsDependencyScheduler)

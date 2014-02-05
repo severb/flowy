@@ -1,4 +1,5 @@
 import json
+import logging
 from functools import partial
 
 from flowy import posint_or_none, str_or_none
@@ -37,6 +38,7 @@ class Task(object):
             self._scheduler.suspend()
         except Exception as e:
             self._scheduler.fail(str(e))
+            logging.exception("Error while running the task:")
         else:
             self._scheduler.complete(self._serialize_result(result))
 

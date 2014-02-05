@@ -11,7 +11,7 @@ class ScannerTest(unittest.TestCase):
     def test_activity(self, a):
         from flowy.swf.scanner import activity
 
-        act = activity('name', 'v1', 'tl')
+        activity('name', 'v1', 'tl')
         a.assert_called_once_with(task_id=SWFTaskId('name', 'v1'),
                                   task_list='tl')
 
@@ -19,6 +19,6 @@ class ScannerTest(unittest.TestCase):
     def test_workflow(self, w):
         from flowy.swf.scanner import workflow
 
-        act = workflow('name', 'v1', 'tl')
+        workflow('name', 'v1', 'tl')
         w.assert_called_once_with(task_id=SWFTaskId('name', 'v1'),
                                   task_list='tl')

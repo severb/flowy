@@ -14,7 +14,7 @@ class ActivityScheduler(object):
 
     def heartbeat(self):
         try:
-            self._client.record_activity_task_heartbeat(token=self._token)
+            self._client.record_activity_task_heartbeat(task_token=self._token)
         except SWFResponseError:
             return False
         return True
@@ -22,7 +22,7 @@ class ActivityScheduler(object):
     def complete(self, result):
         try:
             self._client.respond_activity_task_completed(
-                result=result, token=self._token
+                result=result, task_token=self._token
             )
         except SWFResponseError:
             return False
@@ -31,7 +31,7 @@ class ActivityScheduler(object):
     def fail(self, reason):
         try:
             self._client.respond_activity_task_failed(
-                reason=reason, token=self._token
+                reason=reason, task_token=self._token
             )
         except SWFResponseError:
             return False

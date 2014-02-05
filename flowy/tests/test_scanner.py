@@ -37,7 +37,7 @@ class TestRegistrationDecorators(unittest.TestCase):
                 start_to_close=30)
         ])
 
-        uut.scan_workflow(package=flowy.tests.specs)
+        uut.scan_workflows(package=flowy.tests.specs)
 
         collector.collect.assert_has_calls([
             call(

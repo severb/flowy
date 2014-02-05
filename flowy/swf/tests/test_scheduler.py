@@ -19,7 +19,7 @@ class ActivitySchedulerTest(unittest.TestCase):
         a_s, client = self._get_uut()
         self.assertTrue(a_s.heartbeat())
         client.record_activity_task_heartbeat.assert_called_once_with(
-            token=s.token
+            task_token=s.token
         )
 
     def test_heartbeat_error(self):
@@ -31,7 +31,7 @@ class ActivitySchedulerTest(unittest.TestCase):
         a_s, client = self._get_uut()
         self.assertTrue(a_s.complete('result'))
         client.respond_activity_task_completed.assert_called_once_with(
-            result='result', token=s.token
+            result='result', task_token=s.token
         )
 
     def test_complete_error(self):
@@ -43,7 +43,7 @@ class ActivitySchedulerTest(unittest.TestCase):
         a_s, client = self._get_uut()
         self.assertTrue(a_s.fail('reason'))
         client.respond_activity_task_failed.assert_called_once_with(
-            reason='reason', token=s.token
+            reason='reason', task_token=s.token
         )
 
     def test_fail_error(self):

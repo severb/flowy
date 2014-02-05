@@ -21,7 +21,7 @@ class TestOptionsScheduler(unittest.TestCase):
 
     def test_remote_activity_other_values(self):
         uut, scheduler = self._get_uut()
-        uut.remote_activity(
+        result = uut.remote_activity(
             heartbeat=s.heartbeat,
             schedule_to_close=s.schedule_to_close,
             schedule_to_start=s.schedule_to_start,
@@ -43,10 +43,11 @@ class TestOptionsScheduler(unittest.TestCase):
             error_handling=s.error_handling,
             **self.defaults
         )
+        self.assertEquals(result, scheduler.remote_activity())
 
     def test_remote_workflow_other_values(self):
         uut, scheduler = self._get_uut()
-        uut.remote_subworkflow(
+        result = uut.remote_subworkflow(
             workflow_duration=s.workflow_duration,
             decision_duration=s.decision_duration,
             task_list=s.task_list,
@@ -64,6 +65,7 @@ class TestOptionsScheduler(unittest.TestCase):
             error_handling=s.error_handling,
             **self.defaults
         )
+        self.assertEquals(result, scheduler.remote_subworkflow())
 
     def test_remote_activity_options_stack(self):
         uut, scheduler = self._get_uut()
@@ -245,8 +247,9 @@ class TestArgsDependencyScheduler(unittest.TestCase):
             start_to_close=s.start_to_close,
             **self.defaults
         )
+        serializer.assert_called_once_with(1, 2, x=1, y=2)
         scheduler.remote_activity.assert_called_once_with(
-            input=serializer([1, 2], dict(x=1, y=2)),
+            input=serializer(),
             heartbeat=s.heartbeat,
             schedule_to_close=s.schedule_to_close,
             schedule_to_start=s.schedule_to_start,
@@ -267,8 +270,9 @@ class TestArgsDependencyScheduler(unittest.TestCase):
             decision_duration=s.decision_duration,
             **self.defaults
         )
+        serializer.assert_called_once_with(1, 2, x=1, y=2)
         scheduler.remote_subworkflow.assert_called_once_with(
-            input=serializer([1, 2], dict(x=1, y=2)),
+            input=serializer(),
             workflow_duration=s.workflow_duration,
             decision_duration=s.decision_duration,
             **self.defaults

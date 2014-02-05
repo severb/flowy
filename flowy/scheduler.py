@@ -7,7 +7,12 @@ from flowy.result import Error, Placeholder, Result
 _sentinel = object()
 
 
-class OptionsScheduler(object):
+class PassTroughSchedulerMixin(object):
+    def __getattr__(self, name):
+        return getattr(self._scheduler, name)
+
+
+class OptionsScheduler(PassTroughSchedulerMixin):
     def __init__(self, scheduler):
         self._scheduler = scheduler
         self._activity_options_stack = [dict()]
@@ -29,7 +34,7 @@ class OptionsScheduler(object):
             error_handling=error_handling
         )
         options.update(self._activity_options_stack[-1])
-        self._scheduler.remote_activity(
+        return self._scheduler.remote_activity(
             task_id=task_id, args=args, kwargs=kwargs,
             args_serializer=args_serializer,
             result_deserializer=result_deserializer,
@@ -49,7 +54,7 @@ class OptionsScheduler(object):
             error_handling=error_handling
         )
         options.update(self._subworkflow_options_stack[-1])
-        self._scheduler.remote_subworkflow(
+        return self._scheduler.remote_subworkflow(
             task_id=task_id, args=args, kwargs=kwargs,
             args_serializer=args_serializer,
             result_deserializer=result_deserializer,
@@ -105,7 +110,7 @@ class OptionsScheduler(object):
         self._subworkflow_options_stack.pop()
 
 
-class ArgsDependencyScheduler(object):
+class ArgsDependencyScheduler(PassTroughSchedulerMixin):
     def __init__(self, scheduler):
         self._scheduler = scheduler
 
@@ -177,4 +182,4 @@ class ArgsDependencyScheduler(object):
             (k, v.result() if isinstance(v, Result) else v)
             for k, v in kwargs.items()
         )
-        return args_serializer(raw_args, raw_kwargs)
+        return args_serializer(*raw_args, **raw_kwargs)

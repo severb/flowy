@@ -1,7 +1,11 @@
 import functools
 import inspect
+import logging
 import types
 from itertools import izip_longest
+
+
+logging.basicConfig()
 
 
 class MagicBind(object):

@@ -1,6 +1,6 @@
 from boto.swf.exceptions import SWFResponseError
 
-from flowy.scheduler import OptionsScheduler
+from flowy.scheduler import OptionsScheduler, ArgsDependencyScheduler
 from flowy.swf import SWFTaskId
 from flowy.swf.scheduler import ActivityScheduler, DecisionScheduler
 
@@ -54,13 +54,15 @@ class ActivityPoller(object):
 
 def decision_scheduler(client, token, running, timedout, results, errors):
     return OptionsScheduler(
-        DecisionScheduler(
-            client=client,
-            token=token,
-            running=running,
-            timedout=timedout,
-            results=results,
-            errors=errors
+        ArgsDependencyScheduler(
+            DecisionScheduler(
+                client=client,
+                token=token,
+                running=running,
+                timedout=timedout,
+                results=results,
+                errors=errors
+            )
         )
     )
 
