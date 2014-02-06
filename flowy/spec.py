@@ -36,10 +36,10 @@ class RemoteTaskSpec(TaskSpec):
         return success
 
     def _try_register_remote(self):
-        raise NotImplementedError  # pragma: no cover
+        raise NotImplementedError
 
     def _check_if_compatible(self):
-        raise NotImplementedError  # pragma: no cover
+        raise NotImplementedError
 
 
 class ActivitySpecCollector(object):

@@ -43,7 +43,7 @@ class Task(object):
             self._scheduler.complete(self._serialize_result(result))
 
     def run(self, *args, **kwargs):
-        raise NotImplementedError  # pragma: no cover
+        raise NotImplementedError
 
     def _serialize_result(self, result):
         return json.dumps(result)
