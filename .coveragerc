@@ -22,3 +22,6 @@ exclude_lines =
 ignore_errors = True
 
 include = flowy/*
+omit =
+    flowy/tests/*
+    flowy/swf/tests/*
