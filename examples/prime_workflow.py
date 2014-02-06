@@ -1,7 +1,7 @@
-from flowy.task import Workflow
-
+from flowy.swf.boilerplate import start_workflow_worker
 from flowy.swf.scanner import workflow
 from flowy.swf.task import ActivityProxy
+from flowy.task import Workflow
 
 
 @workflow('MyPrime', 2, 'prime_task_list')
@@ -26,29 +26,4 @@ class PrimeTest(Workflow):
 
 
 if __name__ == '__main__':
-    from boto.swf.layer1 import Layer1
-
-    from flowy import MagicBind
-    from flowy.scanner import Scanner
-    from flowy.spec import WorkflowSpecCollector
-    from flowy.worker import SingleThreadedWorker
-
-    from flowy.swf.spec import WorkflowSpec
-    from flowy.swf.poller import DecisionPoller
-
-    swf_client = MagicBind(Layer1(), domain='SeversTest')
-
-    scanner = Scanner(WorkflowSpecCollector(WorkflowSpec, swf_client))
-    scanner.scan_workflows()
-
-    poller = DecisionPoller(swf_client, 'prime_task_list')
-    worker = SingleThreadedWorker(poller)
-
-    not_registered = scanner.register(worker)
-    if not_registered:
-        print 'could not register!'
-        print not_registered
-        import sys
-        sys.exit(1)
-
-    worker.run_forever()
+    start_workflow_worker('SeversTest', 'prime_task_list')

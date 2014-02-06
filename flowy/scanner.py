@@ -69,19 +69,29 @@ class Scanner(object):
     def __init__(self, collector):
         self._collector = collector
 
-    def scan_activities(self, package=None, ignore=None):
-        self._scan(categories=('activity',), package=package, ignore=ignore)
+    def scan_activities(self, package=None, ignore=None, level=0):
+        self._scan(
+            categories=('activity',),
+            package=package,
+            ignore=ignore,
+            level=level
+        )
 
-    def scan_workflows(self, package=None, ignore=None):
-        self._scan(categories=('workflow',), package=package, ignore=ignore)
+    def scan_workflows(self, package=None, ignore=None, level=0):
+        self._scan(
+            categories=('workflow',),
+            package=package,
+            ignore=ignore,
+            level=level
+        )
 
     def register(self, poller=None):
         self._collector.register(poller)
 
-    def _scan(self, categories=None, package=None, ignore=None):
+    def _scan(self, categories=None, package=None, ignore=None, level=0):
         scanner = venusian.Scanner(collector=self._collector)
         if package is None:
-            package = caller_package(level=3)  # because of the scan call
+            package = caller_package(level=3 + level)
         scanner.scan(package, categories=categories, ignore=ignore)
 
 

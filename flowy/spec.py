@@ -15,6 +15,18 @@ class TaskSpec(object):
         )
 
 
+class ActivitySpec(TaskSpec):
+    def __init__(self, task_id, task_factory, *args, **kwargs):
+        # Ignore all other details, this class only registers with the worker
+        super(ActivitySpec, self).__init__(task_id, task_factory)
+
+
+class WorkflowSpec(TaskSpec):
+    def __init__(self, task_id, task_factory, *args, **kwargs):
+        # Ignore all other details, this class only registers with the worker
+        super(WorkflowSpec, self).__init__(task_id, task_factory)
+
+
 class RemoteTaskSpec(TaskSpec):
     def __init__(self, task_id, task_factory, client):
         super(RemoteTaskSpec, self).__init__(task_id, task_factory)

@@ -6,6 +6,7 @@ from itertools import izip_longest
 
 
 logging.basicConfig()
+logger = logging.root
 
 
 class MagicBind(object):

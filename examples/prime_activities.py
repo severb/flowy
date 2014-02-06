@@ -1,3 +1,4 @@
+from flowy.swf.boilerplate import start_activity_worker
 from flowy.swf.scanner import activity
 from flowy.task import Activity
 
@@ -22,29 +23,4 @@ class NumberDivider(Activity):
 
 
 if __name__ == '__main__':
-    from boto.swf.layer1 import Layer1
-
-    from flowy import MagicBind
-    from flowy.scanner import Scanner
-    from flowy.spec import ActivitySpecCollector
-    from flowy.worker import SingleThreadedWorker
-
-    from flowy.swf.spec import ActivitySpec
-    from flowy.swf.poller import ActivityPoller
-
-    swf_client = MagicBind(Layer1(), domain='SeversTest')
-
-    scanner = Scanner(ActivitySpecCollector(ActivitySpec, swf_client))
-    scanner.scan_activities()
-
-    poller = ActivityPoller(swf_client, 'mr_list')
-    worker = SingleThreadedWorker(poller)
-
-    not_registered = scanner.register(worker)
-    if not_registered:
-        print 'could not register!'
-        print not_registered
-        import sys
-        sys.exit(1)
-
-    worker.run_forever()
+    start_activity_worker('SeversTest', 'mr_list')
