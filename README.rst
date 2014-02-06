@@ -3,3 +3,7 @@
 
 .. image:: https://coveralls.io/repos/pbs/flowy/badge.png?branch=master
     :target: https://coveralls.io/r/pbs/flowy?branch=master
+
+.. image:: https://pypip.in/v/flowy/badge.png
+    :target: https://pypi.python.org/pypi/flowy/
+    :alt: Latest Version
