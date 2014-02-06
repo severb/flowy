@@ -9,5 +9,5 @@
     :alt: Latest Version
 
 .. image:: https://pypip.in/d/flowy/badge.png?period=month
-    :target: https://pypi.python.org/pypi//PYPI_PKG_NAME/
+    :target: https://pypi.python.org/pypi/flowy/
     :alt: Downloads
