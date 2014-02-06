@@ -19,6 +19,10 @@ class TestOptionsScheduler(unittest.TestCase):
             scheduler = Mock()
         return OptionsScheduler(scheduler), scheduler
 
+    def test_pass_trough(self):
+        uut, scheduler = self._get_uut()
+        self.assertEquals(uut.a, scheduler.a)
+
     def test_remote_activity_other_values(self):
         uut, scheduler = self._get_uut()
         result = uut.remote_activity(
@@ -232,6 +236,10 @@ class TestArgsDependencyScheduler(unittest.TestCase):
         from flowy.scheduler import ArgsDependencyScheduler
         scheduler = Mock()
         return ArgsDependencyScheduler(scheduler), scheduler
+
+    def test_pass_trough(self):
+        uut, scheduler = self._get_uut()
+        self.assertEquals(uut.a, scheduler.a)
 
     def test_activity_dispatch_to_next_scheduler(self):
         uut, scheduler = self._get_uut()

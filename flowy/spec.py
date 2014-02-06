@@ -9,7 +9,7 @@ class TaskSpec(object):
             task_factory=self._task_factory
         )
 
-    def __repr__(self):  # pragma: no cover
+    def __repr__(self):
         return '%s(%r, %r)' % (
             self.__class__.__name__, self._task_id, self._task_factory
         )
