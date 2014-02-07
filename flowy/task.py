@@ -76,10 +76,12 @@ class TaskProxy(object):
             raise AttributeError('no scheduler bound to the task')
         return partial(self, obj._scheduler)
 
-    def _serialize_arguments(self, *args, **kwargs):
+    @staticmethod
+    def _serialize_arguments(*args, **kwargs):
         return json.dumps([args, kwargs])
 
-    def _deserialize_result(self, result):
+    @staticmethod
+    def _deserialize_result(result):
         return json.loads(result)
 
 

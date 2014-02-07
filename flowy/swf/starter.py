@@ -44,7 +44,7 @@ class WorkflowStarter(object):
                 workflow_name=self._name,
                 workflow_version=self._version,
                 task_list=self._task_list,
-                input=self._serialize_arguments(*args, **kwargs),
+                input=TaskProxy._serialize_arguments(*args, **kwargs),
                 execution_start_to_close_timeout=self._workflow_duration,
                 task_start_to_close_timeout=self._decision_duration
             )
