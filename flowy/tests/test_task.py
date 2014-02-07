@@ -40,19 +40,19 @@ class TestTask(unittest.TestCase):
 
 
 class TestHeartbeat(unittest.TestCase):
-
     def test_heartbeat(self):
         from flowy.task import Activity
         scheduler = Mock()
-        a = Activity(input=s.input, scheduler=scheduler)
+        a = Activity(input='[[], {}]', scheduler=scheduler)
         a.heartbeat()
         scheduler.heartbeat.assert_called_once_with()
+
 
 class TestWorkflow(unittest.TestCase):
     def _get_uut(self):
         from flowy.task import Workflow
         scheduler = Mock()
-        return Workflow(input=s.input, scheduler=scheduler), scheduler
+        return Workflow(input='[[], {}]', scheduler=scheduler), scheduler
 
     def test_restart(self):
         uut, scheduler = self._get_uut()

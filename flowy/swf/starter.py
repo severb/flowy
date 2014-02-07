@@ -3,7 +3,7 @@ import uuid
 from boto.swf.exceptions import SWFResponseError
 from boto.swf.layer1 import Layer1
 
-from flowy.task import TaskProxy
+from flowy.task import serialize_args
 from flowy import str_or_none, posint_or_none
 
 
@@ -44,7 +44,7 @@ class WorkflowStarter(object):
                 workflow_name=self._name,
                 workflow_version=self._version,
                 task_list=self._task_list,
-                input=TaskProxy._serialize_arguments(*args, **kwargs),
+                input=self._serialize_arguments(*args, **kwargs),
                 execution_start_to_close_timeout=self._workflow_duration,
                 task_start_to_close_timeout=self._decision_duration
             )
@@ -52,4 +52,4 @@ class WorkflowStarter(object):
             return None
         return r['runId']
 
-    _serialize_arguments = TaskProxy._serialize_arguments
+    _serialize_arguments = serialize_args

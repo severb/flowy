@@ -24,15 +24,24 @@ class TaskTimedout(TaskError):
     """
 
 
+serialize_result = staticmethod(json.dumps)
+deserialize_result = staticmethod(json.loads)
+deserialize_args = staticmethod(json.loads)
+
+
+@staticmethod
+def serialize_args(*args, **kwargs):
+    return json.dumps([args, kwargs])
+
+
 class Task(object):
     def __init__(self, input, scheduler):
-        self._input = str(input)
+        self._args, self._kwargs = self._deserialize_arguments(str(input))
         self._scheduler = scheduler
 
     def __call__(self):
         try:
-            args, kwargs = self._deserialize_arguments()
-            result = self.run(*args, **kwargs)
+            result = self.run(*self._args, **self._kwargs)
         except SuspendTask:
             self._scheduler.suspend()
         except Exception as e:
@@ -44,11 +53,8 @@ class Task(object):
     def run(self, *args, **kwargs):
         raise NotImplementedError
 
-    def _serialize_result(self, result):
-        return json.dumps(result)
-
-    def _deserialize_arguments(self):
-        return json.loads(self._input)
+    _serialize_result = serialize_result
+    _deserialize_arguments = deserialize_args
 
 
 class Activity(Task):
@@ -64,8 +70,7 @@ class Workflow(Task):
         arguments = self._serialize_restart_arguments(*args, **kwargs)
         return self._scheduler.restart(arguments)
 
-    def _serialize_restart_arguments(self, *args, **kwargs):
-        return json.dumps([args, kwargs])
+    _serialize_restart_arguments = serialize_args
 
 
 class TaskProxy(object):
@@ -76,13 +81,8 @@ class TaskProxy(object):
             raise AttributeError('no scheduler bound to the task')
         return partial(self, obj._scheduler)
 
-    @staticmethod
-    def _serialize_arguments(*args, **kwargs):
-        return json.dumps([args, kwargs])
-
-    @staticmethod
-    def _deserialize_result(result):
-        return json.loads(result)
+    _serialize_arguments = serialize_args
+    _deserialize_result = deserialize_result
 
 
 class ActivityProxy(TaskProxy):
