@@ -3,8 +3,8 @@ import uuid
 from boto.swf.exceptions import SWFResponseError
 from boto.swf.layer1 import Layer1
 
+from flowy import logger, posint_or_none, str_or_none
 from flowy.task import serialize_args
-from flowy import str_or_none, posint_or_none
 
 
 class WorkflowStarter(object):
@@ -49,6 +49,7 @@ class WorkflowStarter(object):
                 task_start_to_close_timeout=self._decision_duration
             )
         except SWFResponseError:
+            logger.exception('Could not start the workflow:')
             return None
         return r['runId']
 

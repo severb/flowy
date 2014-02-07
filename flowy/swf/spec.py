@@ -1,5 +1,6 @@
-from boto.swf.exceptions import SWFResponseError
+from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
 
+from flowy import logger
 from flowy.spec import RemoteTaskSpec
 
 
@@ -31,7 +32,10 @@ class ActivitySpec(RemoteTaskSpec):
                 default_task_schedule_to_start_timeout=self._schedule_to_start,
                 default_task_start_to_close_timeout=self._start_to_close,
             )
-        except SWFResponseError:  # SWFTypeAlreadyExistsError is subclass
+        except SWFTypeAlreadyExistsError:
+            return False
+        except SWFResponseError:
+            logger.exception('Error while registering activity:')
             return False
         return True
 
@@ -42,6 +46,7 @@ class ActivitySpec(RemoteTaskSpec):
                 activity_version=self._version
             )['configuration']
         except SWFResponseError:
+            logger.exception('Error while checking activity compatibility:')
             return False
         return all([
             c['defaultTaskList']['name'] == self._task_list,
@@ -78,7 +83,10 @@ class WorkflowSpec(RemoteTaskSpec):
                 default_execution_start_to_close_timeout=workflow_duration,
                 default_task_start_to_close_timeout=decision_duration,
             )
-        except SWFResponseError:  # SWFTypeAlreadyExistsError is subclass
+        except SWFTypeAlreadyExistsError:
+            return False
+        except SWFResponseError:
+            logger.exception('Error while registering workflow:')
             return False
         return True
 
@@ -89,6 +97,7 @@ class WorkflowSpec(RemoteTaskSpec):
                 workflow_version=self._version
             )['configuration']
         except SWFResponseError:
+            logger.exception('Error while checking workflow compatibility:')
             return False
         workflow_duration = self._workflow_duration
         decision_duration = self._decision_duration

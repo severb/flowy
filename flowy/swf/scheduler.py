@@ -3,7 +3,7 @@ import uuid
 from boto.swf.exceptions import SWFResponseError
 from boto.swf.layer1_decisions import Layer1Decisions
 
-from flowy import str_or_none
+from flowy import str_or_none, logger
 from flowy.result import Error, Placeholder, Result, Timeout
 
 
@@ -16,6 +16,7 @@ class ActivityScheduler(object):
         try:
             self._client.record_activity_task_heartbeat(task_token=self._token)
         except SWFResponseError:
+            logger.exception('Error while sending the heartbeat:')
             return False
         return True
 
@@ -25,6 +26,7 @@ class ActivityScheduler(object):
                 result=result, task_token=self._token
             )
         except SWFResponseError:
+            logger.exception('Error while completing the activity:')
             return False
         return True
 
@@ -34,6 +36,7 @@ class ActivityScheduler(object):
                 reason=reason[:256], task_token=self._token
             )
         except SWFResponseError:
+            logger.exception('Error while failing the activity:')
             return False
         return True
 
@@ -114,6 +117,7 @@ class DecisionScheduler(object):
             )
             return True
         except SWFResponseError:
+            logger.exception('Error while sending the decisions:')
             return False
         finally:
             self._decisions = Layer1Decisions()
