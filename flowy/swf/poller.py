@@ -1,6 +1,7 @@
 from boto.swf.exceptions import SWFResponseError
 
-from flowy.scheduler import OptionsScheduler, ArgsDependencyScheduler
+from flowy import logger
+from flowy.scheduler import ArgsDependencyScheduler, OptionsScheduler
 from flowy.swf import SWFTaskId
 from flowy.swf.scheduler import ActivityScheduler, DecisionScheduler
 
@@ -48,7 +49,8 @@ class ActivityPoller(object):
                     task_list=self._task_list
                 )
             except SWFResponseError:
-                pass  # add a delay before retrying?
+                # add a delay before retrying?
+                logger.exception('Error while polling for activities:')
         return swf_response
 
 
@@ -217,7 +219,7 @@ class DecisionPoller(object):
                     task_list=self._task_list
                 )
             except SWFResponseError:
-                pass
+                logger.exception('Error while polling for decisions:')
         return swf_response
 
     def _poll_response_page(self, page_token):
@@ -229,7 +231,7 @@ class DecisionPoller(object):
                 )
                 break
             except SWFResponseError:
-                pass
+                logger.exception('Error while polling for decision page:')
         else:
             raise _PaginationError()
         return swf_response

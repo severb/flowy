@@ -31,7 +31,7 @@ class ActivityScheduler(object):
     def fail(self, reason):
         try:
             self._client.respond_activity_task_failed(
-                reason=reason, task_token=self._token
+                reason=reason[:256], task_token=self._token
             )
         except SWFResponseError:
             return False
