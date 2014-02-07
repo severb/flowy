@@ -15,7 +15,8 @@ class SingleThreadedWorker(object):
             return task_factory(input=input, scheduler=scheduler)
         return None
 
-    def run_forever(self):
-        while 1:
+    def run_forever(self, loop=-1):
+        while loop != 0:
             task = self.poll_next_task()
             task()
+            loop = max(-1, loop - 1)

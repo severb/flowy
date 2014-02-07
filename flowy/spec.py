@@ -1,5 +1,5 @@
 class TaskSpec(object):
-    def __init__(self, task_id, task_factory):
+    def __init__(self, task_id, task_factory, *args, **kwargs):
         self._task_id = task_id
         self._task_factory = task_factory
 
@@ -13,18 +13,6 @@ class TaskSpec(object):
         return '%s(%r, %r)' % (
             self.__class__.__name__, self._task_id, self._task_factory
         )
-
-
-class ActivitySpec(TaskSpec):
-    def __init__(self, task_id, task_factory, *args, **kwargs):
-        # Ignore all other details, this class only registers with the worker
-        super(ActivitySpec, self).__init__(task_id, task_factory)
-
-
-class WorkflowSpec(TaskSpec):
-    def __init__(self, task_id, task_factory, *args, **kwargs):
-        # Ignore all other details, this class only registers with the worker
-        super(WorkflowSpec, self).__init__(task_id, task_factory)
 
 
 class RemoteTaskSpec(TaskSpec):

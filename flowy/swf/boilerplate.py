@@ -4,18 +4,19 @@ from boto.swf.layer1 import Layer1
 
 from flowy import logger, MagicBind
 from flowy.scanner import Scanner
-from flowy.spec import ActivitySpec as LocalActivitySpec
-from flowy.spec import WorkflowSpec as LocalWorkflowSpec
-from flowy.spec import ActivitySpecCollector, WorkflowSpecCollector
+from flowy.spec import ActivitySpecCollector, WorkflowSpecCollector, TaskSpec
 from flowy.swf.poller import ActivityPoller, DecisionPoller
 from flowy.swf.spec import ActivitySpec as RemoteActivitySpec
 from flowy.swf.spec import WorkflowSpec as RemoteWorkflowSpec
 from flowy.worker import SingleThreadedWorker
 
 
-def start_activity_worker(domain, task_list, layer1=None, reg_remote=True):
+def start_activity_worker(domain, task_list,
+                          layer1=None,
+                          reg_remote=True,
+                          loop=-1):
     swf_client = _get_client(layer1, domain)
-    Spec = LocalActivitySpec
+    Spec = TaskSpec
     if reg_remote:
         Spec = RemoteActivitySpec
     scanner = Scanner(ActivitySpecCollector(Spec, swf_client))
@@ -29,14 +30,17 @@ def start_activity_worker(domain, task_list, layer1=None, reg_remote=True):
         )
         sys.exit(1)
     try:
-        worker.run_forever()
+        worker.run_forever(loop)
     except KeyboardInterrupt:
         pass
 
 
-def start_workflow_worker(domain, task_list, layer1=None, reg_remote=True):
+def start_workflow_worker(domain, task_list,
+                          layer1=None,
+                          reg_remote=True,
+                          loop=-1):
     swf_client = _get_client(layer1, domain)
-    Spec = LocalWorkflowSpec
+    Spec = TaskSpec
     if reg_remote:
         Spec = RemoteWorkflowSpec
     scanner = Scanner(WorkflowSpecCollector(Spec, swf_client))
@@ -50,7 +54,7 @@ def start_workflow_worker(domain, task_list, layer1=None, reg_remote=True):
         )
         sys.exit(1)
     try:
-        worker.run_forever()
+        worker.run_forever(loop)
     except KeyboardInterrupt:
         pass
 
