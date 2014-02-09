@@ -14,13 +14,15 @@ from flowy.worker import SingleThreadedWorker
 def start_activity_worker(domain, task_list,
                           layer1=None,
                           reg_remote=True,
-                          loop=-1):
+                          loop=-1,
+                          package=None,
+                          ignore=None):
     swf_client = _get_client(layer1, domain)
     Spec = TaskSpec
     if reg_remote:
         Spec = RemoteActivitySpec
     scanner = Scanner(ActivitySpecCollector(Spec, swf_client))
-    scanner.scan_activities(level=1)
+    scanner.scan_activities(package=package, ignore=ignore, level=1)
     poller = ActivityPoller(swf_client, task_list)
     worker = SingleThreadedWorker(poller)
     not_registered = scanner.register(worker)
@@ -38,13 +40,15 @@ def start_activity_worker(domain, task_list,
 def start_workflow_worker(domain, task_list,
                           layer1=None,
                           reg_remote=True,
-                          loop=-1):
+                          loop=-1,
+                          package=None,
+                          ignore=None):
     swf_client = _get_client(layer1, domain)
     Spec = TaskSpec
     if reg_remote:
         Spec = RemoteWorkflowSpec
     scanner = Scanner(WorkflowSpecCollector(Spec, swf_client))
-    scanner.scan_workflows(level=1)
+    scanner.scan_workflows(package=package, ignore=ignore, level=1)
     poller = DecisionPoller(swf_client, task_list)
     worker = SingleThreadedWorker(poller)
     not_registered = scanner.register(worker)

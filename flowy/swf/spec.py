@@ -82,6 +82,7 @@ class WorkflowSpec(RemoteTaskSpec):
                 task_list=self._task_list,
                 default_execution_start_to_close_timeout=workflow_duration,
                 default_task_start_to_close_timeout=decision_duration,
+                default_child_policy='TERMINATE'
             )
         except SWFTypeAlreadyExistsError:
             return False

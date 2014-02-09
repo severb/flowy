@@ -16,7 +16,7 @@ class WorkflowStarter(object):
         self._domain = str(domain)
         self._name = str(name)
         self._version = str(version)
-        self._task_list = str(task_list)
+        self._task_list = str_or_none(task_list)
         self._decision_duration = str_or_none(
             posint_or_none(decision_duration)
         )

@@ -15,5 +15,4 @@ args = parser.parse_args()
 wf = WorkflowStarter(args.domain, args.name, args.version, args.task_list,
                      args.decision_duration, args.workflow_duration)
 
-wf(args.args)
-
+wf(*args.args)
