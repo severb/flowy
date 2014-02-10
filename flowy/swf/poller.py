@@ -202,7 +202,7 @@ class DecisionPoller(object):
                 id = e['timerStartedEventAttributes']['timerId']
                 running.add(id)
             elif e_type == 'TimerFired':
-                id = e['timerStartedEventAttributes']['timerId']
+                id = e['timerFiredEventAttributes']['timerId']
                 running.remove(id)
                 results[id] = None
         running = set(map(int, running))

@@ -64,7 +64,7 @@ class Activity(Task):
 
 class Workflow(Task):
     def options(self, **kwargs):
-        self._scheduler.options(**kwargs)
+        return self._scheduler.options(**kwargs)
 
     def restart(self, *args, **kwargs):
         arguments = self._serialize_restart_arguments(*args, **kwargs)

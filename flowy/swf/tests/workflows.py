@@ -6,7 +6,7 @@ from flowy.task import TaskError, TaskTimedout, Workflow
 @workflow('SimpleReturnExample', 77, 'example_list')
 class SimpleReturn(Workflow):
     """ Does nothing, just returns the argument it receives. """
-    def run(self, value):
+    def run(self, value='hello'):
         return value
 
 
@@ -14,25 +14,25 @@ class SimpleReturn(Workflow):
 class ActivityReturn(Workflow):
     """ Returns the value of the activity. """
 
-    identitiy = ActivityProxy('Identity', 77)
+    identity = ActivityProxy('Identity', 77)
 
     def run(self):
-        return self.identity_activity('activity return')
+        return self.identity('activity return').result()
 
 
 @workflow('SimpleDependencyExample', 77, 'example_list')
 class SimpleDependency(Workflow):
     """ Some tasks that depend on other task results. """
 
-    identitiy = ActivityProxy('Identity', 77)
+    identity = ActivityProxy('Identity', 77)
     double = ActivityProxy('Double', 77)
     sum = ActivityProxy('Sum', 77)
 
     def run(self):
-        a = self.identity_activity(10)
+        a = self.identity(10)
         b = self.double(a)
         c = self.double(b)
-        d = self.identity_activity(100)
+        d = self.identity(100)
         return self.sum(a, b, c, d).result()
 
 
@@ -42,7 +42,7 @@ class Sequence(Workflow):
 
     double = ActivityProxy('Double', 77)
 
-    def run(self, n):
+    def run(self, n=5):
         n = int(n)  # when starting a workflow from cmdline this is a string
         double = self.double(n)
         while double.result() < 100:
@@ -55,10 +55,11 @@ class MapReduce(Workflow):
     """ A toy map reduce example. """
 
     square = ActivityProxy('Square', 77)
-    sum = ActivityProxy('Square', 77)
+    sum = ActivityProxy('Sum', 77)
 
-    def run(self, n):
-        squares = (s.result() for s in map(self.square, range(n)))
+    def run(self, n=5):
+        n = int(n)
+        squares = [s.result() for s in map(self.square, range(n))]
         return self.sum(*squares).result()
 
 
@@ -73,7 +74,7 @@ class Delay(Workflow):
         self.identity('no delay')
         self.delayed_identity('5 delay')
         with self.options(delay=10):
-            self.identitiy('10 dealy')
+            self.identity('10 dealy')
 
 
 @workflow('UnhandledErrorExample', 77, 'example_list')
@@ -141,7 +142,7 @@ class ErrorResultPassed(Workflow):
     def run(self):
         with self.options(error_handling=True):
             a = self.error('err!')
-        return self.identitiy(a)
+        return self.identity(a).result()
 
 
 @workflow('ErrorInWorkflowExample', 77, 'example_list')
@@ -150,25 +151,6 @@ class ErrorInWorkflow(Workflow):
 
     def run(self):
         raise ValueError('stop')
-
-
-@workflow('RetryExample', 77, 'example_list')
-class Retry(Workflow):
-    """ A task that times out will be retried a few times. """
-
-    timeout = ActivityProxy('Timeout', 77)
-    retry_timeout = ActivityProxy('Timeout', 77, retry=10)
-
-    def run(self):
-        with self.options(retry=10):
-            self.timeout()
-        self.retry_timeout()
-        with self.options(error_handling=True):
-            a = self.timeout()
-        try:
-            a.result()
-        except TaskTimedout:
-            pass
 
 
 @workflow('TimeoutExample', 77, 'example_list')

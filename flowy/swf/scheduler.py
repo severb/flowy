@@ -148,7 +148,8 @@ class DecisionScheduler(object):
                 return Placeholder()
             if self._call_id not in self._results:
                 self._decisions.start_timer(
-                    start_to_fire_timeout=delay, timer_id=str(self._call_id)
+                    start_to_fire_timeout=str(delay),
+                    timer_id=str(self._call_id)
                 )
                 return Placeholder()
             self._call_id += 1

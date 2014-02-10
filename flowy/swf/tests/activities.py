@@ -29,7 +29,7 @@ class Sum(Activity):
 class Square(Activity):
 
     def run(self, n):
-        return n ^ 2
+        return n ** 2
 
 
 @activity('Error', 77, 'example_list')

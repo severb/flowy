@@ -211,7 +211,7 @@ class DecisionSchedulerTest(unittest.TestCase):
             task_token=s.token, decisions=[{
                 'startTimerDecisionAttributes': {
                     'timerId': '0',
-                    'startToFireTimeout': 1
+                    'startToFireTimeout': '1'
                 },
                 'decisionType': 'StartTimer'
             }]
@@ -433,7 +433,7 @@ class DecisionSchedulerTest(unittest.TestCase):
             task_token=s.token, decisions=[{
                 'startTimerDecisionAttributes': {
                     'timerId': '0',
-                    'startToFireTimeout': 1
+                    'startToFireTimeout': '1'
                 },
                 'decisionType': 'StartTimer'
             }, self.activity_decision(12), self.activity_decision(16)]
