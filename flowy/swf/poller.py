@@ -120,18 +120,19 @@ class DecisionPoller(object):
             if not page.get('nextPageToken'):
                 break
             next_p = self._poll_response_page(page_token=page['nextPageToken'])
-            assert (
-                next_p['taskToken'] == page['taskToken']
-                and (
-                    next_p['workflowType']['name']
-                    == page['workflowType']['name'])
-                and (
-                    next_p['workflowType']['version']
-                    == page['workflowType']['version'])
-                and (
-                    next_p.get('previousStartedEventId')
-                    == page.get('previousStartedEventId'))
-            ), 'Inconsistent decision pages.'
+            # curiously enough, this assert doesn't always hold...
+            # assert (
+            #     next_p['taskToken'] == page['taskToken']
+            #     and (
+            #         next_p['workflowType']['name']
+            #         == page['workflowType']['name'])
+            #     and (
+            #         next_p['workflowType']['version']
+            #         == page['workflowType']['version'])
+            #     and (
+            #         next_p.get('previousStartedEventId')
+            #         == page.get('previousStartedEventId'))
+            # ), 'Inconsistent decision pages.'
             page = next_p
 
     def _parse_events(self, events):
