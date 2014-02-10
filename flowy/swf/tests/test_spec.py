@@ -183,6 +183,7 @@ class SWFWorkflowSpecTest(unittest.TestCase):
             task_list='tl',
             default_execution_start_to_close_timeout='10',
             default_task_start_to_close_timeout='20',
+            default_child_policy='TERMINATE',
         )
 
     def test_remote_checks_compatibility(self):
