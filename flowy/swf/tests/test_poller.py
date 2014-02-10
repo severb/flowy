@@ -267,7 +267,7 @@ class TestDecisionPoller(unittest.TestCase):
             },
             {
                 'eventType': 'TimerFired',
-                'timerStartedEventAttributes': {'timerId': '1'}
+                'timerFiredEventAttributes': {'timerId': '1'}
             }
         ])
         uut, client, scheduler = self._get_uut()
@@ -312,7 +312,7 @@ class TestDecisionPoller(unittest.TestCase):
         response3['events'].extend([
             {
                 'eventType': 'TimerFired',
-                'timerStartedEventAttributes': {'timerId': '1'}
+                'timerFiredEventAttributes': {'timerId': '1'}
             },
         ])
         uut, client, scheduler = self._get_uut()
