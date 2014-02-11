@@ -465,8 +465,7 @@ class DecisionSchedulerTest(unittest.TestCase):
         from flowy.scheduler import OptionsScheduler
         from flowy.scheduler import ArgsDependencyScheduler
 
-        d_s = decision_scheduler(Mock(), Mock(), Mock(), Mock(), Mock(),
-                                 Mock())
+        d_s = decision_scheduler(None, 'token', set(), set(), {}, {})
 
         self.assertIsInstance(d_s, OptionsScheduler)
         self.assertIsInstance(d_s._scheduler, ArgsDependencyScheduler)
