@@ -45,7 +45,8 @@ class ActivityScheduler(object):
 
 
 class DecisionScheduler(object):
-    def __init__(self, client, token, running, timedout, results, errors):
+    def __init__(self, client, token, running, timedout, results, errors,
+                 rate_limit=64):
         self._client = client
         self._token = token
         self._running = running
@@ -54,6 +55,7 @@ class DecisionScheduler(object):
         self._errors = errors
         self._call_id = 0
         self._decisions = Layer1Decisions()
+        self._max_schedule = max(0, (rate_limit - len(self._running)))
 
     def remote_activity(self, task_id, input, result_deserializer,
                         heartbeat, schedule_to_close,
@@ -65,15 +67,17 @@ class DecisionScheduler(object):
         )
         if result is None:
             name, version = task_id
-            self._decisions.schedule_activity_task(
-                str(self._call_id), name, version,
-                heartbeat_timeout=str_or_none(heartbeat),
-                schedule_to_close_timeout=str_or_none(schedule_to_close),
-                schedule_to_start_timeout=str_or_none(schedule_to_start),
-                start_to_close_timeout=str_or_none(start_to_close),
-                task_list=str_or_none(task_list),
-                input=str(input)
-            )
+            if self._max_schedule > 0:
+                self._decisions.schedule_activity_task(
+                    str(self._call_id), name, version,
+                    heartbeat_timeout=str_or_none(heartbeat),
+                    schedule_to_close_timeout=str_or_none(schedule_to_close),
+                    schedule_to_start_timeout=str_or_none(schedule_to_start),
+                    start_to_close_timeout=str_or_none(start_to_close),
+                    task_list=str_or_none(task_list),
+                    input=str(input)
+                )
+                self._max_schedule -= 1
             result = Placeholder()
         self._reserve_call_ids(initial_call_id, delay, retry)
         return result
@@ -89,13 +93,15 @@ class DecisionScheduler(object):
             name, version = task_id
             subworkflow_id = '%s-%s' % (uuid.uuid4(), self._call_id)
             wf_duration = workflow_duration
-            self._decisions.start_child_workflow_execution(
-                subworkflow_id, name, version,
-                execution_start_to_close_timeout=str_or_none(wf_duration),
-                task_start_to_close_timeout=str_or_none(decision_duration),
-                task_list=str_or_none(task_list),
-                input=str(input)
-            )
+            if self._max_schedule > 0:
+                self._decisions.start_child_workflow_execution(
+                    subworkflow_id, name, version,
+                    execution_start_to_close_timeout=str_or_none(wf_duration),
+                    task_start_to_close_timeout=str_or_none(decision_duration),
+                    task_list=str_or_none(task_list),
+                    input=str(input)
+                )
+                self._max_schedule -= 1
             result = Placeholder()
         self._reserve_call_ids(initial_call_id, delay, retry)
         return result
@@ -147,10 +153,12 @@ class DecisionScheduler(object):
             if self._call_id in self._running:
                 return Placeholder()
             if self._call_id not in self._results:
-                self._decisions.start_timer(
-                    start_to_fire_timeout=str(delay),
-                    timer_id=str(self._call_id)
-                )
+                if self._max_schedule > 0:
+                    self._decisions.start_timer(
+                        start_to_fire_timeout=str(delay),
+                        timer_id=str(self._call_id)
+                    )
+                    self._max_schedule -= 1
                 return Placeholder()
             self._call_id += 1
 
