@@ -31,7 +31,7 @@ if __name__ == '__main__':
     if 'activity' in sys.argv:
         from flowy.swf.tests import activities
         start_activity_worker(
-            domain='SeversTest',
+            domain='IntegrationTest',
             task_list='example_list',
             layer1=client,
             package=activities,
@@ -40,7 +40,7 @@ if __name__ == '__main__':
     else:
         from flowy.swf.tests import workflows
         start_workflow_worker(
-            domain='SeversTest',
+            domain='IntegrationTest',
             task_list='example_list',
             layer1=client,
             package=workflows,
