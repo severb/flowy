@@ -38,6 +38,16 @@ class TestTask(unittest.TestCase):
         task.run.assert_called_once_with()
         scheduler.fail.assert_called_once_with('err')
 
+    def test_run_return_error(self):
+        from flowy.result import Error
+        task, scheduler = self._get_uut()
+        task.run = Mock()
+        task.run.return_value = Error('reason')
+        task()
+        task.run.assert_called_once_with()
+        scheduler.fail.assert_called_once_with('reason')
+
+
 
 class TestHeartbeat(unittest.TestCase):
     def test_heartbeat(self):
