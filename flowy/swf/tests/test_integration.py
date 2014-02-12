@@ -14,7 +14,13 @@ class MockLayer1(Layer1):
         self.requests = cycle(requests)
 
     def json_request(self, action, data, object_hook=None):
-        return next(self.responses)
+        self._normalize_request_dict(data)
+        nxt_req = next(self.requests)
+        assert nxt_req[0] == action, ('Difference expected %s, got %s'
+                                      % (nxt_req[0], action))
+        assert nxt_req[1] == data
+        nxt_resp = next(self.responses)
+        return nxt_resp
 
 
 def make(file_name):
@@ -25,19 +31,18 @@ def make(file_name):
         line = line.split('\t')
         if line[0] == '<<<':
             res = json.loads(line[1])
-            if res is not None:
-                responses.append(res)
+            responses.append(res)
         else:
             requests.append((line[1], json.loads(line[2])))
 
     mock_layer1 = MockLayer1(responses, requests)
 
     def test(self):
-        start_workflow_worker('TestDomain', 'test_list',
+        start_workflow_worker('IntegrationTest', 'example_list',
                               layer1=mock_layer1,
                               reg_remote=False,
                               package=workflows,
-                              loop=10)
+                              loop=len(responses))
     f.close()
     return test
 
@@ -48,7 +53,6 @@ class ExamplesTest(unittest.TestCase):
 
 here = os.path.dirname(__file__)
 
-for file_name in os.listdir(os.path.join(here, 'logs'))[:8]:
+for file_name in os.listdir(os.path.join(here, 'logs')):
     test_name = 'test_' + file_name.rsplit('.', 1)[0]
-    print 'adding:', test_name
     setattr(ExamplesTest, test_name, make(file_name))
