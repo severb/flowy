@@ -345,3 +345,14 @@ class TestArgsDependencyScheduler(unittest.TestCase):
             **defaults
         )
         self.assertIsInstance(result, Error)
+
+    def test_workflow_result_return(self):
+        from flowy.result import Result
+        uut, scheduler = self._get_uut()
+        uut.complete(Result(s.result))
+        scheduler.complete.assert_called_once_with(s.result)
+
+    def test_workflow_other_return(self):
+        uut, scheduler = self._get_uut()
+        uut.complete(s.result)
+        scheduler.complete.assert_called_once_with(s.result)
