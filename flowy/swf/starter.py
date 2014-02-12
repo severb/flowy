@@ -29,7 +29,7 @@ class WorkflowStarter(object):
 
     def __call__(self, *args, **kwargs):
         workflow_id = uuid.uuid4()
-        self._start_workflow(workflow_id, *args, **kwargs)
+        return self._start_workflow(workflow_id, *args, **kwargs)
 
     def with_id(self, workflow_id):
         def wrapper(*args, **kwargs):
