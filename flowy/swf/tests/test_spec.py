@@ -96,21 +96,23 @@ class SWFActivitySpecTest(unittest.TestCase):
             description='d'
         )
         poller = Mock()
-        client.register_activity_type.side_effect = swf_error()
-        client.describe_activity_type.return_value = {
-            'configuration': {
-                'defaultTaskList': {'name': 'tl'},
-                'defaultTaskHeartbeatTimeout': '10',
-                'defaultTaskScheduleToCloseTimeout': '20',
-                'defaultTaskScheduleToStartTimeout': '30',
-                'defaultTaskStartToCloseTimeout': '40'
+        from boto.swf.exceptions import SWFTypeAlreadyExistsError
+        for err in [swf_error(), SWFTypeAlreadyExistsError(0, 0)]:
+            client.register_activity_type.side_effect = err
+            client.describe_activity_type.return_value = {
+                'configuration': {
+                    'defaultTaskList': {'name': 'tl'},
+                    'defaultTaskHeartbeatTimeout': '10',
+                    'defaultTaskScheduleToCloseTimeout': '20',
+                    'defaultTaskScheduleToStartTimeout': '30',
+                    'defaultTaskStartToCloseTimeout': '40'
+                }
             }
-        }
-        result = spec.register(poller)
-        client.describe_activity_type.assert_called_once_with(
-            activity_name='n', activity_version='v'
-        )
-        self.assertTrue(result)
+            result = spec.register(poller)
+            client.describe_activity_type.assert_called_with(
+                activity_name='n', activity_version='v'
+            )
+            self.assertTrue(result)
 
     def test_remote_register_checks_compatibility_different(self):
         spec, client, factory = self._get_uut(
@@ -190,18 +192,20 @@ class SWFWorkflowSpecTest(unittest.TestCase):
         spec, client, task_factory = self._get_uut(
             name='n', version='v'
         )
-        client.register_workflow_type.side_effect = swf_error()
-        client.describe_workflow_type.return_value = {
-            'configuration': {
-                'defaultTaskList': {'name': 'aaa'},
-                'defaultExecutionStartToCloseTimeout': 10,
-                'defaultTaskStartToCloseTimeout': 30
+        from boto.swf.exceptions import SWFTypeAlreadyExistsError
+        for err in [swf_error(), SWFTypeAlreadyExistsError(0, 0)]:
+            client.register_workflow_type.side_effect = err
+            client.describe_workflow_type.return_value = {
+                'configuration': {
+                    'defaultTaskList': {'name': 'aaa'},
+                    'defaultExecutionStartToCloseTimeout': 10,
+                    'defaultTaskStartToCloseTimeout': 30
+                }
             }
-        }
-        spec.register(Mock())
-        client.describe_workflow_type.assert_called_once_with(
-            workflow_name='n', workflow_version='v'
-        )
+            spec.register(Mock())
+            client.describe_workflow_type.assert_called_with(
+                workflow_name='n', workflow_version='v'
+            )
 
     def test_remote_check_compatibility_fails(self):
         spec, client, task_factory = self._get_uut(

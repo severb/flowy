@@ -479,3 +479,49 @@ class DecisionSchedulerTest(unittest.TestCase):
         client.respond_decision_task_completed.assert_called_once_with(
             task_token=s.token, decisions=[]
         )
+
+    def test_rate_limit(self):
+        from flowy.swf import SWFTaskId
+        uut, client = self._get_uut(running=set(range(20)))
+        for x in range(200):
+            uut.remote_activity(
+                task_id=SWFTaskId(name='name', version='version'),
+                input='input',
+                result_deserializer=s.result_deserializer,
+                heartbeat=10,
+                schedule_to_close=20,
+                schedule_to_start=30,
+                start_to_close=40,
+                task_list=s.task_list,
+                retry=3,
+                delay=10,
+                error_handling=False
+            )
+            uut.remote_activity(
+                task_id=SWFTaskId(name='name', version='version'),
+                input='input',
+                result_deserializer=s.result_deserializer,
+                heartbeat=10,
+                schedule_to_close=20,
+                schedule_to_start=30,
+                start_to_close=40,
+                task_list=s.task_list,
+                retry=3,
+                delay=0,
+                error_handling=False
+            )
+            uut.remote_subworkflow(
+                task_id=SWFTaskId(name='name', version='version'),
+                input='input',
+                result_deserializer=s.result_deserializer,
+                workflow_duration=10,
+                decision_duration=20,
+                task_list=s.task_list,
+                retry=3,
+                delay=0,
+                error_handling=False
+            )
+        uut.suspend()
+        self.assertEquals(44, len(
+            client.respond_decision_task_completed.call_args[1]['decisions']
+        ))
