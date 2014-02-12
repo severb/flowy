@@ -56,6 +56,7 @@ class DecisionScheduler(object):
         self._call_id = 0
         self._decisions = Layer1Decisions()
         self._max_schedule = max(0, (rate_limit - len(self._running)))
+        self._closed = False
 
     def remote_activity(self, task_id, input, result_deserializer,
                         heartbeat, schedule_to_close,
@@ -117,6 +118,9 @@ class DecisionScheduler(object):
         return self.suspend()
 
     def suspend(self):
+        if self._closed:
+            return False
+        self._closed = True
         try:
             self._client.respond_decision_task_completed(
                 task_token=self._token, decisions=self._decisions._data
