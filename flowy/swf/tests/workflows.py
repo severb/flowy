@@ -59,8 +59,8 @@ class MapReduce(Workflow):
 
     def run(self, n=5):
         n = int(n)
-        squares = [s.result() for s in map(self.square, range(n))]
-        return self.sum(*squares).result()
+        squares = map(self.square, range(n))
+        return self.sum(*squares)
 
 
 @workflow('DelayActivityExample', 77, 'example_list')
