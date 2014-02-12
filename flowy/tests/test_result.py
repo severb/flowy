@@ -1,5 +1,5 @@
 import unittest
-from flowy.task import SuspendTask, TaskError, TaskTimedout
+from flowy.exception import SuspendTask, TaskError, TaskTimedout
 
 
 class ResultTest(unittest.TestCase):
@@ -27,4 +27,3 @@ class ResultTest(unittest.TestCase):
 
         res = Result('reason')
         self.assertEquals('reason', res.result())
-

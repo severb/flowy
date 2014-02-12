@@ -2,26 +2,8 @@ import json
 from functools import partial
 
 from flowy import logger, posint_or_none, str_or_none
-
-
-class SuspendTask(Exception):
-    """ Raised to suspend the task run.
-
-    This happens when a worklfow needs to wait for an activity or in case of an
-    async activity.
-    """
-
-
-class TaskError(Exception):
-    """ Raised from an activity or subworkflow task if error handling is
-    enabled and the task fails.
-    """
-
-
-class TaskTimedout(TaskError):
-    """ Raised from an activity or subworkflow task if any of its timeout
-    timers were exceeded.
-    """
+from flowy.result import Result, Error, Timeout, Placeholder
+from flowy.exception import SuspendTask, TaskError
 
 
 serialize_result = staticmethod(json.dumps)
@@ -48,7 +30,18 @@ class Task(object):
             self._scheduler.fail(str(e))
             logger.exception("Error while running the task:")
         else:
-            self._scheduler.complete(self._serialize_result(result))
+            r = result
+            if isinstance(result, Result):
+                r = result.result()
+            elif isinstance(result, (Error, Timeout)):
+                try:
+                    result.result()
+                except TaskError, e:
+                    reason = str(e)
+                return self._scheduler.fail(reason)
+            elif isinstance(result, Placeholder):
+                return self._scheduler.suspend()
+            return self._scheduler.complete(self._serialize_result(r))
 
     def run(self, *args, **kwargs):
         raise NotImplementedError

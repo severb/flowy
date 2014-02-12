@@ -1,4 +1,4 @@
-from flowy.task import SuspendTask, TaskError, TaskTimedout
+from flowy.exception import SuspendTask, TaskError, TaskTimedout
 
 
 class Placeholder(object):

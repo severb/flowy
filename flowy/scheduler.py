@@ -155,12 +155,6 @@ class ArgsDependencyScheduler(PassTroughSchedulerMixin):
             error_handling=error_handling
         )
 
-    def complete(self, result):
-        r = result
-        if isinstance(result, Result):
-            r = result.result()
-        return self._scheduler.complete(r)
-
     def _args_based_result(self, args, kwargs, error_handling):
         args = tuple(args) + tuple(kwargs.values())
         if self._deps_in_args(args):

@@ -28,6 +28,7 @@ class Layer1WorkflowRecorder(Layer1):
 
 if __name__ == '__main__':
     client = Layer1WorkflowRecorder()
+    reg_remote = 'reg' in sys.argv
     if 'activity' in sys.argv:
         from flowy.swf.tests import activities
         start_activity_worker(
@@ -35,7 +36,7 @@ if __name__ == '__main__':
             task_list='example_list',
             layer1=client,
             package=activities,
-            reg_remote=False
+            reg_remote=reg_remote
         )
     else:
         from flowy.swf.tests import workflows
@@ -44,5 +45,5 @@ if __name__ == '__main__':
             task_list='example_list',
             layer1=client,
             package=workflows,
-            reg_remote=False
+            reg_remote=reg_remote
         )

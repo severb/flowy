@@ -1,6 +1,6 @@
 from flowy.swf.scanner import workflow
 from flowy.swf.task import ActivityProxy
-from flowy.task import TaskError, TaskTimedout, Workflow
+from flowy.task import TaskError, Workflow
 
 
 @workflow('SimpleReturnExample', 77, 'example_list')
@@ -17,7 +17,7 @@ class ActivityReturn(Workflow):
     identity = ActivityProxy('Identity', 77)
 
     def run(self):
-        return self.identity('activity return').result()
+        return self.identity('activity return')
 
 
 @workflow('SimpleDependencyExample', 77, 'example_list')
