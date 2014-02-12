@@ -23,7 +23,8 @@ for wf_name in \
     ErrorChainingExample \
     ErrorResultPassedExample \
     ErrorInWorkflowExample \
-    TimeoutExample
+    TimeoutExample \
+    SubworkflowExample
 do
     echo $wf_name
     /usr/bin/env python -m flowy.swf IntegrationTest $wf_name 77 &

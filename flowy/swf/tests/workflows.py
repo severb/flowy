@@ -1,5 +1,5 @@
 from flowy.swf.scanner import workflow
-from flowy.swf.task import ActivityProxy
+from flowy.swf.task import ActivityProxy, WorkflowProxy
 from flowy.task import TaskError, Workflow
 
 
@@ -161,3 +161,13 @@ class Timeout(Workflow):
 
     def run(self):
         self.timeout()
+
+
+@workflow('SubworkflowExample', 77, 'example_list')
+class SubworkflowExample(Workflow):
+    """ Start a subworkflow. """
+
+    subwf = WorkflowProxy('SimpleReturnExample', 77)
+
+    def run(self):
+        return self.subwf()

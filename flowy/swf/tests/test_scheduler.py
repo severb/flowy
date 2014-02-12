@@ -56,14 +56,14 @@ class DecisionSchedulerTest(unittest.TestCase):
 
     subworkflow_decision = {
         'startChildWorkflowExecutionDecisionAttributes': {
-            'workflowId': 'version',
+            'workflowId': ANY,
             'taskList': {'name': 'sentinel.task_list'},
             'taskStartToCloseTimeout': '20',
             'executionStartToCloseTimeout': '10',
             'input': 'input',
             'workflowType': {
-                'version': 'name',
-                'name': ANY
+                'version': 'version',
+                'name': 'name'
             }
         },
         'decisionType': 'StartChildWorkflowExecution'

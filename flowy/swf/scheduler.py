@@ -96,7 +96,7 @@ class DecisionScheduler(object):
             wf_duration = workflow_duration
             if self._max_schedule > 0:
                 self._decisions.start_child_workflow_execution(
-                    subworkflow_id, name, version,
+                    name, version, subworkflow_id,
                     execution_start_to_close_timeout=str_or_none(wf_duration),
                     task_start_to_close_timeout=str_or_none(decision_duration),
                     task_list=str_or_none(task_list),
