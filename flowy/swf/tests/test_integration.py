@@ -5,7 +5,9 @@ from boto.swf.layer1 import Layer1
 import workflows
 from flowy.swf.boilerplate import start_workflow_worker
 from itertools import cycle
-
+import random
+from mock import patch
+import string
 
 class MockLayer1(Layer1):
 
@@ -37,7 +39,11 @@ def make(file_name):
 
     mock_layer1 = MockLayer1(responses, requests)
 
-    def test(self):
+    @patch('uuid.uuid4')
+    def test(self, uuid):
+        random.seed(0)
+        uuid.return_value = ''.join(random.choice(string.ascii_uppercase +
+                                    string.digits) for x in range(10))
         start_workflow_worker('IntegrationTest', 'example_list',
                               layer1=mock_layer1,
                               reg_remote=False,
