@@ -2,10 +2,9 @@ Flowy library documentation
 ===========================
 
 
-`Flowy`_ is a library that makes it easy and fun to write distributed
-asynchronous workflows. It uses `Amazon SWF`_ as a backend. It is ideal for
-applications that deal with media encoding, long-running tasks or background
-processing.
+`Flowy`_ is a library that makes it easy to write distributed asynchronous
+workflows. It uses `Amazon SWF`_ as a backend. It is ideal for applications
+that deal with media encoding, long-running tasks or background processing.
 
 A toy map-reduce workflow using Flowy looks like this::
 
