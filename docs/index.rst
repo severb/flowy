@@ -47,8 +47,8 @@ In Depth
 
     indepth/activity
     indepth/decision
-    indepth/settings
     indepth/error
+    indepth/settings
     indepth/transport
     indepth/production
     indepth/contribute
