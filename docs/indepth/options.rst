@@ -1,2 +1,0 @@
-Granular Options
-================
