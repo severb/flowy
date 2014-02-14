@@ -1,4 +1,4 @@
-Flowy library documentation
+Flowy Library Documentation
 ===========================
 
 
@@ -39,8 +39,8 @@ Tutorial
     tutorial/tutorial
 
 
-In depth documentation
-----------------------
+In Depth
+--------
 
 .. toctree::
     :titlesonly:
