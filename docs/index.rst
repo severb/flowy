@@ -1,57 +1,63 @@
-.. _index:
-
-==========================
-Flowy Amazon SWF Framework
-==========================
-
-Amazon Simple Workflow Service (Amazon SWF) provides a powerful and flexible
-way for developers to implement distributed asynchronous workflow applications.
-The AWS Flow Framework is a programming framework that simplifies the process
-of implementing a distributed asynchronous application while providing all the
-benefits of Amazon SWF. It is ideal for implementing applications to address a
-broad range of scenarios including business processes, media encoding,
-long-running tasks, and background processing.
-
-With the :app:`Flowy` Framework, you can focus on implementing your workflow
-logic.  Behind the scenes, the framework uses the scheduling, routing, and
-state management capabilities of Amazon SWF to manage your workflow's execution
-and make it scalable, reliable, and auditable. AWS Flow Framework-based
-workflows are highly concurrent. The workflows can be distributed across
-multiple components, which can run as separate processes on separate computers
-and be scaled independently. The application can continue to progress if any of
-its components are running, making it highly fault tolerant.
+Flowy library documentation
+===========================
 
 
-To make a simple :app:`Flowy` application that tests whether a number is even 
-or not, all you need are the following two files, one for the activity and one
-for the workflow:
+`Flowy`_ is a library that makes it easy and fun to write distributed
+asynchronous workflows. It uses `Amazon SWF`_ as a backend. It is ideal for
+applications that deal with media encoding, long-running tasks or background
+processing.
 
-.. literalinclude:: tutorial/simple_workflow.py
-.. literalinclude:: tutorial/simple_activity.py
+A toy map-reduce workflow using Flowy looks like this::
 
-See the :ref:`tutorial` for a full explanation on how this application
-works and how to build a complete workflow from start to finish.
+    @workflow(name='sum_squares', version='v1', task_list='my_list')
+    class SumOfSquares(Workflow):
 
-Contents:
-=================
+            square = ActivityProxy(name='square', version='v0.1')
+            sum = ActivityProxy(name='sum', version=3)
+
+            def run(self, n=5):
+                    squares = map(self.square, range(n))
+                    return self.sum(*squares)
+
+See the :ref:`tutorial <tutorial>` for a narrative introduction of the Flowy
+features.
+
+
+Installation
+------------
+
+Flowy is available on the Python Package Index - to install it use `pip`_::
+
+    pip install flowy
+
+
+Tutorial
+--------
+
 .. toctree::
     :maxdepth: 2
 
-    installation
-    tutorial/tutorial.rst
+    tutorial/tutorial
 
-API Reference
-=============
+
+In depth documentation
+----------------------
+
 .. toctree::
-    :glob:
-    :maxdepth: 1
+    :titlesonly:
 
-    api/*
+    indepth/activity
+    indepth/decision
+    indepth/options
+    indepth/error
+    indepth/transport
+    indepth/production
+    indepth/contribute
 
 
-Indices and tables
-==================
 
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+.. _Flowy: http://example.com/
+.. _Amazon SWF: http://aws.amazon.com/swf/
+.. _pip: http://www.pip-installer.org/
+
+
