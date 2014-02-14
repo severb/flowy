@@ -8,15 +8,15 @@ that deal with media encoding, long-running tasks or background processing.
 
 A toy map-reduce workflow using Flowy looks like this::
 
-    @workflow(name='sum_squares', version='v1', task_list='my_list')
-    class SumOfSquares(Workflow):
+    @workflow(name='add_squares', version='v1', task_list='my_list')
+    class AddSquares(Workflow):
 
             square = ActivityProxy(name='square', version='v0.1')
-            sum = ActivityProxy(name='sum', version=3)
+            add = ActivityProxy(name='add', version=3)
 
             def run(self, n=5):
                     squares = map(self.square, range(n))
-                    return self.sum(*squares)
+                    return self.add(*squares)
 
 See the :ref:`tutorial <tutorial>` for a narrative introduction of the Flowy
 features.
