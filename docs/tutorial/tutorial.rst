@@ -17,7 +17,7 @@ But before, lets start by setting up the development environment and create a
 new domain.
 
 
-Setting up the environment
+Setting Up the Environment
 --------------------------
 
 To isolate the requirements for this tutorial lets create a new virtual
@@ -32,7 +32,7 @@ After installation make sure `pillow`_ has JPEG support. You should see::
     --- JPEG support available
 
 
-Registering a new domain
+Registering a New Domain
 ------------------------
 
 
