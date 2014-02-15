@@ -24,10 +24,10 @@ To isolate the requirements for this tutorial lets create a new virtual
 environment and install all the dependencies::
 
     $ virtualenv /tmp/flowytutorial/
-    (flowytutorial)$ pip install flowy
-    (flowytutorial)$ pip install pillow  # a fork of PIL
+    $ source /tmp/flowytutorial/bin/activate
+    (flowytutorial)$ pip install flowy requests pillow # a fork of PIL
 
-After installation make sure pillow has JPEG support. You should see::
+After installation make sure `pillow`_ has JPEG support. You should see::
 
     --- JPEG support available
 
@@ -53,12 +53,13 @@ And use the `register_domain`_ method like so:
         >>> Layer1().register_domain('flowy_tutorial', 7)  # keep the run history for 1 week
 
 
-.. _these steps: http://docs.aws.amazon.com/amazonswf/latest/developerguide/swf-dg-register-domain-console.html
-.. _boto: http://boto.readthedocs.org/
-.. _register_domain: http://boto.readthedocs.org/en/latest/ref/swf.html#boto.swf.layer1.Layer1.register_domain
-
-
 Image Resizing Activity
 -----------------------
 
 TBD
+
+
+.. _pillow: http://pillow.readthedocs.org/
+.. _these steps: http://docs.aws.amazon.com/amazonswf/latest/developerguide/swf-dg-register-domain-console.html
+.. _boto: http://boto.readthedocs.org/
+.. _register_domain: http://boto.readthedocs.org/en/latest/ref/swf.html#boto.swf.layer1.Layer1.register_domain
