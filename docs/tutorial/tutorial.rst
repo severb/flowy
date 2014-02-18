@@ -38,7 +38,7 @@ Registering a New Domain
 
 Before implementing our first workflow we need to define a domain in the Amazon
 SWF service that will host the workflow and all its activities. The domain is
-like a namspace, only the workflows an activities registered under the same
+like a namspace, only the workflows and activities registered under the same
 domain can see eachother. You can register a domain using the management
 console and following `these steps`_ - just make sure you name it
 *flowy_tutorial*. You can also register a domain using the `boto`_ library:
