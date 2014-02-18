@@ -35,7 +35,6 @@ After installation make sure `pillow`_ has JPEG support. You should see::
 Registering a New Domain
 ------------------------
 
-
 Before implementing our first workflow we need to define a domain in the Amazon
 SWF service that will host the workflow and all its activities. The domain is
 like a namspace, only the workflows and activities registered under the same
@@ -56,7 +55,11 @@ And use the `register_domain`_ method like so:
 Image Resizing Activity
 -----------------------
 
-TBD
+Create a new file named ``activities.py`` and add the following content:
+
+.. literalinclude:: activities.py
+    :linenos:
+    :lines: 1-37
 
 
 .. _pillow: http://pillow.readthedocs.org/
