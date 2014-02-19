@@ -38,16 +38,6 @@ class TestTask(unittest.TestCase):
         task.run.assert_called_once_with()
         scheduler.fail.assert_called_once_with('err')
 
-    def test_run_return_error(self):
-        from flowy.result import Error
-        task, scheduler = self._get_uut()
-        task.run = Mock()
-        task.run.return_value = Error('reason')
-        task()
-        task.run.assert_called_once_with()
-        scheduler.fail.assert_called_once_with('reason')
-
-
 
 class TestHeartbeat(unittest.TestCase):
     def test_heartbeat(self):
@@ -73,6 +63,41 @@ class TestWorkflow(unittest.TestCase):
         uut, scheduler = self._get_uut()
         uut.options(x=1, y=2, z='abc')
         scheduler.options.assert_called_once_with(x=1, y=2, z='abc')
+
+    def test_run_return_error(self):
+        from flowy.result import Error
+        uut, scheduler = self._get_uut()
+        uut.run = Mock()
+        uut.run.return_value = Error('reason')
+        uut()
+        uut.run.assert_called_once_with()
+        scheduler.fail.assert_called_once_with('reason')
+
+    def test_run_return_placeholder(self):
+        from flowy.result import Placeholder
+        uut, scheduler = self._get_uut()
+        uut.run = Mock()
+        uut.run.return_value = Placeholder()
+        uut()
+        uut.run.assert_called_once_with()
+        scheduler.suspend.assert_called_once_with()
+
+    def test_run_return_result(self):
+        from flowy.result import Result
+        uut, scheduler = self._get_uut()
+        uut.run = Mock()
+        uut.run.return_value = Result(12)
+        uut()
+        uut.run.assert_called_once_with()
+        scheduler.complete.assert_called_once_with('12')
+
+    def test_run_return_value(self):
+        uut, scheduler = self._get_uut()
+        uut.run = Mock()
+        uut.run.return_value = 12
+        uut()
+        uut.run.assert_called_once_with()
+        scheduler.complete.assert_called_once_with('12')
 
 
 class TestTaskProxy(unittest.TestCase):
