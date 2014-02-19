@@ -59,7 +59,7 @@ Create a new file named ``activities.py`` and add the following content:
 
 .. literalinclude:: activities.py
     :linenos:
-    :lines: 1-37
+    :lines: 1-35
 
 
 .. _pillow: http://pillow.readthedocs.org/

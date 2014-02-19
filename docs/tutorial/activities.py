@@ -1,6 +1,6 @@
 import os
 import StringIO
-import uuid
+import tempfile
 
 from PIL import Image
 
@@ -13,25 +13,23 @@ from flowy.task import Activity
 class ResizeImage(Activity):
     def run(self, url, width=128, height=128):
         image_file = self.download_image(url)
-        resized_file = self.resize(image_file, width, height)
-        destination = self.generate_unique_key(url)
-        self.store(resized_file, destination)
-        return destination
+        image = self.resize(image_file, width, height)
+        dest_file, dest_path = self.prepare_destination()
+        self.store(image, dest_file)
+        return dest_path
 
     def download_image(self, url):
         return StringIO.StringIO(requests.get(url).content)
 
-    def resize(self, image_file, width, height):
+    def resize(self, image_file, width, height, dest_file):
         i = Image.open(image_file)
         i.thumbnail((width, height))
-        result = StringIO.StringIO()
-        i.save(result)
-        return result
+        return i
 
-    def generate_unique_key(self, url):
-        basename = os.path.basename(url)
-        file_name = '%s-%s' % (uuid.uuid4(), basename)
-        return os.path.join('/img-tmp', file_name)
+    def prepare_destination(self):
+        fd, path = tempfile.mkstemp(prefix='flowy-', dir='/tmp/')
+        return os.fdopen(fd, 'w+'), path
 
-    def store(self, file_object, destination):
-        pass
+    def store(self, image, dest_file):
+        image.save(dest_file)
+        dest_file.close()
