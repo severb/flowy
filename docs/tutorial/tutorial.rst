@@ -56,10 +56,10 @@ Image Resizing Activity
 -----------------------
 
 
-Activities are the components of a workflow that do the actual processing. As
-we'll see in the example below you implement an activity by overriding the
-``run`` method of the ``Activity`` class. You can pass data in the activity
-from the workflow and out from the activity to the workflow. Once we have a few
+An activity is the part of a workflow that does the actual processing. As we'll
+see in the example below you implement an activity by overriding the ``run``
+method of the ``Activity`` class. You can pass data in the activity from the
+workflow and out from the activity to the workflow. Once we have a few
 activities implemented we can spawn as many activity worker processes as we
 need. Each worker will scan for all activities implemented and start listening
 for things to do. As soon as a workflow schedules a new activity to run one of
