@@ -13,8 +13,7 @@ time an activity finishes its execution the workflow will decide what needs to
 happen next. This decision can be one of the following: start or retry
 activities, complete or abort the workflow execution.
 
-But before, lets start by setting up the development environment and create a
-new domain.
+Lets start by setting up the development environment and create a new domain.
 
 
 Setting Up the Environment
