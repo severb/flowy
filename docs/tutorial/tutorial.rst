@@ -60,9 +60,9 @@ see in the example below you implement an activity by overriding the ``run``
 method of the ``Activity`` class. You can pass data in the activity from the
 workflow and out from the activity to the workflow. Once we have a few
 activities implemented we can spawn as many activity worker processes as we
-need. Each worker will scan for all activities implemented and start listening
-for things to do. As soon as a workflow schedules a new activity to run one of
-the available worker will execute the activity code and report back the result.
+need. Each worker will scan for all implemented activities and start pulling
+for things to do. As soon as a workflow schedules a new activity, one of the
+available workers will execute the activity code and report back the result.
 Lets create our first activity, open a new file named ``activities.py`` and add
 the following content:
 
@@ -72,7 +72,7 @@ the following content:
     :language: python
 
 
-There is a lot going on in this activity so lets go over it line by line.
+There is a lot going on in this activity so we'll go over it line by line.
 Skipping all the imports we get to the first interesting part which is the
 ``activity`` decorator:
 
@@ -81,13 +81,13 @@ Skipping all the imports we get to the first interesting part which is the
     :language: python
 
 
-The ``activity`` decorator has two different responsibilities. It registers
-this activity implementation so that when we later spawn an activity worker the
-activity is discovered. At the same time it provides some required properties
-like the activity name, version and the default default task list. A workflow
-can use the name and the version defined here to schedule a run of this
-activity - we'll see exactly how later. The task lists control how tasks are
-routed to activity worker processes. Whenever we spawn an activity worker
+The ``activity`` decorator has two different responsibilities. It makes the
+activity implementation discoverable in the scanning step of the worker
+process. At the same time it provides some required properties like the
+activity name, version and the default task list. A workflow can use the name
+and the version defined here to schedule a run of this activity - we'll see
+exactly how later. The task lists are used to  route scheduled activities to be
+executed by specific worker processes. Whenever we spawn an activity worker
 process we specify a task list to pull tasks from; we can even have many
 workers pulling from the same list. The task list defined with the ``activity``
 decorator only serves as a default - the workflow can force an activity to be
