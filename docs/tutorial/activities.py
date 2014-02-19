@@ -31,5 +31,5 @@ class ResizeImage(Activity):
         return os.fdopen(fd, 'w+'), path
 
     def store(self, image, dest_file):
-        image.save(dest_file)
+        image.save(dest_file, format='jpeg')
         dest_file.close()
