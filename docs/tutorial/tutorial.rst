@@ -91,8 +91,8 @@ executed by specific worker processes. Whenever we spawn an activity worker
 process we specify a task list to pull tasks from; we can even have many
 workers pulling from the same list. The task list defined with the ``activity``
 decorator only serves as a default - the workflow can force an activity to be
-scheduled on a specific list. There are other things that can be specified with
-this decorator like timeout values, error handling strategy and the number of
+scheduled on a different list. There are other things that can be set with this
+decorator like timeout values, error handling strategy and the number of
 retries but for now we won't need any of those.
 
 
