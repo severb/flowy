@@ -30,18 +30,10 @@ class Task(object):
             self._scheduler.fail(str(e))
             logger.exception("Error while running the task:")
         else:
-            r = result
-            if isinstance(result, Result):
-                r = result.result()
-            elif isinstance(result, (Error, Timeout)):
-                try:
-                    result.result()
-                except TaskError, e:
-                    reason = str(e)
-                return self._scheduler.fail(reason)
-            elif isinstance(result, Placeholder):
-                return self._scheduler.suspend()
-            return self._scheduler.complete(self._serialize_result(r))
+            return self._finish(result)
+
+    def _finish(self, result):
+        self._scheduler.complete(self._serialize_result(result))
 
     def run(self, *args, **kwargs):
         raise NotImplementedError
@@ -62,6 +54,19 @@ class Workflow(Task):
     def restart(self, *args, **kwargs):
         arguments = self._serialize_restart_arguments(*args, **kwargs)
         return self._scheduler.restart(arguments)
+
+    def _finish(self, result):
+        r = result
+        if isinstance(result, Result):
+            r = result.result()
+        elif isinstance(result, (Error, Timeout)):
+            try:
+                result.result()
+            except TaskError, e:
+                return self._scheduler.fail(str(e))
+        elif isinstance(result, Placeholder):
+            return self._scheduler.suspend()
+        return super(Workflow, self)._finish(r)
 
     _serialize_restart_arguments = serialize_args
 

@@ -71,7 +71,7 @@ and add the following content:
     :language: python
 
 
-There is a lot going on in this activity so lets go over it line by line.
+There is a lot going on in this activity so we'll go over it line by line.
 Skipping all the imports we get to the first interesting part which is the
 ``activity`` decorator:
 
@@ -93,8 +93,8 @@ run all the different activity types scheduled on the list it pulls from. The
 task list defined with the ``activity`` decorator only serves as a default -
 the workflow can force an activity to be scheduled on a specific list. There
 are other things that can be specified with this decorator like timeout values,
-error handling strategy and the number of retries but for now we won't need any
-of those.
+error handling strategy and the number of retries. For now we should be fine
+using the defaults.
 
 
 .. literalinclude:: activities.py
@@ -109,7 +109,7 @@ The image resizing code is inside the ``run`` method which is the activity
 entrypoint. It gets an URL and a target size and starts by downloading and
 processing the image. In the end it creates a temporary file where it stores
 the resulting new image and returns the path to it. There are some restrictions
-on what can go in and out of an activity but we don't need to worry about that
+on what can go in and out an activity but we don't need to worry about that
 for now.
 
 
