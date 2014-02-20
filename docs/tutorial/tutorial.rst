@@ -55,19 +55,18 @@ Image Resizing Activity
 -----------------------
 
 
-An activity is the part of a workflow that does the actual processing. As we'll
+The workflows are using activities to delegate the actual processing. As we'll
 see in the example below you implement an activity by overriding the ``run``
 method of the ``Activity`` class. You can pass data in the activity from the
 workflow and out from the activity to the workflow. Once we have a few
 activities implemented we can spawn as many activity worker processes as we
-need. Each worker will scan for all activities implemented and start listening
-for things to do. As soon as a workflow schedules a new activity to run one of
-the available worker will execute the activity code and report back the result.
-Lets create our first activity, open a new file named ``activities.py`` and add
-the following content:
+need. Each worker will scan for available activity impementations and start
+listening for things to do. As soon as a workflow schedules a new activity, one
+of the available worker will execute the activity code and report back the
+result. Lets create our first activity, open a new file named ``activities.py``
+and add the following content:
 
 .. literalinclude:: activities.py
-    :linenos:
     :lines: 1-35
     :language: python
 
@@ -86,14 +85,32 @@ this activity implementation so that when we later spawn an activity worker the
 activity is discovered. At the same time it provides some required properties
 like the activity name, version and the default default task list. A workflow
 can use the name and the version defined here to schedule a run of this
-activity - we'll see exactly how later. The task lists control how tasks are
-routed to activity worker processes. Whenever we spawn an activity worker
-process we specify a task list to pull tasks from; we can even have many
-workers pulling from the same list. The task list defined with the ``activity``
-decorator only serves as a default - the workflow can force an activity to be
-scheduled on a specific list. There are other things that can be specified with
-this decorator like timeout values, error handling strategy and the number of
-retries but for now we won't need any of those.
+activity - we'll see exactly how later. The task lists control how actvities
+are routed to the worker processes. Whenever we spawn a worker process we
+specify a task list to pull activties from - we can even have multiple workers
+pulling from the same list. It is important that a worker process knows how to
+run all the different activity types scheduled on the list it pulls from. The
+task list defined with the ``activity`` decorator only serves as a default -
+the workflow can force an activity to be scheduled on a specific list. There
+are other things that can be specified with this decorator like timeout values,
+error handling strategy and the number of retries but for now we won't need any
+of those.
+
+
+.. literalinclude:: activities.py
+    :lines: 13-19
+    :language: python
+
+
+Moving forward we get to the class definition of the activity. It is necessary
+that every activity is a subclass of ``Activity``. This provides some
+convenience like input and output conversion, exception handling and logging.
+The image resizing code is inside the ``run`` method which is the activity
+entrypoint. It gets an URL and a target size and starts by downloading and
+processing the image. In the end it creates a temporary file where it stores
+the resulting new image and returns the path to it. There are some restrictions
+on what can go in and out of an activity but we don't need to worry about that
+for now.
 
 
 .. _pillow: http://pillow.readthedocs.org/
