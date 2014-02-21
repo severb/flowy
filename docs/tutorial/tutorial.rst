@@ -53,8 +53,8 @@ And then use the `register_domain`_ method like so:
         >>> Layer1().register_domain('flowy_tutorial', 7)  # keep the run history for 1 week
 
 
-Image Resizing Activity
------------------------
+Creating Some Activities
+------------------------
 
 The workflows are using activities to delegate the actual processing. As we'll
 see in the example below, you can implement an activity by overriding the
@@ -64,8 +64,14 @@ activities implemented we can spawn as many activity worker processes as we
 need. Each worker will scan for available activity implementations and start
 listening for incoming tasks. As soon as a workflow schedules a new activity,
 one of the available workers will execute the activity code and return the
-result. Let's write our first activity: create a new file named
-``activities.py`` and add the following content:
+result.
+
+
+The Image Resizing Activity
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Let's create an activity that will download and resize an image. Start by
+creating a new file named ``activities.py`` and add the following content:
 
 .. literalinclude:: activities.py
     :lines: 1-35
@@ -107,6 +113,20 @@ the resulting new image and returns the path to it. There are some restrictions
 on what can go in and out an activity but we don't need to worry about that
 for now.
 
+.. note::
+
+    This tutorial tries to keep things easy to understand and not necessarly
+    robust. As you may have noticed we are saving the resized image to the
+    local disk. This assumes that all your workers will run on the same
+    machine. As soon as you start to distribute the work across multiple
+    machines you will have a problem. In that case a better solution would be
+    to use a shared storage system.
+
+
+Adding More Activities
+~~~~~~~~~~~~~~~~~~~~~~
+
+TBD
 
 .. _pillow: http://pillow.readthedocs.org/
 .. _these steps: http://docs.aws.amazon.com/amazonswf/latest/developerguide/swf-dg-register-domain-console.html
