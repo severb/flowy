@@ -97,9 +97,9 @@ allowed to pull from the same list. It is important that a worker process knows
 how to run all the different activity types that will be scheduled on the list
 it pulls from. The task list defined with the ``activity`` decorator only
 serves as a default value - the workflow can override it for an activity,
-scheduling it on a specific list. There are other things that can be specified
-with this decorator, like timeout values, error handling strategy and the
-number of retries. For now we should be fine using the default values.
+scheduling it on a specific list. There are other things that can be set with
+this decorator, like timeout values, error handling strategy and the number of
+retries. For now we should be fine using the default values.
 
 .. literalinclude:: activities.py
     :lines: 13-19

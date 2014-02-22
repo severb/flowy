@@ -24,7 +24,7 @@ class WorkflowStarter(object):
             posint_or_none(workflow_duration)
         )
         self._client = client
-        if client is None:
+        if client is None:  # pragma: no cover
             self._client = Layer1()
 
     def __call__(self, *args, **kwargs):

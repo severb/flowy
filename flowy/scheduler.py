@@ -7,12 +7,7 @@ from flowy.result import Error, Placeholder, Result
 _sentinel = object()
 
 
-class PassTroughSchedulerMixin(object):
-    def __getattr__(self, name):
-        return getattr(self._scheduler, name)
-
-
-class OptionsScheduler(PassTroughSchedulerMixin):
+class OptionsScheduler(object):
     def __init__(self, scheduler):
         self._scheduler = scheduler
         self._activity_options_stack = [dict()]
@@ -109,8 +104,11 @@ class OptionsScheduler(PassTroughSchedulerMixin):
         self._activity_options_stack.pop()
         self._subworkflow_options_stack.pop()
 
+    def __getattr__(self, name):
+        return getattr(self._scheduler, name)
 
-class ArgsDependencyScheduler(PassTroughSchedulerMixin):
+
+class ArgsDependencyScheduler(object):
     def __init__(self, scheduler):
         self._scheduler = scheduler
 
@@ -183,3 +181,6 @@ class ArgsDependencyScheduler(PassTroughSchedulerMixin):
             for k, v in kwargs.items()
         )
         return args_serializer(*raw_args, **raw_kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._scheduler, name)
