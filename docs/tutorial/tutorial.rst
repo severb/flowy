@@ -115,7 +115,7 @@ for now.
 
 .. note::
 
-    This tutorial tries to keep things easy to understand and not necessarly
+    This tutorial tries to keep things easy to understand and not necessarily
     robust. As you may have noticed we are saving the resized image to the
     local disk. This assumes that all your workers will run on the same
     machine. As soon as you start to distribute the work across multiple
@@ -123,10 +123,59 @@ for now.
     to use a shared storage system.
 
 
-Adding More Activities
-~~~~~~~~~~~~~~~~~~~~~~
+Processing the Image and Sending Updates
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-TBD
+There are two activities that we still have to implement: one that computes the
+most predominant color and another one that moves images on disk.  Open
+``activities.py`` and append the following code:
+
+.. literalinclude:: activities.py
+    :lines: 38-61
+    :language: python
+
+We changed a few things in this example so lets go over it. We'll start again
+with the ``activity`` decorator:
+
+.. literalinclude:: activities.py
+    :lines: 38
+    :language: python
+
+Here we used positional arguments for the name, version (which is a string this
+time) and task list. This gave us some space to squeeze in a `heartbeat` value.
+The heartbeat represents the maximum duration in seconds in which an activity
+must report back some progress. The value we set here, like with the task list,
+is only a default value. A workflow using this activity has very granular
+options for overriding it.
+
+.. literalinclude:: activities.py
+    :lines: 40-44
+    :language: python
+
+Jumping over the class definition we get to the ``run`` method. Here we can see
+how the ``heartbeat`` method is used to report progress. The method returns a
+boolean value indicating whether we were on time or not. In this case being on
+time means that the time elapsed between the last heartbeat or since the
+activity started and the current heartbeat is less then 15 seconds. If we are
+on time we can continue with our processing; else we should abandon the
+activity since it timed out and the result or further heartbeats will be
+ignored. Any cleanup needed to stop the progress cleanly can be done at this
+point. You can also see the heartbeat functionality used in the ``sum_colors``
+method to report progress after each megapixel is processed.
+
+
+Moving Files on Disk
+~~~~~~~~~~~~~~~~~~~~
+
+This will be a very simple activity that will just rename a file. Append in
+``activities.py`` the following code:
+
+.. literalinclude:: activities.py
+    :lines: 63
+    :language: python
+
+Hopefully at this point
+
 
 .. _pillow: http://pillow.readthedocs.org/
 .. _these steps: http://docs.aws.amazon.com/amazonswf/latest/developerguide/swf-dg-register-domain-console.html

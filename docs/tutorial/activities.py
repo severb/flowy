@@ -33,3 +33,29 @@ class ResizeImage(Activity):
     def store(self, image, dest_file):
         image.save(dest_file, format='jpeg')
         dest_file.close()
+
+
+@activity('predominantcolor', 'v1', 'image_processing', heartbeat=15)
+class ComputePredominantColor(Activity):
+    def run(self, url):
+        image = self.download_image(self, url)
+        if not self.heartbeat():
+            return
+        return self.sum_colors(image)
+
+    def download_image(self, url):
+        f_like = StringIO.StringIO(requests.get(url).content)
+        return Image.open(f_like)
+
+    def sum_colors(self, image):
+        r_total, g_total, b_total = (0, 0, 0)
+        pixels = 1
+        for r, g, b in image.getdata():
+            r_total += r
+            g_total += g
+            b_total += b
+            pixels += 1
+            if pixels % 2**20 == 0:  # about every megapixel
+                if not self.heartbeat():
+                    return
+        return r_total, g_total, b_total
