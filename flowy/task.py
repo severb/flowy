@@ -62,7 +62,7 @@ class Workflow(Task):
         elif isinstance(result, (Error, Timeout)):
             try:
                 result.result()
-            except TaskError, e:
+            except TaskError as e:
                 return self._scheduler.fail(str(e))
         elif isinstance(result, Placeholder):
             return self._scheduler.suspend()
