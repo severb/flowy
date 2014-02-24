@@ -113,8 +113,8 @@ class DecisionScheduler(object):
         return self.suspend()
 
     def fail(self, reason):
-        d = self._decisions = Layer1Decisions()
-        d.fail_workflow_execution(reason=reason[:256])
+        self._decisions = Layer1Decisions()
+        self._decisions.fail_workflow_execution(reason=reason[:256])
         return self.suspend()
 
     def suspend(self):
