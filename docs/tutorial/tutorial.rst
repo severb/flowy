@@ -41,7 +41,7 @@ SWF service that will host the workflow and all its activities. The domain is
 like a namespace, where the workflows and activities registered in the same
 domain can see only each other. You can register a domain using the management
 console and by following `these steps`_ - just make sure you name it
-*flowy_tutorial*. You can also register a domain using the `boto`_ library:
+*flowytutorial*. You can also register a domain using the `boto`_ library:
 launch your Python interpreter with the following two environment variables
 set::
 
@@ -50,11 +50,11 @@ set::
 And then use the `register_domain`_ method like so:
 
         >>> from boto.swf.layer1 import Layer1
-        >>> Layer1().register_domain('flowy_tutorial', 7)  # keep the run history for 1 week
+        >>> Layer1().register_domain('flowytutorial', 7)  # keep the run history for 1 week
 
 
-Creating Some Activities
-------------------------
+The Image Resizing Activity
+---------------------------
 
 The workflows are using activities to delegate the actual processing. As we'll
 see in the example below, you can implement an activity by overriding the
@@ -65,10 +65,6 @@ need. Each worker will scan for available activity implementations and start
 listening for incoming tasks. As soon as a workflow schedules a new activity,
 one of the available workers will execute the activity code and return the
 result.
-
-
-The Image Resizing Activity
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Let's create an activity that will download and resize an image. Start by
 creating a new file named ``activities.py`` and add the following content:
@@ -124,7 +120,7 @@ for now.
 
 
 Processing the Image and Sending Updates
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+----------------------------------------
 
 There are two activities that we still have to implement: one that computes the
 most predominant color and another one that moves images on disk.  Open
@@ -165,16 +161,53 @@ method to report progress after each megapixel is processed.
 
 
 Moving Files on Disk
-~~~~~~~~~~~~~~~~~~~~
+--------------------
 
-This will be a very simple activity that will just rename a file. Append in
+This will be a very simple activity that will rename a file. Append in
 ``activities.py`` the following code:
 
 .. literalinclude:: activities.py
-    :lines: 63
+    :lines: 63-67
     :language: python
 
-Hopefully at this point
+Hopefully at this point this should look familiar. The only new thing here is
+the use of the ``start_to_close``. This will sets a limit of 10 seconds on how
+long the activity can run before it will time out and be abandoned.
+
+
+Running the Activity Worker
+---------------------------
+
+We finished writing all the activities that we need and it's time to start an
+activity worker process. This process, once started, will continuously pull for
+jobs from a task list and call the ``run`` method of one of the three
+activities we have defined. The task list we'll pull from it's called
+*image_processing* and it's already the default task list defined for each
+activity. Another thing we need is the domain we created at the beginning of
+the tutorial - it was named *flowytutorial*. So, once again open
+``activities.py`` and append:
+
+.. literalinclude:: activities.py
+    :lines: 69-72
+    :language: python
+
+To start a worker run Python passing the boto authentication environment
+variables like so::
+
+    (flowytutorial)$ AWS_ACCESS_KEY_ID=<your key> AWS_SECRET_ACCESS_KEY=<your secret> python activities.py
+
+
+You don't have to limit to only one process - start as many as you want.
+Because all of them will pull for jobs from the same task list, the workload
+will be evenly spread. Actually, you won't see anything happening as you run
+your workers because there is no workflow to schedule any activities. Let's
+change that and write our first workflow!
+
+
+Putting it All Together
+-----------------------
+
+TBD
 
 
 .. _pillow: http://pillow.readthedocs.org/

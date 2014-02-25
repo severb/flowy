@@ -59,3 +59,14 @@ class ComputePredominantColor(Activity):
                 if not self.heartbeat():
                     return
         return r_total, g_total, b_total
+
+
+@activity('renameimage', 1, 'image_processing', start_to_close=10)
+class RenameImage(Activity):
+    def run(self, source, destination):
+        os.rename(source, destination)
+
+
+if __name__ == '__main__':
+    from flowy.swf.boilerplate import start_activity_worker
+    start_activity_worker(domain='flowytutorial', task_list='image_processing')
