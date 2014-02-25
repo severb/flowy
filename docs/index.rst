@@ -58,5 +58,3 @@ In Depth
 .. _Flowy: http://example.com/
 .. _Amazon SWF: http://aws.amazon.com/swf/
 .. _pip: http://www.pip-installer.org/
-
-

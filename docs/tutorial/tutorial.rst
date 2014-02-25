@@ -203,8 +203,14 @@ will be evenly spread. Actually, you won't see anything happening as you run
 your workers because there is no workflow to schedule any activities. Let's
 change that and write our first workflow!
 
+.. seealso::
 
-Putting it All Together
+
+   :ref:`activity`
+         In depth documentation on writing Activity Tasks.
+
+
+Putting It All Together
 -----------------------
 
 TBD
