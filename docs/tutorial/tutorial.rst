@@ -215,7 +215,18 @@ change that and write our first workflow!
 Putting It All Together
 -----------------------
 
-TBD
+A workflow is just like an activity - the only difference is that while an
+activity does the actual processing or computation the workflow doesn't do much
+except for coordinating the activities.
+
+We'll need a new file for the workflow. Open ``workflow.py`` and add the
+following code:
+
+.. literalinclude:: workflow.py
+    :language: python
+
+The structure of this file is simlar with the one we have for activities but
+there are many subtle (and very important) differences that we'll talk about.
 
 
 .. _pillow: http://pillow.readthedocs.org/
