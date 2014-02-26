@@ -16,12 +16,13 @@ class ImageCategorization(Workflow):
         colors = self.sum_colors(url)
         r, g, b = colors.result()
         if max(r, g, b) == r:
-            self.rename(tmp_path, '/tmp/r.jpeg')
+            dest_path = '/tmp/r.jpeg'
         elif max(r, g, b) == g:
-            self.rename(tmp_path, '/tmp/g.jpeg')
+            dest_path = '/tmp/g.jpeg'
         else:
-            self.rename(tmp_path, '/tmp/b.jpeg')
-        return tmp_path
+            dest_path = '/tmp/b.jpeg'
+        self.rename(tmp_path, dest_path)
+        return dest_path
 
 
 if __name__ == '__main__':
