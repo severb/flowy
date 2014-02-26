@@ -101,13 +101,14 @@ retries. For now we should be fine using the default values.
     :lines: 13-19
     :language: python
 
-Moving forward we get to the class definition of the activity. Every activity must be a subclass of ``Activity``. This provides some default preprocessing of the input and output, exception handling and logging.
-The image resizing code is inside the ``run`` method which is the activity
-entry point. It gets an URL and a target size and starts by downloading and
-processing the image. In the end it creates a temporary file where it stores
-the resulting new image and returns the path to it. There are some restrictions
-on what can go in and out an activity but we don't need to worry about that
-for now.
+Moving forward we get to the class definition of the activity. Every activity
+must be a subclass of ``Activity``. This provides some default preprocessing of
+the input and output, exception handling and logging. The image resizing code
+is inside the ``run`` method which is the activity entry point. It gets an URL
+and a target size and starts by downloading and processing the image. In the
+end it creates a temporary file where it stores the resulting new image and
+returns the path to it. There are some restrictions on what can go in and out
+an activity but we don't need to worry about that for now.
 
 .. note::
 
@@ -123,7 +124,7 @@ Processing the Image and Sending Updates
 ----------------------------------------
 
 There are two activities that we still have to implement: one that computes the
-most predominant color and another one that moves images on disk.  Open
+most predominant color and another one that moves images on disk. Open
 ``activities.py`` and append the following code:
 
 .. literalinclude:: activities.py
@@ -205,7 +206,8 @@ change that and write our first workflow!
 
 .. seealso::
 
-
+   :ref:`activities_py`
+         The final version of ``activities.py`` file.
    :ref:`activity`
          In depth documentation on writing Activity Tasks.
 
