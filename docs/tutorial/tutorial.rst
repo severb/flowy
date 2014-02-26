@@ -217,7 +217,7 @@ Putting It All Together
 
 A workflow is just like an activity - the only difference is that while an
 activity does the actual processing or computation the workflow doesn't do much
-except for coordinating the activities.
+except coordinating the activities.
 
 We'll need a new file for the workflow. Open ``workflow.py`` and add the
 following code:

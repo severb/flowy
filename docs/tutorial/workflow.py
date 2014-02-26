@@ -21,6 +21,7 @@ class ImageCategorization(Workflow):
             self.rename(tmp_path, '/tmp/g.jpeg')
         else:
             self.rename(tmp_path, '/tmp/b.jpeg')
+        return tmp_path
 
 
 if __name__ == '__main__':
