@@ -23,7 +23,7 @@ class TestRegistrationDecorators(unittest.TestCase):
                 task_id=s.task_id,
                 task_factory=s.task_factory1,
                 task_list='sentinel.task_list',
-                heartbeat=60,
+                heartbeat=300,
                 schedule_to_close=420,
                 schedule_to_start=120,
                 start_to_close=300),

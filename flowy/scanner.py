@@ -4,15 +4,12 @@ import venusian
 
 
 def activity(task_id, task_list,
-             heartbeat=60,
+             heartbeat=None,
              schedule_to_close=420,
              schedule_to_start=120,
              start_to_close=300):
 
     task_list = str(task_list)
-    heartbeat = int(heartbeat)
-    if heartbeat <= 0:
-        raise ValueError('heartbeat must be positive')
     schedule_to_close = int(schedule_to_close)
     if schedule_to_close <= 0:
         raise ValueError('schedule_to_close must be positive')
@@ -22,6 +19,11 @@ def activity(task_id, task_list,
     start_to_close = int(start_to_close)
     if start_to_close <= 0:
         raise ValueError('start_to_close must be positive')
+    if heartbeat is None:
+        heartbeat = start_to_close
+    heartbeat = int(heartbeat)
+    if heartbeat <= 0:
+        raise ValueError('heartbeat must be positive')
 
     def wrapper(task_factory):
         def callback(scanner, n, obj):

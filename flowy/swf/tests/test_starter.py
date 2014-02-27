@@ -14,7 +14,7 @@ class WorkflowStarterTest(unittest.TestCase):
         from flowy.swf.starter import WorkflowStarter
         client = Mock()
         wfs = WorkflowStarter(s.domain, s.name, s.version, s.task_list,
-                              10, 20, client=client)
+                              10, 20, layer1=client)
         return wfs, client
 
     def test_calling_with_id(self):

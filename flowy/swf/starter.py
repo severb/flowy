@@ -12,7 +12,7 @@ class WorkflowStarter(object):
                  task_list=None,
                  decision_duration=None,
                  workflow_duration=None,
-                 client=None):
+                 layer1=None):
         self._domain = str(domain)
         self._name = str(name)
         self._version = str(version)
@@ -23,8 +23,8 @@ class WorkflowStarter(object):
         self._workflow_duration = str_or_none(
             posint_or_none(workflow_duration)
         )
-        self._client = client
-        if client is None:  # pragma: no cover
+        self._client = layer1
+        if layer1 is None:  # pragma: no cover
             self._client = Layer1()
 
     def __call__(self, *args, **kwargs):
