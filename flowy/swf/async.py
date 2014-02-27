@@ -10,8 +10,12 @@ class AsyncScheduler(object):
             self._client = Layer1()
         self._scheduler = scheduler
 
-    def finish_activity(self, token, result):
+    def complete_activity(self, token, result):
         scheduler = self._scheduler(self._client, token)
-        return scheduler.finish(self._serialize_result(result))
+        return scheduler.complete(self._serialize_result(result))
+
+    def fail_activity(self, token, reason):
+        scheduler = self._scheduler(self._client, token)
+        return scheduler.fail(reason)
 
     _serialize_result = serialize_result
