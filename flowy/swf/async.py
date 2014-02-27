@@ -4,7 +4,6 @@ from flowy.task import serialize_result
 
 
 class AsyncScheduler(object):
-
     def __init__(self, domain, layer1=None, scheduler=ActivityScheduler):
         self._client = layer1
         if layer1 is None:
