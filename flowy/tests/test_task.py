@@ -9,7 +9,7 @@ class TestTask(unittest.TestCase):
         from flowy.task import Task
         if scheduler is None:
             scheduler = Mock()
-        return Task(input, scheduler), scheduler
+        return Task(input, scheduler, 'token1'), scheduler
 
     def test_successful_run(self):
         task, scheduler = self._get_uut(
@@ -43,7 +43,7 @@ class TestHeartbeat(unittest.TestCase):
     def test_heartbeat(self):
         from flowy.task import Activity
         scheduler = Mock()
-        a = Activity(input='[[], {}]', scheduler=scheduler)
+        a = Activity(input='[[], {}]', scheduler=scheduler, token='t1')
         a.heartbeat()
         scheduler.heartbeat.assert_called_once_with()
 
@@ -52,7 +52,7 @@ class TestWorkflow(unittest.TestCase):
     def _get_uut(self):
         from flowy.task import Workflow
         scheduler = Mock()
-        return Workflow(input='[[], {}]', scheduler=scheduler), scheduler
+        return Workflow('[[], {}]', scheduler, 'token1'), scheduler
 
     def test_restart(self):
         uut, scheduler = self._get_uut()
@@ -105,7 +105,7 @@ class TestTaskProxy(unittest.TestCase):
         from flowy.task import Task, TaskProxy
         tp = TaskProxy()
         input = tp._serialize_arguments(*args, **kwargs)
-        t = Task(input=input, scheduler=Mock())
+        t = Task(input=input, scheduler=Mock(), token='token1')
         return tp, t
 
     def test_results(self):

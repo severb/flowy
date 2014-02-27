@@ -28,7 +28,7 @@ class TestSingleThreadedWorker(unittest.TestCase):
     def test_invalid_task_factory(self):
         worker, client = self._get_uut()
 
-        result = worker.make_task(1, "aaaa", s.sched)
+        result = worker.make_task(1, "aaaa", s.sched, 't1')
         self.assertEquals(result, None)
 
     def test_task_factory(self):
@@ -37,7 +37,9 @@ class TestSingleThreadedWorker(unittest.TestCase):
         worker.register(s.id, factory)
         factory.return_value = s.result
 
-        result = worker.make_task(s.id, s.input, s.sched)
+        result = worker.make_task(s.id, s.input, s.sched, 't1')
 
         self.assertEqual(result, s.result)
-        factory.assert_called_once_with(input=s.input, scheduler=s.sched)
+        factory.assert_called_once_with(
+            input=s.input, scheduler=s.sched, token='t1'
+        )

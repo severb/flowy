@@ -9,10 +9,10 @@ class SingleThreadedWorker(object):
     def poll_next_task(self):
         return self._client.poll_next_task(self)
 
-    def make_task(self, task_id, input, scheduler):
+    def make_task(self, task_id, input, scheduler, token):
         task_factory = self._registry.get(task_id)
         if task_factory is not None:
-            return task_factory(input=input, scheduler=scheduler)
+            return task_factory(input=input, scheduler=scheduler, token=token)
         return None
 
     def run_forever(self, loop=-1):

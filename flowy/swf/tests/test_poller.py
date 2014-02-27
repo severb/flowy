@@ -35,7 +35,8 @@ class TestActivityPoller(unittest.TestCase):
         worker.make_task.assert_called_once_with(
             task_id=SWFTaskId('at', 'v1'),
             input='in',
-            scheduler=scheduler()
+            scheduler=scheduler(),
+            token='token1'
         )
         self.assertEquals(result, worker.make_task())
 
@@ -50,7 +51,8 @@ class TestActivityPoller(unittest.TestCase):
         worker.make_task.assert_called_once_with(
             task_id=SWFTaskId('at', 'v1'),
             input='in',
-            scheduler=scheduler()
+            scheduler=scheduler(),
+            token='token1'
         )
         self.assertEquals(result, worker.make_task())
 
@@ -63,7 +65,8 @@ class TestActivityPoller(unittest.TestCase):
         worker.make_task.assert_called_once_with(
             task_id=SWFTaskId('at', 'v1'),
             input='in',
-            scheduler=scheduler()
+            scheduler=scheduler(),
+            token='token1'
         )
         self.assertEquals(result, worker.make_task())
 
@@ -77,7 +80,8 @@ class TestActivityPoller(unittest.TestCase):
         worker.make_task.assert_called_once_with(
             task_id=SWFTaskId('at', 'v1'),
             input='in',
-            scheduler=scheduler()
+            scheduler=scheduler(),
+            token='token1'
         )
         self.assertEquals(result, worker.make_task())
 
@@ -165,7 +169,8 @@ class TestDecisionPoller(unittest.TestCase):
         worker.make_task.assert_called_once_with(
             task_id=SWFTaskId('n', 'v1'),
             input='in',
-            scheduler=scheduler()
+            scheduler=scheduler(),
+            token='token1',
         )
         self.assertEquals(result, worker.make_task())
 
@@ -247,7 +252,8 @@ class TestDecisionPoller(unittest.TestCase):
         worker.make_task.assert_called_once_with(
             task_id=SWFTaskId('n', 'v1'),
             input='in',
-            scheduler=scheduler()
+            scheduler=scheduler(),
+            token='token1'
         )
         self.assertEquals(result, worker.make_task())
 
@@ -285,7 +291,8 @@ class TestDecisionPoller(unittest.TestCase):
         worker.make_task.assert_called_once_with(
             task_id=SWFTaskId('n', 'v1'),
             input='in',
-            scheduler=scheduler()
+            scheduler=scheduler(),
+            token='token1'
         )
         self.assertEquals(result, worker.make_task())
 
@@ -334,7 +341,8 @@ class TestDecisionPoller(unittest.TestCase):
         worker.make_task.assert_called_once_with(
             task_id=SWFTaskId('n', 'v1'),
             input='in',
-            scheduler=scheduler()
+            scheduler=scheduler(),
+            token='token1'
         )
         self.assertEquals(result, worker.make_task())
 
@@ -367,7 +375,8 @@ class TestDecisionPoller(unittest.TestCase):
         worker.make_task.assert_called_once_with(
             task_id=SWFTaskId('n', 'v1'),
             input='in',
-            scheduler=scheduler()
+            scheduler=scheduler(),
+            token='token1'
         )
         self.assertEquals(result, worker.make_task())
 
@@ -411,7 +420,8 @@ class TestDecisionPoller(unittest.TestCase):
         worker.make_task.assert_called_once_with(
             task_id=SWFTaskId('n', 'v1'),
             input='in',
-            scheduler=scheduler()
+            scheduler=scheduler(),
+            token='token1'
         )
         self.assertEquals(result, worker.make_task())
 
@@ -453,7 +463,8 @@ class TestDecisionPoller(unittest.TestCase):
         worker.make_task.assert_called_once_with(
             task_id=SWFTaskId('n', 'v1'),
             input='in',
-            scheduler=scheduler()
+            scheduler=scheduler(),
+            token='token1'
         )
         self.assertEquals(result, worker.make_task())
 

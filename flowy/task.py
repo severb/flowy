@@ -17,9 +17,10 @@ def serialize_args(*args, **kwargs):
 
 
 class Task(object):
-    def __init__(self, input, scheduler):
+    def __init__(self, input, scheduler, token):
         self._args, self._kwargs = self._deserialize_arguments(str(input))
         self._scheduler = scheduler
+        self.token = token
 
     def __call__(self):
         try:

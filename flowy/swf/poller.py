@@ -27,7 +27,8 @@ class ActivityPoller(object):
             task = worker.make_task(
                 task_id=task_id,
                 input=input,
-                scheduler=scheduler
+                scheduler=scheduler,
+                token=token
             )
         return task
 
@@ -108,7 +109,8 @@ class DecisionPoller(object):
             task = worker.make_task(
                 task_id=task_id,
                 input=input,
-                scheduler=scheduler
+                scheduler=scheduler,
+                token=token
             )
         return task
 
