@@ -73,11 +73,10 @@ def workflow_starter(domain, name, version,
                      decision_duration=None,
                      workflow_duration=None,
                      layer1=None):
-    client = _get_client(layer1, domain)
     return WorkflowStarter(
         name=name,
         version=version,
-        client=client,
+        client=_get_client(layer1, domain),
         task_list=task_list,
         decision_duration=decision_duration,
         workflow_duration=workflow_duration
