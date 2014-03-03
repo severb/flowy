@@ -113,10 +113,10 @@ an activity but we don't need to worry about that for now.
 .. note::
 
     This tutorial tries to keep things easy to understand and not necessarily
-    robust. As you may have noticed we are saving the resized image to the
+    robust. As you may have noticed, we are saving the resized image to the
     local disk. This assumes that all your workers will run on the same
     machine. As soon as you start to distribute the work across multiple
-    machines you will have a problem. In that case a better solution would be
+    machines, you will have a problem. In that case, a better solution would be
     to use a shared storage system.
 
 
@@ -171,9 +171,9 @@ This will be a very simple activity that will rename a file. Append in
     :lines: 63-67
     :language: python
 
-Hopefully at this point this should look familiar. The only new thing here is
-the use of the ``start_to_close``. This will sets a limit of 10 seconds on how
-long the activity can run before it will time out and be abandoned.
+Hopefully, at this point, this should look familiar. The only new thing here is
+the use of ``start_to_close``. This sets a limit of 10 seconds on how long
+the activity can run before it will time out and be abandoned.
 
 
 Running the Activity Worker
@@ -182,8 +182,8 @@ Running the Activity Worker
 We finished writing all the activities that we need and it's time to start an
 activity worker process. This process, once started, will continuously pull for
 jobs from a task list and call the ``run`` method of one of the three
-activities we have defined. The task list we'll pull from it's called
-*image_processing* and it's already the default task list defined for each
+activities we have defined. The task list we'll pull from is called
+*image_processing* and it's already defined as the default task list for each
 activity. Another thing we need is the domain we created at the beginning of
 the tutorial - it was named *flowytutorial*. So, once again open
 ``activities.py`` and append:
@@ -192,17 +192,17 @@ the tutorial - it was named *flowytutorial*. So, once again open
     :lines: 69-72
     :language: python
 
-To start a worker run Python passing the boto authentication environment
+To start a worker run Python, while passing the Boto authentication environment
 variables like so::
 
     (flowytutorial)$ AWS_ACCESS_KEY_ID=<your key> AWS_SECRET_ACCESS_KEY=<your secret> python activities.py
 
 
-You don't have to limit to only one process - start as many as you want.
-Because all of them will pull for jobs from the same task list, the workload
-will be evenly spread. Actually, you won't see anything happening as you run
-your workers because there is no workflow to schedule any activities. Let's
-change that and write our first workflow!
+You don't have to limit yourself to only one process - start as many as you
+want.  Because all of them will pull for jobs from the same task list, the
+workload will be evenly spread. Actually, you won't see anything happening as
+you run your workers because there is no workflow to schedule any activities.
+Let's change that and write our first workflow!
 
 .. seealso::
 
@@ -216,8 +216,8 @@ Putting It All Together
 -----------------------
 
 A workflow is just like an activity - the only difference is that while an
-activity does the actual processing or computation the workflow doesn't do much
-except coordinating the activities.
+activity does the actual processing or computation, the workflow doesn't do
+much except coordinating the activities.
 
 We'll need a new file for the workflow. Open ``workflow.py`` and add the
 following code:
@@ -225,7 +225,7 @@ following code:
 .. literalinclude:: workflow.py
     :language: python
 
-The structure of this file is simlar with the one we have for activities but
+The structure of this file is simlar with the one we have for activities, but
 there are many subtle (and very important) differences that we'll talk about.
 
 
