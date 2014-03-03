@@ -36,6 +36,8 @@ class MagicBind(object):
     ...     @staticmethod
     ...     def static(x, y, z):
     ...         return x, y, z
+    ...     def __call__(self, x, y, z=3):
+    ...         return x, y, z
 
     >>> t = Test()
     >>> mb = MagicBind(t, x=10)
@@ -66,6 +68,9 @@ class MagicBind(object):
     ((10, 20), [('x', 30), ('y', 40)])
     >>> mb.static(20, 30)
     (10, 20, 30)
+    >>> t.clble = t
+    >>> mb.clble(20)
+    (10, 20, 3)
 
     """
     def __init__(self, obj, **kwargs):
@@ -76,7 +81,11 @@ class MagicBind(object):
         func = getattr(self._obj, name)
         if not callable(func):
             return func
-        args, varargs, keywords, defaults = inspect.getargspec(func)
+        try:
+            args, varargs, keywords, defaults = inspect.getargspec(func)
+        except TypeError:
+            func = getattr(func, '__call__')
+            args, varargs, keywords, defaults = inspect.getargspec(func)
         if defaults is None:
             defaults = []
         if isinstance(func, types.MethodType):

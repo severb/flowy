@@ -13,8 +13,7 @@ class WorkflowStarterTest(unittest.TestCase):
     def _get_uut(self):
         from flowy.swf.starter import WorkflowStarter
         client = Mock()
-        wfs = WorkflowStarter(s.domain, s.name, s.version, s.task_list,
-                              10, 20, layer1=client)
+        wfs = WorkflowStarter(s.name, s.version, client, s.task_list, 10, 20)
         return wfs, client
 
     def test_calling_with_id(self):
@@ -25,7 +24,6 @@ class WorkflowStarterTest(unittest.TestCase):
         self.assertEqual(result, 0)
 
         client.start_workflow_execution.assert_called_once_with(
-            domain='sentinel.domain',
             workflow_id='IMARANDOMSTRING',
             workflow_name='sentinel.name',
             workflow_version='sentinel.version',
@@ -42,7 +40,6 @@ class WorkflowStarterTest(unittest.TestCase):
         self.assertEqual(result, 0)
 
         client.start_workflow_execution.assert_called_once_with(
-            domain='sentinel.domain',
             workflow_id=ANY,
             workflow_name='sentinel.name',
             workflow_version='sentinel.version',

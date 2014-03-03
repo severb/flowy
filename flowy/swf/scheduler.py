@@ -3,45 +3,48 @@ import uuid
 from boto.swf.exceptions import SWFResponseError
 from boto.swf.layer1_decisions import Layer1Decisions
 
-from flowy import str_or_none, logger
+from flowy import str_or_none, logger, MagicBind
 from flowy.result import Error, Placeholder, Result, Timeout
 
 
-class ActivityScheduler(object):
-    def __init__(self, client, token):
+class AsyncActivityScheduler(object):
+    def __init__(self, client):
         self._client = client
-        self._token = token
 
-    def heartbeat(self):
+    def heartbeat(self, token):
         try:
-            self._client.record_activity_task_heartbeat(task_token=self._token)
+            self._client.record_activity_task_heartbeat(task_token=token)
         except SWFResponseError:
             logger.exception('Error while sending the heartbeat:')
             return False
         return True
 
-    def complete(self, result):
+    def complete(self, token, result):
         try:
             self._client.respond_activity_task_completed(
-                result=result, task_token=self._token
+                result=result, task_token=token
             )
         except SWFResponseError:
             logger.exception('Error while completing the activity:')
             return False
         return True
 
-    def fail(self, reason):
+    def fail(self, token, reason):
         try:
             self._client.respond_activity_task_failed(
-                reason=reason[:256], task_token=self._token
+                reason=reason[:256], task_token=token
             )
         except SWFResponseError:
             logger.exception('Error while failing the activity:')
             return False
         return True
 
-    def suspend(self):
+    def suspend(self, token):
         pass  # pragma: no cover
+
+
+def ActivityScheduler(client, token):
+    return MagicBind(AsyncActivityScheduler(client), token=token)
 
 
 class DecisionScheduler(object):

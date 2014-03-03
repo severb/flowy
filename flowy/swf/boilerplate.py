@@ -1,13 +1,14 @@
 import sys
 
 from boto.swf.layer1 import Layer1
-
 from flowy import logger, MagicBind
 from flowy.scanner import Scanner
-from flowy.spec import ActivitySpecCollector, WorkflowSpecCollector, TaskSpec
+from flowy.spec import ActivitySpecCollector, TaskSpec, WorkflowSpecCollector
 from flowy.swf.poller import ActivityPoller, DecisionPoller
+from flowy.swf.scheduler import AsyncActivityScheduler
 from flowy.swf.spec import ActivitySpec as RemoteActivitySpec
 from flowy.swf.spec import WorkflowSpec as RemoteWorkflowSpec
+from flowy.swf.starter import WorkflowStarter
 from flowy.worker import SingleThreadedWorker
 
 
@@ -63,7 +64,25 @@ def start_workflow_worker(domain, task_list,
         pass
 
 
+def async_scheduler(domain, layer1=None):
+    return AsyncActivityScheduler(client=_get_client(layer1, domain))
+
+
+def workflow_starter(domain, name, version,
+                     task_list=None, decision_duration=None,
+                     workflow_duration=None, layer1=None):
+    client = _get_client(layer1, domain)
+    return WorkflowStarter(
+        name=name,
+        version=version,
+        client=client,
+        task_list=task_list,
+        decision_duration=decision_duration,
+        workflow_duration=workflow_duration
+    )
+
+
 def _get_client(layer1, domain):
     if layer1 is None:
         layer1 = Layer1()
-    return MagicBind(layer1, domain=domain)
+    return MagicBind(layer1, domain=str(domain))
