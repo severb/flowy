@@ -69,8 +69,10 @@ def async_scheduler(domain, layer1=None):
 
 
 def workflow_starter(domain, name, version,
-                     task_list=None, decision_duration=None,
-                     workflow_duration=None, layer1=None):
+                     task_list=None,
+                     decision_duration=None,
+                     workflow_duration=None,
+                     layer1=None):
     client = _get_client(layer1, domain)
     return WorkflowStarter(
         name=name,
