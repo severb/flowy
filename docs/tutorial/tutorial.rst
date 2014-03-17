@@ -290,7 +290,7 @@ But enough with the blabber, lets see an execution timeline of the workflow to
 get a better understanding on how things work.
 
 
-How workflows are executed
+How Workflows Are Executed
 --------------------------
 
 If there is a single activity worker running, tracking the execution of the
@@ -367,6 +367,13 @@ You can schedule a workflow manually from the command line like so::
 
     (flowytutorial)$ AWS_ACCESS_KEY_ID=<your key> AWS_SECRET_ACCESS_KEY=<your secret> python -m flowy.swf flowytutorial imagecateg 1 http://www.jpeg.org/images/blue_large_01.jpg
 
+.. seealso::
+
+    :ref:`decision`
+        In depth documentation on writing workflows.
+    `Amazon SWF Developer Guide`_
+        Provides a conceptual overview of Amazon SWF and includes detailed development instructions for using the various features.
+
 
 Next Steps
 ----------
@@ -378,3 +385,4 @@ TBD
 .. _these steps: http://docs.aws.amazon.com/amazonswf/latest/developerguide/swf-dg-register-domain-console.html
 .. _boto: http://boto.readthedocs.org/
 .. _register_domain: http://boto.readthedocs.org/en/latest/ref/swf.html#boto.swf.layer1.Layer1.register_domain
+.. _Amazon SWF Developer Guide: http://docs.aws.amazon.com/amazonswf/latest/developerguide/swf-welcome.html
