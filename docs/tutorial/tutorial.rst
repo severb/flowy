@@ -254,6 +254,7 @@ did for the ``start_to_close`` value.
 .. literalinclude:: workflow.py
     :lines: 14-25
     :language: python
+    :linenos:
 
 The ``run`` method contains the activity coordination code. Let's treat the
 activity proxies as regular methods and see what happens here. Except for the
@@ -287,6 +288,84 @@ calls identified as new are then used to schedule new activities.
 
 But enough with the blabber, lets see an execution timeline of the workflow to
 get a better understanding on how things work.
+
+
+How workflows are executed
+--------------------------
+
+If there is a single activity worker running, tracking the execution of the
+workflow is not very exciting - everything will run just as if the code would
+be synchronous. So lets consider there are multiple activity workers running,
+each ready to pull and execute activities.
+
+.. literalinclude:: workflow.py
+    :lines: 14-17
+    :language: python
+    :linenos:
+
+The first execution of the ``run`` method will happen sometime after the
+workflow is scheduled, when one of the workflow runners is free. The first two
+recorded proxy calls are those on lines 2 and 3 and both of them will return a
+placeholder. Soon after that, the ``.result()`` method is called on the
+``colors`` placeholder. When you access a result inside the workflow there are
+two things that can happen (actually three, but don't worry about that): you
+can get back the actual result if the activity finished successfully or
+completely interrupt the execution of the ``run`` method otherwise. In this
+case the ``run`` method is interrupted because the ``sum_colors`` activity
+didn't finish - actually it wasn't even scheduled yet. Next, all the registered
+proxy calls that depend only on values known at runtime or placeholders of
+other finished activities are used to schedule their corresponding activities.
+In our case both proxies are called with values known at runtime so both
+activities get scheduled at the same time. The workflow runner is now free to
+to process other workflow decisions.
+
+As soon as one of the two activities finishes running a new decision will be
+needed. One of the available workflow workers will execute the ``run`` method
+again but this time the placeholders returned by the proxy calls will be
+slightly different.
+
+There are two possible continuations, based on which activity is the first one
+to finish:
+
+    1. ``resize`` is the first to finish: ``colors.result()`` still interrupts
+       the execution, no new proxy calls are registered and thus no new
+       activities are scheduled.
+    2. ``sum_colors`` is the first to finish: ``colors.result()`` returns the
+       actual activity result, the rest of the code is executed, a new proxy
+       call for ``rename`` is registered but no activity is scheduled because
+       the call depends on the value of ``resize`` which is unavailable.
+
+As we can see, the 2nd time the ``run`` method is executed nothing will happen.
+That's because we need both activities to finish in order to do progress. For
+the 3rd decision we know both activity results for ``resize`` and
+``sum_colors`` will be available and the ``rename`` activity is finally
+scheduled. The last decision will complete the workflow execution as there are
+no activities running and no new proxy calls detected.
+
+.. warning::
+
+    Because the ``run`` method is invoked multiple times for a single workflow
+    execution it's very important that execution flow inside this method is
+    deterministic. This means inside the workflow any conditional statement
+    should only test input data or activity results. Code that schedules
+    different activities based on time, random values or external data that may
+    change will corrupt the workflow execution.
+
+
+Running the Workflow Worker
+---------------------------
+
+Now that we know how the workflows are executed, lets start a few workflow
+worker processes.  Like with the activity workers you can start multiple
+processes and have the decision work distributed between them.  All we have to
+do is execute the ``workflow.py`` file passing the Boto authentication
+environment variables::
+
+    (flowytutorial)$ AWS_ACCESS_KEY_ID=<your key> AWS_SECRET_ACCESS_KEY=<your secret> python workflows.py
+
+You can schedule a workflow manually from the command line like so::
+
+    (flowytutorial)$ AWS_ACCESS_KEY_ID=<your key> AWS_SECRET_ACCESS_KEY=<your secret> python -m flowy.swf flowytutorial imagecateg 1 http://www.jpeg.org/images/blue_large_01.jpg
 
 
 .. _pillow: http://pillow.readthedocs.org/

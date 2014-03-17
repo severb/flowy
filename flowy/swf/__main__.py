@@ -4,7 +4,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("domain")
 parser.add_argument("name")
-parser.add_argument("version", type=int)
+parser.add_argument("version")
 parser.add_argument("--task_list")
 parser.add_argument("--decision_duration", type=int, default=None)
 parser.add_argument("--workflow_duration", type=int, default=None)
