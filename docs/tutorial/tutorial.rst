@@ -78,7 +78,7 @@ Skipping all the imports we get to the first interesting part, which is the
 ``activity`` decorator:
 
 .. literalinclude:: activities.py
-    :lines: 12
+    :lines: 12-13
     :language: python
 
 The ``activity`` decorator has two different responsibilities. It registers
@@ -135,7 +135,7 @@ We changed a few things in this example so lets go over it. We'll start again
 with the ``activity`` decorator:
 
 .. literalinclude:: activities.py
-    :lines: 38
+    :lines: 38-39
     :language: python
 
 Here we used positional arguments for the name, version (which is a string this
@@ -227,6 +227,65 @@ following code:
 
 The structure of this file is simlar with the one we have for activities, but
 there are many subtle (and very important) differences that we'll talk about.
+Lets start again with the decorator:
+
+.. literalinclude:: workflow.py
+    :lines: 6-7
+    :language: python
+
+Just like an activity, a workflow is identified by a name and a version - those
+are needed when you want to start a new workflow. By default, a new workflow
+will be queued to its default task list but that can be overridden latter. One
+or more workers can then pull workflows from the task list and execute them.
+There are a bunch of other defaults that can be set with this decorator like
+the total duration this workflow can run before it times out. For now we'll
+just go with the defaults.
+
+.. literalinclude:: workflow.py
+    :lines: 7-12
+    :language: python
+
+Here we define proxies for each activity we created earlier. A proxy is a
+callable that will schedule an activity when called, passing all the arguments
+it received. We set the name and the version of a proxy to a corresponding
+activity. We can also override any value set in the activity decorator like we
+did for the ``start_to_close`` value.
+
+.. literalinclude:: workflow.py
+    :lines: 14-25
+    :language: python
+
+The ``run`` method contains the activity coordination code. Let's treat the
+activity proxies as regular methods and see what happens here. Except for the
+mysterious ``colors.result()`` call everything should be familiar: download,
+resize and store an image in a temp file, download the image again and compute
+the predominant color and based on the color move the temporary file to a
+predefined location. Lastly, return the path where the image can be found.
+
+So now that we know what this workflow does lets see how it does it. The first
+important thing to realize is that *each proxy call is asynchronous*. The call
+only schedules an activity to run and usually returns before the activity even
+started. Because of this the return value of a proxy call is a placeholder for
+the actual computation. You can pass this placeholder to other activities as it
+is but if you need to access its value inside the workflow you need to call the
+``.result()`` method on it.
+
+The second thing you need to know is that the ``run`` method doesn't actually
+run for the entire duration of the workflow execution. It will run multiple
+times and only for short periods of time. Actually, after the initial run when
+the workflow is started, it will run every time an activity either finishes,
+produces an error or times out. Each time the ``run`` method is invoked it
+starts executing the code from the beginning, replacing the proxy calls with
+different types of placeholders based on the most recent state of the
+activities. A placeholder can either contain a result if the activity finished
+successfully, an error if there was a problem or the activity timed out or
+nothing at all if the activity is still running. While ``run`` the method is
+running Flowy registers all the proxy calls and looks for new ones that receive
+as arguments only constants or placeholders that contain results. All the proxy
+calls identified as new are then used to schedule new activities.
+
+But enough with the blabber, lets see an execution timeline of the workflow to
+get a better understanding on how things work.
 
 
 .. _pillow: http://pillow.readthedocs.org/

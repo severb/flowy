@@ -3,7 +3,7 @@ from flowy.swf.task import ActivityProxy
 from flowy.task import Workflow
 
 
-@workflow('imagecateg', 1, 'my_workflows')
+@workflow(name='imagecateg', version=1, task_list='my_workflows')
 class ImageCategorization(Workflow):
     """ Download, resize and categorize images based on color. """
 
