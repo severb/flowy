@@ -368,6 +368,12 @@ You can schedule a workflow manually from the command line like so::
     (flowytutorial)$ AWS_ACCESS_KEY_ID=<your key> AWS_SECRET_ACCESS_KEY=<your secret> python -m flowy.swf flowytutorial imagecateg 1 http://www.jpeg.org/images/blue_large_01.jpg
 
 
+Next Steps
+----------
+
+TBD
+
+
 .. _pillow: http://pillow.readthedocs.org/
 .. _these steps: http://docs.aws.amazon.com/amazonswf/latest/developerguide/swf-dg-register-domain-console.html
 .. _boto: http://boto.readthedocs.org/
