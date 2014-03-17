@@ -247,7 +247,7 @@ just go with the defaults.
 
 Here we define proxies for each activity we created earlier. A proxy is a
 callable that will schedule an activity when called, passing all the arguments
-it received. We set the name and the version of a proxy to a corresponding
+it received. We set the name and the version of a proxy to the corresponding
 activity. We can also override any value set in the activity decorator like we
 did for the ``start_to_close`` value.
 
@@ -258,17 +258,18 @@ did for the ``start_to_close`` value.
 The ``run`` method contains the activity coordination code. Let's treat the
 activity proxies as regular methods and see what happens here. Except for the
 mysterious ``colors.result()`` call everything should be familiar: download,
-resize and store an image in a temp file, download the image again and compute
-the predominant color and based on the color move the temporary file to a
-predefined location. Lastly, return the path where the image can be found.
+resize and store an image in a temporary file, download the image again and
+compute the predominant color and based on the color and move the temporary
+file to a predefined location. Lastly, return the path where the image can be
+found.
 
 So now that we know what this workflow does lets see how it does it. The first
 important thing to realize is that *each proxy call is asynchronous*. The call
-only schedules an activity to run and usually returns before the activity even
-started. Because of this the return value of a proxy call is a placeholder for
-the actual computation. You can pass this placeholder to other activities as it
-is but if you need to access its value inside the workflow you need to call the
-``.result()`` method on it.
+only registers the activity to be scheduled (without necessarily scheduling it
+yet) and returns in an instant. Because of this the return value of a proxy
+call is a placeholder for the actual computation. You can pass this placeholder
+to other activities as it is but if you need to access its value inside the
+workflow you need to call the ``.result()`` method on it.
 
 The second thing you need to know is that the ``run`` method doesn't actually
 run for the entire duration of the workflow execution. It will run multiple
