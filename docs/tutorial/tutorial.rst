@@ -397,9 +397,8 @@ Let's review some of the more important properties of the workflow we created:
 Next Steps
 ----------
 
-Before diving in the in depth documentation section you should probably try to
-experiment on your own with the code from the tutorial. Here are some ideas you
-may try:
+Before diving in the in depth documentation section you may want to experiment
+on your own with the tutorial code. Here are some ideas you may try:
 
     * Open the Amazon console and inspect the history of your workflow
       execution.
