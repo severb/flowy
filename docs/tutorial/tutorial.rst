@@ -378,13 +378,43 @@ You can schedule a workflow manually from the command line like so::
 Is This Useful?
 ---------------
 
-TBD
+Let's review some of the more important properties of the workflow we created:
+
+    * There is no single process running for the entire duration of the
+      workflow - this makes it possible to write workflows that run for very
+      long periods of time without the fear of losing the progress.
+    * Grouping activities on different task lists allows you to scale parts of
+      the workflow independently (for example having two task lists for video
+      and image processing).
+    * Because of the diversity in timeout configuration and customizable
+      retrying or manual error handling (which we haven't touched much in this
+      tutorial) the workflow is very robust. We can restart all the activity
+      and workflow workers at the same time, regardless of the state they are
+      in and as soon as any of them is back up the workflow will happily
+      continue its progress.
 
 
 Next Steps
 ----------
 
-TBD
+Before diving in the in depth documentation section you should probably try to
+experiment on your own with the code from the tutorial. Here are some ideas you
+may try:
+
+    * Open the Amazon console and inspect the history of your workflow
+      execution.
+    * While the workflow is running try restarting some workers and see what
+      happens.
+    * Try to make the activities raise some exceptions and see how it affects
+      the workflow execution.
+    * Spread the activities between two different task lists and scale them
+      idependently.
+
+While we are using Flowy to run a large number of workflows in production
+systems it's still a new project. There are areas that can be improved and many
+new ideas to experiment with. We'd love to hear from you and we could really
+use your help. If you liked the turorial, have questions, found a bug or a very
+cool idea, you can find us `on github`_.
 
 
 .. _pillow: http://pillow.readthedocs.org/
@@ -392,3 +422,4 @@ TBD
 .. _boto: http://boto.readthedocs.org/
 .. _register_domain: http://boto.readthedocs.org/en/latest/ref/swf.html#boto.swf.layer1.Layer1.register_domain
 .. _Amazon SWF Developer Guide: http://docs.aws.amazon.com/amazonswf/latest/developerguide/swf-welcome.html
+.. _on github: http://github.com/pbs/flowy/
