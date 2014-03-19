@@ -32,6 +32,9 @@ After installation make sure `pillow`_ has JPEG support. You should see::
 
     --- JPEG support available
 
+If you have any problems with the JPEG support checkout the `pillow
+installation`_ guide. They do a good job describing how to get things working.
+
 
 Registering a New Domain
 ------------------------
@@ -417,6 +420,7 @@ cool idea, you can find us `on github`_.
 
 
 .. _pillow: http://pillow.readthedocs.org/
+.. _pillow installation: http://pillow.readthedocs.org/en/latest/installation.html
 .. _these steps: http://docs.aws.amazon.com/amazonswf/latest/developerguide/swf-dg-register-domain-console.html
 .. _boto: http://boto.readthedocs.org/
 .. _register_domain: http://boto.readthedocs.org/en/latest/ref/swf.html#boto.swf.layer1.Layer1.register_domain
