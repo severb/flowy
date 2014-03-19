@@ -21,7 +21,7 @@ class ResizeImage(Activity):
     def download_image(self, url):
         return StringIO.StringIO(requests.get(url).content)
 
-    def resize(self, image_file, width, height, dest_file):
+    def resize(self, image_file, width, height):
         i = Image.open(image_file)
         i.thumbnail((width, height))
         return i
@@ -38,7 +38,7 @@ class ResizeImage(Activity):
 @activity('predominantcolor', 'v1', 'image_processing', heartbeat=15)
 class ComputePredominantColor(Activity):
     def run(self, url):
-        image = self.download_image(self, url)
+        image = self.download_image(url)
         if not self.heartbeat():
             return
         return self.sum_colors(image)
@@ -69,4 +69,4 @@ class RenameImage(Activity):
 
 if __name__ == '__main__':
     from flowy.swf.boilerplate import start_activity_worker
-    start_activity_worker(domain='flowytutorial', task_list='image_processing')
+    start_activity_worker(domain='SeversTest', task_list='image_processing')
