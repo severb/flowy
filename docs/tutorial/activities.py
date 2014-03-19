@@ -69,4 +69,4 @@ class RenameImage(Activity):
 
 if __name__ == '__main__':
     from flowy.swf.boilerplate import start_activity_worker
-    start_activity_worker(domain='SeversTest', task_list='image_processing')
+    start_activity_worker(domain='flowytutorial', task_list='image_processing')

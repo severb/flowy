@@ -27,4 +27,4 @@ class ImageCategorization(Workflow):
 
 if __name__ == '__main__':
     from flowy.swf.boilerplate import start_workflow_worker
-    start_workflow_worker(domain='SeversTest', task_list='my_workflows')
+    start_workflow_worker(domain='flowytutorial', task_list='my_workflows')
