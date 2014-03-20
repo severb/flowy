@@ -39,3 +39,33 @@ can change this by overriding the ``_serialize_result`` and
 ``_deserialize_arguments`` methods but this is rarely enough as the workflow
 must also be aware of the changes. For a complete explanation on how to change
 the transport protocol see :ref:`transport`.
+
+
+Reporting Progress
+------------------
+
+TBD
+
+
+Dealing With Errors
+-------------------
+
+TBD
+
+
+Registration and Default Configuration
+--------------------------------------
+
+TBD
+
+
+Task Lists
+----------
+
+TBD
+
+
+Spawning Worker Processes
+-------------------------
+
+TBD
