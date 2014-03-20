@@ -1,4 +1,0 @@
-.. _decision:
-
-Decision Task
-=============

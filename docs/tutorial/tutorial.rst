@@ -212,7 +212,7 @@ Let's change that and write our first workflow!
    :ref:`activities_py`
          The final version of ``activities.py`` file.
    :ref:`activity`
-         In depth documentation on writing Activity Tasks.
+         In depth documentation on writing activities.
 
 
 Putting It All Together
@@ -372,7 +372,7 @@ You can schedule a workflow manually from the command line like so::
 
 .. seealso::
 
-    :ref:`decision`
+    :ref:`workflow`
         In depth documentation on writing workflows.
     `Amazon SWF Developer Guide`_
         Provides a conceptual overview of Amazon SWF and includes detailed development instructions for using the various features.

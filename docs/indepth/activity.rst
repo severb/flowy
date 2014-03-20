@@ -1,7 +1,7 @@
 .. _activity:
 
-Activity Task
-=============
+Activities
+==========
 
 An activity task is the smallest computational part of a workflow. You can
 think of it as a function: it can get an input, does some processing and may

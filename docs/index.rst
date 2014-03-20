@@ -43,10 +43,10 @@ In Depth
 --------
 
 .. toctree::
-    :titlesonly:
+    :maxdepth: 2
 
     indepth/activity
-    indepth/decision
+    indepth/workflow
     indepth/error
     indepth/settings
     indepth/transport
