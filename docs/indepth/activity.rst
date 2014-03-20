@@ -18,22 +18,24 @@ this::
             return value
 
 
-Activity I/O
-------------
+Passing Data In and Out
+-----------------------
 
-Just as any regular Python method you can provide some default values for your
-arguments making them optional later when the workflow schedules activities to
-run. You can also receive variable arguments both positional or keyword.
-Actually, you can use valid Python method signature for your activities::
+The entire communication between an activity and a workflow is made exclusively
+trough the arguments and the return value of the ``run`` method.  Just as any
+regular Python method you can provide some default values for your arguments
+making them optional later when the workflow schedules the activity to run. You
+can also receive variable arguments both positional or keyword. Actually, you
+can use any valid Python method signature for your activity::
 
     class Echo(Activity):
         def run(self, value=None, *args, **kwargs):
             return (value,) + tuple(args) + tuple(kwargs.values())
 
-There are some limitations on the values that can be passed as arguments to the
-activity or returned back as results: they must be JSON serializable. That's
-because the default transport implementation uses JSON to pass data to and back
-from Amazon. You can change this by overriding the ``_serialize_result`` and
+There are some limitations on the values that can be passed in or out of the
+activity: all of them must be JSON serializable. That's because the default
+transport implementation uses JSON to pass data to and back from Amazon. You
+can change this by overriding the ``_serialize_result`` and
 ``_deserialize_arguments`` methods but this is rarely enough as the workflow
-must also be aware of this changes. For a complete explanation on how to change
+must also be aware of the changes. For a complete explanation on how to change
 the transport protocol see :ref:`transport`.
