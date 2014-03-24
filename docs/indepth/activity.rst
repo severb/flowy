@@ -86,6 +86,11 @@ continue running the activity but the final result produced by this activity
 would be disregarded anyway because of the timed out. More then that, running
 an activity that already timed out is a wast of the worker processing time.
 
+.. warning::
+
+    Make sure you don't send heartbeats in tight loops. Sending a lot of them
+    in a short period of time may trigger backend rate limits errors.
+
 
 Implementation Registration and Discovery
 -----------------------------------------
