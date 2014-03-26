@@ -4,14 +4,16 @@ Tutorial
 ========
 
 In this tutorial we'll create a workflow that resizes and classifies images
-based on their predominant color. A typical workflow uses one or more
-activities to do the actual data processing. Here we'll use three activities:
-one for image resizing, another one for predominant color computation and the
-last one will move images from one place to another. The workflow's
-responsibility is to coordinate these activities and pass the data between
-them. Each time an activity finishes its execution the workflow will decide
-what needs to happen next. This decision can be one of the following: start or
-retry activities, complete or abort the workflow execution.
+based on their predominant color.
+
+A typical workflow uses one or more activities to do the actual data
+processing. Here we'll use three activities: one for image resizing, another
+one for predominant color computation and the last one will move images from
+one place to another. The workflow's responsibility is to coordinate these
+activities and pass the data between them. Each time an activity finishes its
+execution the workflow will decide what needs to happen next. This decision can
+be one of the following: start or retry activities, complete or abort the
+workflow execution.
 
 Let's start by setting up the development environment and create a new domain.
 
