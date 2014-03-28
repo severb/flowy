@@ -174,7 +174,49 @@ value - it can be overridden from the workflow.
 Async Activities
 ----------------
 
-TBD
+An activity need not return a value right away. Instead you can raise a
+``SuspendTask`` exception to finish the execution without returning a value and
+free the worker. Later, maybe in a different system, you can use
+``async_scheduler`` to finish the execution. This is when an activity is
+asynchronous - for example it waits for a human approval in order to continue::
+
+    from flowy.exception import SuspendTask
+
+    class Echo(Activity):
+        def run(self, value):
+            self.persist_in_3rd_party_system(value, self.token)
+            raise SuspendTask
+
+Here we persist the value we received together with a token. The token is used
+to identify this activity when we decide to finish it and it's always present
+in an activity as the ``.token`` property.
+
+.. function:: flowy.swf.boilerplate.async_scheduler(domain, layer1=None)
+
+    A factory for instances that can control asynchronous activities. The
+    *domain* must be the same with the domain of the activities you want to
+    control.
+
+    If you want to construct and customize your own SWF `Layer1`_ instance you
+    can pass it in trough the *layer1* attribute.
+
+    Objects returned by this factory implement the following methods:
+
+    .. method:: heartbeat(token)
+
+        Send a heartbeat for the activity identified by *token*. The same as
+        calling the ``heartbeat()`` method on the activity itself.
+
+    .. method:: complete(token, result) 
+
+        Complete the activity identified by *token* with the *result* value.
+        This is similar with returning a value directly from the activity
+        itself.
+
+    .. method:: fail(token, reason)
+
+        Complete the activity identified by *token* with an error. Similar as
+        raising an exception inside the activity with the *reason* message.
 
 
 .. _venusian: http://docs.pylonsproject.org/projects/venusian/
