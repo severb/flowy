@@ -135,7 +135,40 @@ existing activities.
 Default Configuration
 ---------------------
 
-TBD
+The ``activity`` decorator does more than just making the implementation
+discoverable, it's also  used to provide activity metadata. The name and the
+version are required and are used to identify the activity. The task list is
+also required but like the other timeout related values it's only a default
+value - it can be overridden from the workflow.
+
+.. function:: flowy.swf.scanner.activity(name, version, task_list, heartbeat=None, schedule_to_close=420, schedule_to_start=120, start_to_close=300)
+
+    This function returns a decorator that can be used to register activity
+    implementations.
+
+    The *name* and the *version* are used to identify the activity being
+    decorated. The workflow will need to know this values in order to schedule
+    the activity. By default it will schedule this type of activities to the
+    specified *task_list*.
+
+    The other values are used to control different types of timeout limits.
+    All of them serve just as default values and can be overridden by a
+    workflow:
+
+        * *heartbeat* - the maximum number of seconds between two consecutive
+          heartbeat notifications; by default no limit is set.
+        * *schedule_to_close* - the number of seconds since the activity was
+          scheduled until it can finish. This value must usually be larger than
+          *schedule_to_start* and *start_to_close*.
+        * *schedule_to_start* - the duration in seconds this activity can spend
+          queued.
+        * *start_to_close* - how many seconds the activity can run for before
+          it will timeout.
+
+.. seealso::
+
+    `Amazon SWF Timeout Types`_
+        A document describing in great detail the different types of timeout timers.
 
 
 Async Activities
@@ -147,3 +180,4 @@ TBD
 .. _venusian: http://docs.pylonsproject.org/projects/venusian/
 .. _scan: http://docs.pylonsproject.org/projects/venusian/en/latest/api.html#venusian.Scanner.scan
 .. _Layer1: http://boto.readthedocs.org/en/latest/ref/swf.html#boto.swf.layer1.Layer1
+.. _Amazon SWF Timeout Types: http://docs.aws.amazon.com/amazonswf/latest/developerguide/swf-timeout-types.html

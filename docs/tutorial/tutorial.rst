@@ -28,8 +28,6 @@ environment and install all the dependencies::
     $ source /tmp/flowytutorial/bin/activate
     (flowytutorial)$ pip install flowy requests pillow # a fork of PIL
 
-.. When should you see this?
-
 After installation make sure `pillow`_ has JPEG support. You should see::
 
     --- JPEG support available
