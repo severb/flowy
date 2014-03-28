@@ -6,9 +6,9 @@ Activities
 An activity task is the smallest computational part of a workflow. You can
 think of it as a function: it can get an input, do some processing and may
 return something back. The easiest way to implement an activity is by
-subclassing the ``Activity`` class and overriding the ``run`` method. This
-provides some convenience for you like automatic error handling, input
-deserialization and result serialization.
+subclassing ``Activity`` and overriding the ``run`` method. This provides some
+convenience for you like automatic error handling, input deserialization and
+result serialization.
 
 A simple echo activity that returns the input it receives looks like this::
 
