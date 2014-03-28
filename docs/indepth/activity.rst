@@ -177,7 +177,7 @@ Async Activities
 An activity need not return a value right away. Instead you can raise a
 ``SuspendTask`` exception to finish the execution without returning a value and
 free the worker. Later, maybe in a different system, you can use
-``async_scheduler`` to finish the execution. This is when an activity is
+``async_scheduler`` to finish the execution. This is useful when an activity is
 asynchronous - for example it waits for a human approval in order to continue::
 
     from flowy.exception import SuspendTask
