@@ -6,9 +6,9 @@ Activities
 An activity task is the smallest computational part of a workflow. You can
 think of it as a function: it can receive an input, do some processing and it
 can return something. The easiest way to implement an activity is by
-subclassing ``Activity`` and overriding the ``run`` method. This
-provides some convenience methods for you like automatic error handling, input
-deserialization and result serialization.
+subclassing ``Activity`` and overriding the ``run`` method. This provides some
+convenience for you like automatic error handling, input deserialization and
+result serialization.
 
 A simple echo activity that returns the input it receives looks like this::
 
@@ -93,8 +93,8 @@ resources.
     in a short period of time may trigger backend rate limiting errors.
 
 
-Implementation Registration and Discovery
------------------------------------------
+Activity Registration and Discovery
+-----------------------------------
 
 In order to discover the activities you implement Flowy uses `venusian`_ to
 register and later scan for existing implementations. For an activity to be
