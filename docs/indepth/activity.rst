@@ -174,6 +174,12 @@ value - it can be overridden from the workflow.
         timers.
 
 
+Updating the Activity Implementation
+------------------------------------
+
+TBD
+
+
 Async Activities
 ----------------
 
