@@ -50,6 +50,7 @@ In Depth
     indepth/error
     indepth/settings
     indepth/transport
+    indepth/versioning
     indepth/production
     indepth/contribute
 
