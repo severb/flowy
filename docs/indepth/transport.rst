@@ -1,4 +1,4 @@
 .. _transport:
 
-Transport
-=========
+Customizing the Transport
+=========================

@@ -22,6 +22,18 @@ sub-workflows looks very similar to an activity::
 Passing Data In and Out
 -----------------------
 
+Similarly with an activity, you can pass data in a workflow using any
+combination of arguments on the ``run`` method. After the workflow finished its
+processing, you can pass data out simply by returning from the ``run`` method.
+The only thing to keep in mind is that the data that gets in and out must be
+(by default) JSON serializable. That’s because the default transport
+implementation uses JSON to pass data to and back from the backend. You can
+change this by overriding the ``_serialize_result``, ``_deserialize_arguments``
+and ``_serialize_restart_arguments`` methods, but this is rarely enough as the
+workflow starter implementation  must also be aware of the changes. For a
+complete explanation on how to change the transport protocol see
+:ref:`transport`.
+
 
 Workflow Registration and Discovery
 -----------------------------------
@@ -48,13 +60,13 @@ to schedule a specific task to run. This is how it looks in practice::
             self.echo_activity_proxy('activity echo')
             self.echo_workflow_proxy('workflow echo')
 
-As you can see the the proxies can also override some of the defaults used when
-the activity or the workflow was registered.
+As you can see the proxies can also override some of the defaults used when the
+activity or the workflow was registered.
+
+
+Task Result
+-----------
 
 
 Execution Model
 ---------------
-
-
-Result Synchronization
-----------------------

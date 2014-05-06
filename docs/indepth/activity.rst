@@ -33,8 +33,8 @@ Actually, you can use any valid Python method signature for your activity::
 
 There are some limitations on the values that can be passed in or out of the
 activity: all of them must be JSON serializable. That's because the default
-transport implementation uses JSON to pass data to and back from Amazon. You
-can change this by overriding the ``_serialize_result`` and
+transport implementation uses JSON to pass data to and back from the backend.
+You can change this by overriding the ``_serialize_result`` and
 ``_deserialize_arguments`` methods, but this is rarely enough as the workflow
 must also be aware of the changes. For a complete explanation on how to change
 the transport protocol see :ref:`transport`.
@@ -62,8 +62,8 @@ Reporting Progress
 ------------------
 
 An activity can send back progress notifications from time to time using the
-``hearbeat`` method so that the workflow knows that it's still alive. The
-return value of this call can then be used to determine if the activity should
+``hearbeat`` method so that the workflow knows it's still alive. The return
+value of this call can then be used to determine if the activity should
 continue running or abandon the progress. Let's see how this looks in
 practice::
 
