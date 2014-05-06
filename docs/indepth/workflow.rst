@@ -38,6 +38,45 @@ complete explanation on how to change the transport protocol see
 Workflow Registration and Discovery
 -----------------------------------
 
+In order to discover the workflows you implement Flowy uses `venusian`_ to
+register and later scan for existing implementations. For a workflow to be
+discoverable it must be decorated with the ``workflow`` decorator like so::
+
+    from flowy.swf.scanner import workflow
+
+    @workflow(name='echo', version=1, task_list='my_tasklist')
+    class Echo(Workflow):
+        def run(self, value):
+            return value
+
+This not only provides some required metadata for the workflow, but also
+makes it so that later, when the workflow worker is started, it can scan for
+existing activities.
+
+.. function:: flowy.swf.boilerplate.start_workflow_worker(domain, task_list, layer1=None, reg_remote=True, loop=-1, package=None, ignore=None)
+
+    Start the main loop that pulls workflows that can make progress from the
+    *task_list* belonging to the *domain* and runs them. This is a single
+    threaded/single process loop. If you want to distribute the workload it's
+    up to you to start multiple loops.
+
+    It begins by scanning for workflow implementations in the *package* list of
+    Python package or module objects skipping the ones in the *ignore* list.
+    These two arguments have the same semantic value as the ones in the
+    venusian `scan`_ method. By default, if no modules are provided it scans
+    the current module.
+
+    If you want to construct and customize your own SWF `Layer1`_ instance you
+    can pass it in through the *layer1* attribute.
+
+    If *reg_remote* flag is set it attempts to register the workflows remotely.
+    A workflow needs to be registered remotely before it can be started. This
+    flag makes it possible to start a lot of workers at the same time without
+    all of them doing the remote registration calls.
+
+    The *loop* is mainly used for testing to force the main loop to run only
+    for a limited number of iterations. By default the main loop runs forever.
+
 
 Default Configuration
 ---------------------
@@ -70,3 +109,8 @@ Task Result
 
 Execution Model
 ---------------
+
+
+.. _venusian: http://docs.pylonsproject.org/projects/venusian/
+.. _scan: http://docs.pylonsproject.org/projects/venusian/en/latest/api.html#venusian.Scanner.scan
+.. _Layer1: http://boto.readthedocs.org/en/latest/ref/swf.html#boto.swf.layer1.Layer1

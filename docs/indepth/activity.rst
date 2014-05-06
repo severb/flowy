@@ -114,7 +114,9 @@ existing activities.
 .. function:: flowy.swf.boilerplate.start_activity_worker(domain, task_list, layer1=None, reg_remote=True, loop=-1, package=None, ignore=None)
 
     Start the main loop that pulls activities from the *task_list* belonging to
-    the *domain* and runs them.
+    the *domain* and runs them. This is a single threaded/single process loop.
+    If you want to distribute the workload it's up to you to start multiple
+    loops.
 
     It begins by scanning for activity implementations in the *package* list of
     Python package or module objects skipping the ones in the *ignore* list.
