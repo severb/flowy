@@ -140,10 +140,10 @@ Default Configuration
 ---------------------
 
 The ``activity`` decorator does more than just making the implementation
-discoverable, it's also  used to provide activity metadata. The name and the
-version are required and are used to identify the activity. The task list is
-also required but, like the other timeout related values, it's only a default
-value - it can be overridden from the workflow.
+discoverable, it's also  used to provide activity metadata. The `name` and the
+`version` are required and are used to identify the activity. The `task_list`
+is also required but, like the other timeout related values, it's only a
+default value - it can be overridden from the workflow.
 
 .. function:: flowy.swf.scanner.activity(name, version, task_list, heartbeat=None, schedule_to_close=420, schedule_to_start=120, start_to_close=300)
 

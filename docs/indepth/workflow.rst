@@ -81,6 +81,38 @@ existing activities.
 Default Configuration
 ---------------------
 
+The ``workflow`` decorator does more than just making the implementation
+discoverable, it’s also used to provide workflow metadata. The `name` and the
+`version` are required and are used to identify the workflow. The `task_list`
+is also required but, like the other timeout related values, it’s only a
+default value - it can be overridden by the sub-workflow proxies or when
+starting a new workflow.
+
+.. function:: flowy.swf.scanner.workflow(name, version, task_list, workflow_duration=3600, decision_duration=60)
+
+    This function returns a decorator that can be used to register workflow
+    implementations.
+
+    The *name* and the *version* are used to identify the workflow being
+    decorated. The workflow starter will need to know these values in order to
+    schedule the workflow. By default it will schedule this type of workflows
+    to the specified *task_list*.
+
+    The other values are used to control different types of timeout limits.
+    All of them serve just as default values and can be overridden by the
+    sub-workflow proxies or when starting a new workflow:
+
+        * *workflow_duration* - the maximum number of seconds this entire
+          workflow execution can run for.
+        * *decision_duration* - the maximum number of seconds a single decision
+          execution can run for. See :ref:`execution_model` for more details.
+
+.. seealso::
+
+    `Amazon SWF Timeout Types`_
+        A document describing in great detail the different types of timeout
+        timers.
+
 
 Task Proxies
 ------------
@@ -102,10 +134,44 @@ to schedule a specific task to run. This is how it looks in practice::
 As you can see the proxies can also override some of the defaults used when the
 activity or the workflow was registered.
 
+.. class:: flowy.swf.task.ActivityProxy(name, version, heartbeat=None, schedule_to_close=None, schedule_to_start=None, start_to_close=None, task_list=None, retry=3, delay=0, error_handling=False)
+
+    Create a proxy for the activity identified by `name` and `version`. The
+    recommended way to use the proxy is as a property on the ``Workflow``
+    subclasses.
+
+        * *heartbeat*, *schedule_to_close*, *schedule_to_start*,
+          *start_to_close* and *task_list* - can be used to override the
+          default values used when the activity was registered.
+        * *retry* - the number of automatic retries of the activity in case of
+          timeout errors.
+        * *delay* - add a delay before the activity is scheduled.
+        * *error_handling* - use it in case you want to manually handle
+          exceptions raised inside the activity. See :ref:`error` for more
+          details.
+
+.. class:: flowy.swf.task.WorkflowProxy(name, version, decision_duration=None, workflow_duration=None, task_list=None, retry=3, delay=0, error_handling=False)
+
+    Create a proxy for the activity identified by `name` and `version`. The
+    recommended way to use the proxy is as a property on the ``Workflow``
+    subclasses.
+
+        * *decision_duration*, *workflow_duration* and *task_list* - can be
+          used to override the default values used when the workflow was
+          registered.
+        * *retry* - the number of automatic retries of the workflow in case of
+          timeout errors.
+        * *delay* - add a delay before the workflow is scheduled.
+        * *error_handling* - use it in case you want to manually handle
+          exceptions raised inside the workflow. See :ref:`error` for more
+          details.
+
 
 Task Result
 -----------
 
+
+.. _execution_model:
 
 Execution Model
 ---------------
@@ -114,3 +180,4 @@ Execution Model
 .. _venusian: http://docs.pylonsproject.org/projects/venusian/
 .. _scan: http://docs.pylonsproject.org/projects/venusian/en/latest/api.html#venusian.Scanner.scan
 .. _Layer1: http://boto.readthedocs.org/en/latest/ref/swf.html#boto.swf.layer1.Layer1
+.. _Amazon SWF Timeout Types: http://docs.aws.amazon.com/amazonswf/latest/developerguide/swf-timeout-types.html
