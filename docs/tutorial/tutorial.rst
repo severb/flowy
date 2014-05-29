@@ -270,7 +270,7 @@ found.
 So now that we know what this workflow does lets see how it does it. The first
 important thing to realize is that *each proxy call is asynchronous*. The call
 only registers the activity to be scheduled (without necessarily scheduling it
-yet) and returns in an instant. Because of this the return value of a proxy
+yet) and returns in an instant. Because of this, the return value of a proxy
 call is a placeholder for the actual computation. You can pass this placeholder
 to other activities as it is but if you need to access its value inside the
 workflow you need to call the ``.result()`` method on it.
