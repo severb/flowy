@@ -276,18 +276,18 @@ to other activities as it is but if you need to access its value inside the
 workflow you need to call the ``.result()`` method on it.
 
 The second thing you need to know is that the ``run`` method doesn't actually
-run for the entire duration of the workflow execution. It will run multiple
-times and only for short periods of time. Actually, after the initial run when
-the workflow is started, it will run every time an activity either finishes,
-produces an error or times out. Each time the ``run`` method is invoked it
-starts executing the code from the beginning, replacing the proxy calls with
-different types of placeholders based on the most recent state of the
-activities. A placeholder can either contain a result if the activity finished
-successfully, an error if there was a problem or the activity timed out or
-nothing at all if the activity is still running. While ``run`` the method is
-running Flowy registers all the proxy calls and looks for new ones that receive
-as arguments only constants or placeholders that contain results. All the proxy
-calls identified as new are then used to schedule new activities.
+run for the entire duration of the workflow execution. For the same workflow
+execution it will run repeatedly and only for short periods of time. Actually,
+after the initial run when the workflow is started, it will run every time an
+activity either finishes, produces an error or times out. Each time the ``run``
+method is invoked it starts executing the code from the beginning, replacing
+the proxy calls with different types of placeholders based on the most recent
+state of the activities. A placeholder can either contain a result if the
+activity finished successfully, an error if there was a problem or the activity
+timed out or nothing at all if the activity is still running. While ``run`` the
+method is running Flowy registers all the proxy calls and looks for new ones
+that receive as arguments only constants or placeholders that contain results.
+All the proxy calls identified as new are then used to schedule new activities.
 
 But enough with the blabber, lets see an execution timeline of the workflow to
 get a better understanding on how things work.
