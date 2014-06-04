@@ -1,13 +1,13 @@
-.. image:: https://travis-ci.org/pbs/flowy.png?branch=master
+.. image:: http://img.shields.io/travis/pbs/flowy.svg?style=flat
    :target: https://travis-ci.org/pbs/flowy
 
-.. image:: https://coveralls.io/repos/pbs/flowy/badge.png?branch=master
+.. image:: http://img.shields.io/coveralls/pbs/flowy.svg?style=flat
    :target: https://coveralls.io/r/pbs/flowy?branch=master
 
-.. image:: https://pypip.in/v/flowy/badge.png
+.. image:: http://img.shields.io/pypi/v/flowy.svg?style=flat
    :target: https://pypi.python.org/pypi/flowy/
    :alt: Latest Version
 
-.. image:: https://pypip.in/d/flowy/badge.png?period=month
+.. image:: http://img.shields.io/pypi/dm/flowy.svg?style=flat
    :target: https://pypi.python.org/pypi/flowy/
    :alt: Downloads
