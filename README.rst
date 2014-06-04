@@ -11,3 +11,7 @@
 .. image:: http://img.shields.io/pypi/dm/flowy.svg?style=flat
    :target: https://pypi.python.org/pypi/flowy/
    :alt: Downloads
+
+.. image:: http://img.shields.io/badge/license-MIT-lightgrey.svg?style=flat
+   :target: https://github.com/pbs/flowy/blob/master/LICENSE
+   :alt: License
