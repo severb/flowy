@@ -12,7 +12,7 @@ class LocalRegistry(object):
     def _register_task(self, task_id, task_factory):
         self._registry[task_id] = task_factory
 
-    def make(self, task_id, input, scheduler, token):
+    def __call__(self, task_id, input, scheduler, token):
         try:
             return self._registry[task_id](input, scheduler, token)
         except KeyError:
@@ -36,10 +36,10 @@ class ActivitySpec(object):
         ])
 
     def register(self, registry):
-        registry(self._task_id, self.make)
+        registry(self._task_id, self)
         return True
 
-    def make(self, input, scheduler, token):
+    def __call__(self, input, scheduler, token):
         return self._task_factory(input, scheduler, token)
 
 
