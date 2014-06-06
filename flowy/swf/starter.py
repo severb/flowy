@@ -1,7 +1,7 @@
 import uuid
+from contextlib import contextmanager
 
 from boto.swf.exceptions import SWFResponseError
-
 from flowy import logger, posint_or_none, str_or_none
 from flowy.task import serialize_args
 
@@ -21,17 +21,15 @@ class WorkflowStarter(object):
         self._workflow_duration = str_or_none(
             posint_or_none(workflow_duration)
         )
+        self._options = [{'id': None, 'tags': None}]
 
     def __call__(self, *args, **kwargs):
-        workflow_id = uuid.uuid4()
-        return self._start_workflow(workflow_id, *args, **kwargs)
-
-    def with_id(self, workflow_id):
-        def wrapper(*args, **kwargs):
-            return self._start_workflow(workflow_id, *args, **kwargs)
-        return wrapper
-
-    def _start_workflow(self, workflow_id, *args, **kwargs):
+        workflow_id = self._id
+        if workflow_id is None:
+            workflow_id = uuid.uuid4()
+        tags = self._tags
+        if tags is not None:
+            tags = sorted(tags)
         try:
             r = self._client.start_workflow_execution(
                 workflow_id=str(workflow_id),
@@ -40,11 +38,41 @@ class WorkflowStarter(object):
                 task_list=self._task_list,
                 input=self._serialize_arguments(*args, **kwargs),
                 execution_start_to_close_timeout=self._workflow_duration,
-                task_start_to_close_timeout=self._decision_duration
+                task_start_to_close_timeout=self._decision_duration,
+                tag_list=tags,
             )
         except SWFResponseError:
             logger.exception('Could not start the workflow:')
             return None
         return r['runId']
+
+    @property
+    def _id(self):
+        return self._options[-1]['id']
+
+    @property
+    def _tags(self):
+        return self._options[-1]['tags']
+
+    @contextmanager
+    def id(self, id):
+        d = dict(self._options[-1])
+        d['id'] = id
+        self._options.append(d)
+        yield
+        self._options.pop()
+
+    @contextmanager
+    def tags(self, tags):
+        tags = set(map(str, tags))
+        if self._tags is not None:
+            tags |= self._tags
+        if len(tags) > 5:
+            raise ValueError("Can't set more than 5 tags.")
+        d = dict(self._options[-1])
+        d['tags'] = tags
+        self._options.append(d)
+        yield
+        self._options.pop()
 
     _serialize_arguments = serialize_args
