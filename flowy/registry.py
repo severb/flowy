@@ -113,7 +113,7 @@ class RemoteSWFActivitySpec(SWFActivitySpec):
 def _bail_if_zero(mapping):
     for name, val in mapping:
         if val == '0':
-            raise ValueError("The value of %s must be a non-zero"
+            raise ValueError("The value of %s must be a strictly"
                              " positive integer" % name)
 
 
