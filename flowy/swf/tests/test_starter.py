@@ -38,7 +38,7 @@ class WorkflowStarterTest(unittest.TestCase):
     def test_calling_with_tags(self):
         uut, client = self._get_uut()
         client.start_workflow_execution.return_value = {'runId': 0}
-        with uut.tags(['tag1', 'tag2']):
+        with uut.tags('tag1', 'tag2'):
             result = uut(1, 2, x='x', y='y')
 
         self.assertEqual(result, 0)
@@ -57,9 +57,9 @@ class WorkflowStarterTest(unittest.TestCase):
     def test_tags_collapse(self):
         uut, client = self._get_uut()
         client.start_workflow_execution.return_value = {'runId': 0}
-        with uut.tags(['tag1', 'tag2', 'tag1', 'tag2']):
-            with uut.tags(['tag1', 'tag2', 'tag1', 'tag2']):
-                with uut.tags(['tag1', 'tag2', 'tag1', 'tag2']):
+        with uut.tags('tag1', 'tag2', 'tag1', 'tag2'):
+            with uut.tags('tag1', 'tag2', 'tag1', 'tag2'):
+                with uut.tags('tag1', 'tag2', 'tag1', 'tag2'):
                     result = uut(1, 2, x='x', y='y')
 
         self.assertEqual(result, 0)
@@ -78,11 +78,11 @@ class WorkflowStarterTest(unittest.TestCase):
     def test_calling_with_more_tags(self):
         uut, client = self._get_uut()
         def fails1():
-            with uut.tags(range(10)):
+            with uut.tags(*range(10)):
                 pass
         def fails2():
-            with uut.tags(range(5)):
-                with uut.tags([5]):
+            with uut.tags(*range(5)):
+                with uut.tags(5):
                     pass
         self.assertRaises(ValueError, fails1)
         self.assertRaises(ValueError, fails2)
@@ -90,9 +90,9 @@ class WorkflowStarterTest(unittest.TestCase):
     def test_nesting(self):
         uut, client = self._get_uut()
         client.start_workflow_execution.return_value = {'runId': 0}
-        with uut.tags(['tag1']):
+        with uut.tags('tag1'):
             with uut.id('IMARANDOMSTRING1'):
-                with uut.tags(['tag2']):
+                with uut.tags('tag2'):
                     with uut.id('IMARANDOMSTRING2'):
                         result1 = uut(1, 2, x='x', y='y')
                 result2 = uut(1, 2, x='x', y='y')
