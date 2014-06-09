@@ -24,11 +24,11 @@ class ActivitySpec(object):
                  schedule_to_start, start_to_close):
         self._task_id = task_id
         self._task_factory = task_factory
-        self._heartbeat = _as_pos_int(heartbeat)
-        self._schedule_to_close = _as_pos_int(schedule_to_close)
-        self._schedule_to_start = _as_pos_int(schedule_to_start)
-        self._start_to_close = _as_pos_int(start_to_close)
-        _check_pos_non_zero([
+        self._heartbeat = _pos_int_or_none(heartbeat)
+        self._schedule_to_close = _pos_int_or_none(schedule_to_close)
+        self._schedule_to_start = _pos_int_or_none(schedule_to_start)
+        self._start_to_close = _pos_int_or_none(start_to_close)
+        _bail_if_zero([
             ('heartbeat', self._heartbeat),
             ('schedule_to_close', self._schedule_to_close),
             ('schedule_to_start', self._schedule_to_start),
@@ -110,13 +110,14 @@ class RemoteSWFActivitySpec(SWFActivitySpec):
         ])
 
 
-def _check_pos_non_zero(mapping):
+def _bail_if_zero(mapping):
     for name, val in mapping:
         if val == '0':
-            raise ValueError("%s must be a non-zero positive integer" % name)
+            raise ValueError("The value of %s must be a non-zero"
+                             " positive integer" % name)
 
 
-def _as_pos_int(val):
+def _pos_int_or_none(val):
     if val is not None:
         return str(max(int(val), 0))
     return None
