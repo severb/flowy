@@ -21,7 +21,7 @@ class WorkflowStarter(object):
         self._workflow_duration = str_or_none(
             posint_or_none(workflow_duration)
         )
-        self._options = [{'id': None, 'tags': None}]
+        self._options = {'id': None, 'tags': None}
 
     def __call__(self, *args, **kwargs):
         workflow_id = self._id
@@ -48,19 +48,18 @@ class WorkflowStarter(object):
 
     @property
     def _id(self):
-        return self._options[-1]['id']
+        return self._options['id']
 
     @property
     def _tags(self):
-        return self._options[-1]['tags']
+        return self._options['tags']
 
     @contextmanager
     def id(self, id):
-        d = dict(self._options[-1])
-        d['id'] = id
-        self._options.append(d)
+        old_options = self._options
+        self._options = dict(self._options, id=id)
         yield
-        self._options.pop()
+        self._options = old_options
 
     @contextmanager
     def tags(self, tags):
@@ -69,10 +68,9 @@ class WorkflowStarter(object):
             tags |= self._tags
         if len(tags) > 5:
             raise ValueError("Can't set more than 5 tags.")
-        d = dict(self._options[-1])
-        d['tags'] = tags
-        self._options.append(d)
+        old_options = self._options
+        self._options = dict(old_options, tags=tags)
         yield
-        self._options.pop()
+        self._options = old_options
 
     _serialize_arguments = serialize_args
