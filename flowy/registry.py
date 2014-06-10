@@ -21,7 +21,7 @@ class LocalRegistry(object):
 class ActivitySpec(object):
     def __init__(self, task_id, heartbeat, schedule_to_close,
                  schedule_to_start, start_to_close):
-        self.task_id = task_id
+        self._task_id = task_id
         self._heartbeat = _pos_int_or_none(heartbeat)
         self._schedule_to_close = _pos_int_or_none(schedule_to_close)
         self._schedule_to_start = _pos_int_or_none(schedule_to_start)
@@ -35,17 +35,17 @@ class ActivitySpec(object):
 
     def __eq__(self, other):
         if isinstance(other, ActivitySpec):
-            return self.task_id == other.task_id
+            return self._task_id == other._task_id
         return self._task_id == other
 
     def __hash__(self):
-        return hash(self.task_id)
+        return hash(self._task_id)
 
     def __repr__(self):
         klass = self.__class__.__name__
         return ("%s(task_id=%r, heartbeat=%s, schedule_to_close=%s,"
                 " schedule_to_start=%s, start_to_close=%s)") % (
-            klass, self.task_id, self._heartbeat, self._schedule_to_close,
+            klass, self._task_id, self._heartbeat, self._schedule_to_close,
             self._schedule_to_start, self._start_to_close
         )
 
