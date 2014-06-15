@@ -1,6 +1,7 @@
 from collections import namedtuple
 
 from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
+from boto.swf.layer1_decisions import Layer1Decisions
 from flowy import logger
 
 
@@ -45,9 +46,9 @@ class ActivitySpec(object):
         klass = self.__class__.__name__
         return ("%s(activity_id=%r, heartbeat=%s, schedule_to_close=%s,"
                 " schedule_to_start=%s, start_to_close=%s)") % (
-                klass, self._activity_id, self._heartbeat,
-                self._schedule_to_close, self._schedule_to_start,
-                self._start_to_close)
+                    klass, self._activity_id, self._heartbeat,
+                    self._schedule_to_close, self._schedule_to_start,
+                    self._start_to_close)
 
 
 SWFTaskId = namedtuple('SWFTaskId', 'name version')
@@ -67,8 +68,8 @@ class SWFActivitySpec(ActivitySpec):
             schedule_to_start, start_to_close
         )
 
-    def schedule(self, swf_client, call_id, input):
-        swf_client.schedule_activity_task(
+    def schedule(self, swf_decisions, call_id, input):
+        swf_decisions.schedule_activity_task(
             str(call_id), self._name, self._version,
             heartbeat_timeout=self._heartbeat,
             schedule_to_close_timeout=self._schedule_to_close,
@@ -127,10 +128,9 @@ class SWFActivitySpec(ActivitySpec):
         return ("%s(name=%r, version=%r, task_list=%r, heartbeat=%s,"
                 " schedule_to_close=%s, schedule_to_start=%s,"
                 " start_to_close=%s)") % (
-            klass, self._name, self._version, self._task_list, self._heartbeat,
-            self._schedule_to_close, self._schedule_to_start,
-            self._start_to_close
-        )
+                    klass, self._name, self._version, self._task_list,
+                    self._heartbeat, self._schedule_to_close,
+                    self._schedule_to_start, self._start_to_close)
 
 
 class WorkflowSpec(object):
@@ -156,8 +156,8 @@ class WorkflowSpec(object):
         klass = self.__class__.__name__
         return ("%s(workflow_id=%r, decision_duration=%s,"
                 " workflow_duration=%s,") % (
-                klass, self._workflow_id, self._decision_duration,
-                self._workflow_duration)
+                    klass, self._workflow_id, self._decision_duration,
+                    self._workflow_duration)
 
 
 class SWFWorkflowSpec(WorkflowSpec):
@@ -168,9 +168,9 @@ class SWFWorkflowSpec(WorkflowSpec):
         if task_list is not None:
             self._task_list = str(task_list)
         super(SWFActivitySpec, self).__init__(
-            SWFTaskId(self._name, self._version), decision_duration,
-            workflow_duration
-        )
+            SWFTaskId(self._name, self._version),
+            decision_duration,
+            workflow_duration)
 
     def schedule(self, swf_client, call_id, input, tags=None):
         if tags is not None:
@@ -184,12 +184,29 @@ class SWFWorkflowSpec(WorkflowSpec):
                 execution_start_to_close_timeout=self._workflow_duration,
                 task_list=self._task_list,
                 input=str(input),
-                tag_list=tags,
-            )
+                tag_list=tags)
         except SWFResponseError:
             logger.exception('Could not start the workflow:')
             return None
         return r['runId']
+
+    def restart(self, swf_client, token, input, tags=None):
+        swf_decisions = Layer1Decisions()
+        # BOTO has a bug in this call when setting the decision_duration
+        swf_decisions.continue_as_new_workflow_execution(
+            start_to_close_timeout=self._decision_duration,
+            execution_start_to_close_timeout=self._workflow_duration,
+            task_list=self._task_list,
+            input=str(input),
+            tag_list=tags)
+        try:
+            swf_client.return_decision_task_completed(
+                task_token=token,
+                decisions=swf_decisions._data)
+            return True
+        except SWFResponseError:
+            logger.execption('Error while restarting workflow:')
+            return False
 
     def register_remote(self, swf_client):
         success = True
