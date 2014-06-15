@@ -31,8 +31,7 @@ class ActivitySpec(object):
             ('heartbeat', self._heartbeat),
             ('schedule_to_close', self._schedule_to_close),
             ('schedule_to_start', self._schedule_to_start),
-            ('start_to_close', self._start_to_close)
-        )
+            ('start_to_close', self._start_to_close))
 
     def __eq__(self, other):
         if isinstance(other, ActivitySpec):
@@ -64,9 +63,10 @@ class SWFActivitySpec(ActivitySpec):
         if task_list is not None:
             self._task_list = str(task_list)
         super(SWFActivitySpec, self).__init__(
-            SWFTaskId(self._name, self._version), heartbeat, schedule_to_close,
-            schedule_to_start, start_to_close
-        )
+            SWFTaskId(self._name, self._version),
+            heartbeat,
+            schedule_to_close,
+            schedule_to_start, start_to_close)
 
     def schedule(self, swf_decisions, call_id, input):
         swf_decisions.schedule_activity_task(
@@ -76,8 +76,7 @@ class SWFActivitySpec(ActivitySpec):
             schedule_to_start_timeout=self._schedule_to_start,
             start_to_close_timeout=self._start_to_close,
             task_list=self._task_list,
-            input=str(input)
-        )
+            input=str(input))
 
     def register_remote(self, swf_client):
         success = True
@@ -95,8 +94,7 @@ class SWFActivitySpec(ActivitySpec):
                 default_task_heartbeat_timeout=self._heartbeat,
                 default_task_schedule_to_close_timeout=self._schedule_to_close,
                 default_task_schedule_to_start_timeout=self._schedule_to_start,
-                default_task_start_to_close_timeout=self._start_to_close
-            )
+                default_task_start_to_close_timeout=self._start_to_close)
         except SWFTypeAlreadyExistsError:
             return False
         except SWFResponseError:
@@ -108,8 +106,7 @@ class SWFActivitySpec(ActivitySpec):
         try:
             a = swf_client.describe_activity_type(
                 activity_name=self._name,
-                activity_version=self._version
-            )['configuration']
+                activity_version=self._version)['configuration']
         except SWFResponseError:
             logger.exception('Error while checking %r compatibility:' % self)
             return False
@@ -120,8 +117,7 @@ class SWFActivitySpec(ActivitySpec):
             a['defaultTaskScheduleToCloseTimeout'] == self._schedule_to_close
             and
             a['defaultTaskScheduleToStartTimeout'] == self._schedule_to_start
-            and a['defaultTaskStartToCloseTimeout'] == self._start_to_close
-        )
+            and a['defaultTaskStartToCloseTimeout'] == self._start_to_close)
 
     def __repr__(self):
         klass = self.__class__.__name__
@@ -141,8 +137,7 @@ class WorkflowSpec(object):
         self._workflow_duration = _pos_int_or_none(workflow_duration)
         _bail_if_zero(
             ('decision_duration', decision_duration),
-            ('workflow_duration', workflow_duration)
-        )
+            ('workflow_duration', workflow_duration))
 
     def __eq__(self, other):
         if isinstance(other, WorkflowSpec):
@@ -225,8 +220,7 @@ class SWFWorkflowSpec(WorkflowSpec):
                 task_list=self._task_list,
                 default_task_start_to_close_timeout=decision_duration,
                 default_execution_start_to_close_timeout=workflow_duration,
-                default_child_policy='TERMINATE'
-            )
+                default_child_policy='TERMINATE')
         except SWFTypeAlreadyExistsError:
             return False
         except SWFResponseError:
@@ -238,8 +232,7 @@ class SWFWorkflowSpec(WorkflowSpec):
         try:
             w = swf_client.describe_workflow_type(
                 workflow_name=self._name,
-                workflow_version=self._version
-            )['configuration']
+                workflow_version=self._version)['configuration']
         except SWFResponseError:
             logger.exception('Error while checking workflow compatibility:')
             return False
@@ -248,8 +241,7 @@ class SWFWorkflowSpec(WorkflowSpec):
         return (
             w['defaultTaskList']['name'] == self._task_list
             and w['defaultTaskStartToCloseTimeout'] == decision_duration
-            and w['defaultExecutionStartToCloseTimeout'] == workflow_duration
-        )
+            and w['defaultExecutionStartToCloseTimeout'] == workflow_duration)
 
 
 def _bail_if_zero(*mapping):
