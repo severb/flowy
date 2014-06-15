@@ -15,7 +15,7 @@ def swf_activity(version, task_list=None, heartbeat=None,
             activity_spec = SWFActivitySpec(
                 name, version, task_list, heartbeat, schedule_to_close,
                 schedule_to_start, start_to_close)
-            scanner.registry.add_activity(activity_spec, activity_factory)
+            scanner.registry.add(activity_spec, activity_factory)
         venusian.attach(activity_factory, callback, category='activity')
         return activity_factory
     return wrapper
@@ -30,7 +30,7 @@ def swf_workflow(version, task_list=None, workflow_duration=3600,
                 name = f_name
             workflow_spec = SWFWorkflowSpec(
                 name, version, task_list, decision_duration, workflow_duration)
-            scanner.registry.add_workflow(workflow_spec, workflow_factory)
+            scanner.registry.add(workflow_spec, workflow_factory)
         venusian.attach(workflow_factory, callback, category='workflow')
         return workflow_factory
     return wrapper
@@ -74,7 +74,19 @@ class Scanner(object):
         if package is None:
             package = caller_package(level=3 + level)
         scanner.scan(package, categories=categories, ignore=ignore)
-        return self._registry
+
+    def __call__(self, *args, **kwargs):
+        return self._registry(*args, **kwargs)
+
+
+class SWFScanner(Scanner):
+    def __init__(self, registry=None):
+        if registry is None:
+            registry = SWFTaskRegistry()
+        super(SWFScanner, self).__init__(registry)
+
+    def register_remote(self, swf_client):
+        return self._registry.register_remote(swf_client)
 
 
 # Stolen from Pyramid
