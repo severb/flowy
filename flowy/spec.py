@@ -5,20 +5,6 @@ from boto.swf.layer1_decisions import Layer1Decisions
 from flowy import logger
 
 
-class LocalRegistry(object):
-    def __init__(self):
-        self._registry = {}
-
-    def register(self, task_spec, task_factory):
-        self._registry[task_spec] = task_factory
-
-    def __call__(self, task_spec, input, scheduler, token):
-        try:
-            return self._registry[task_spec](input, scheduler, token)
-        except KeyError:
-            return lambda: None
-
-
 class ActivitySpec(object):
     def __init__(self, activity_id, heartbeat=None, schedule_to_close=None,
                  schedule_to_start=None, start_to_close=None):
