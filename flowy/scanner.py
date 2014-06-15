@@ -53,8 +53,11 @@ class TaskRegistry(object):
 
 class SWFTaskRegistry(TaskRegistry):
     def register_remote(self, swf_client):
+        unregistered = []
         for spec in self._registry.keys():
-            spec.register_remote(swf_client)
+            if not spec.register_remote(swf_client):
+                unregistered.append(spec)
+        return unregistered
 
 
 class Scanner(object):
