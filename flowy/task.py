@@ -35,7 +35,7 @@ class Task(object):
         try:
             result = self.run(*args, **kwargs)
         except SuspendTask:
-            self._suspend()
+            return self._suspend()
         except Exception as e:
             logger.exception("Error while running the task:")
             return self._fail(e)
