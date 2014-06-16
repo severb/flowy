@@ -28,7 +28,7 @@ class Task(object):
 
     def __call__(self):
         try:
-            args, kwargs = self._deserialize_arguments(str(self._input))
+            args, kwargs = self._deserialize_arguments(self._input)
         except ValueError:
             logger.exception("Error while deserializing the arguments:")
             return False
@@ -71,7 +71,7 @@ class SWFActivity(Task):
 
     def _finish(self, result):
         try:
-            result = str(self._serialize_result(result))
+            result = self._serialize_result(result)
         except TypeError:
             logger.exception('Could not serialize result:')
             return False
@@ -94,7 +94,7 @@ class AsyncSWFActivity(object):
 
     def finish(self, result):
         try:
-            result = str(self._serialize_result(result))
+            result = self._serialize_result(result)
         except TypeError:
             logger.exception('Could not serialize result:')
             return False
@@ -115,7 +115,7 @@ def _activity_heartbeat(swf_client, token):
 def _activity_fail(swf_client, token, reason):
     try:
         swf_client.respond_activity_task_failed(
-            reason=str(reason)[:256], task_token=token)
+            reason=str(reason)[:256], task_token=str(token))
     except SWFResponseError:
         logger.exception('Error while failing the activity:')
         return False
@@ -125,7 +125,7 @@ def _activity_fail(swf_client, token, reason):
 def _activity_finish(swf_client, token, result):
     try:
         swf_client.respond_activity_task_completed(
-            result=str(result), task_token=token)
+            result=str(result), task_token=str(token))
     except SWFResponseError:
         logger.exception('Error while completing the activity:')
         return False
