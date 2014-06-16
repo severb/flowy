@@ -2,6 +2,7 @@ import json
 from functools import partial
 
 from boto.swf.exceptions import SWFResponseError
+from boto.swf.layer1_decisions import Layer1Decisions
 from flowy import logger, posint_or_none, str_or_none
 from flowy.exception import SuspendTask, TaskError
 from flowy.result import Error, Placeholder, Result, Timeout
@@ -133,12 +134,44 @@ def _activity_finish(swf_client, token, result):
 
 
 class Workflow(Task):
-    def options(self, **kwargs):
-        return self._scheduler.options(**kwargs)
+    def __init__(self, swf_client, input, token, spec, tags=None):
+        self._swf_client = swf_client
+        self._tags = tags
+        self._spec = spec
+        self._decisions = Layer1Decisions()
+        self._closed = False
+        super(Workflow, self).__init__(input, token)
+
+    def options(self):  # change restart options, including tags
+        pass
 
     def restart(self, *args, **kwargs):
-        arguments = self._serialize_restart_arguments(*args, **kwargs)
-        return self._scheduler.restart(arguments)
+        try:
+            input = self._serialize_restart_arguments(*args, **kwargs)
+        except TypeError:
+            logger.exception('Error while serializing restart arguments:')
+            return False
+        decisions = self._decisions = Layer1Decisions()
+        self._spec.restart(decisions, input, self._tags)
+        return self._suspend()
+
+    def _suspend(self):
+        if self._closed:
+            return False
+        self._closed = True
+        try:
+            self._swf_client.respond_decision_task_completed(
+                task_token=self.token, decisions=self._decisions._data
+            )
+            return True
+        except SWFResponseError:
+            logger.exception('Error while sending the decisions:')
+            return False
+
+    def _fail(self, reason):
+        decisions = self._decisions = Layer1Decisions()
+        decisions.fail_workflow_execution(reason=str(reason)[:256])
+        return self._suspend()
 
     def _finish(self, result):
         r = result
@@ -148,10 +181,27 @@ class Workflow(Task):
             try:
                 result.result()
             except TaskError as e:
-                return self._scheduler.fail(str(e))
-        elif isinstance(result, Placeholder):
-            return self._scheduler.suspend()
-        return super(Workflow, self)._finish(r)
+                return self._fail(e)
+        # No need to cover this case - if we get a placeholder it must be
+        # because something is running or is scheduled and the next condition
+        # won't pass anyway
+        # elif isinstance(result, Placeholder):
+        #     return self._suspend()
+        if self._nothing_scheduled() and self._nothing_running():
+            try:
+                r = self._serialize_result(r)
+            except TypeError:
+                logger.exception("Error while serializing the result:")
+                return False
+            decisions = self._decisions = Layer1Decisions()
+            decisions.complete_workflow_execution(result=r)
+        return self._suspend()
+
+    def _nothing_scheduled(self):
+        return not self._decisions._data
+
+    def _nothing_running(self):
+        return not True
 
     def schedule_activity(self, *args, **kwargs):
         pass

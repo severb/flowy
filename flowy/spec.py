@@ -1,7 +1,6 @@
 from collections import namedtuple
 
 from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
-from boto.swf.layer1_decisions import Layer1Decisions
 from flowy import logger
 
 
@@ -153,7 +152,7 @@ class SWFWorkflowSpec(WorkflowSpec):
             decision_duration,
             workflow_duration)
 
-    def schedule(self, swf_client, call_id, input, tags=None):
+    def start(self, swf_client, call_id, input, tags=None):
         if tags is not None:
             tags = set(map(str, tags))
             if len(tags) > 5:
@@ -171,8 +170,7 @@ class SWFWorkflowSpec(WorkflowSpec):
             return None
         return r['runId']
 
-    def restart(self, swf_client, token, input, tags=None):
-        swf_decisions = Layer1Decisions()
+    def restart(self, swf_decisions, input, tags=None):
         # BOTO has a bug in this call when setting the decision_duration
         swf_decisions.continue_as_new_workflow_execution(
             start_to_close_timeout=self._decision_duration,
@@ -180,14 +178,9 @@ class SWFWorkflowSpec(WorkflowSpec):
             task_list=self._task_list,
             input=str(input),
             tag_list=tags)
-        try:
-            swf_client.return_decision_task_completed(
-                task_token=token,
-                decisions=swf_decisions._data)
-            return True
-        except SWFResponseError:
-            logger.execption('Error while restarting workflow:')
-            return False
+
+    def schedule(self, swf_decisions, call_id, input):
+        pass
 
     def register_remote(self, swf_client):
         success = True
