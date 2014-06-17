@@ -39,7 +39,7 @@ class Task(object):
             return self._suspend()
         except Exception as e:
             logger.exception("Error while running the task:")
-            return self._fail(e)
+            return self.fail(e)
         else:
             return self._finish(result)
 
@@ -49,7 +49,7 @@ class Task(object):
     def _suspend(self):
         raise NotImplementedError
 
-    def _fail(self, reason):
+    def fail(self, reason):
         raise NotImplementedError
 
     def _finish(self, result):
@@ -67,7 +67,7 @@ class SWFActivity(Task):
     def _suspend(self):
         return True
 
-    def _fail(self, reason):
+    def fail(self, reason):
         return _activity_fail(self._swf_client, self.token, reason)
 
     def _finish(self, result):
@@ -176,7 +176,7 @@ class SWFWorkflow(Task):
             logger.exception('Error while sending the decisions:')
             return False
 
-    def _fail(self, reason):
+    def fail(self, reason):
         decisions = self._decisions = Layer1Decisions()
         decisions.fail_workflow_execution(reason=str(reason)[:256])
         return self._suspend()
@@ -189,7 +189,7 @@ class SWFWorkflow(Task):
             try:
                 result.result()
             except TaskError as e:
-                return self._fail(e)
+                return self.fail(e)
         # No need to cover this case - if it's a placeholder it must be
         # because something is running or is scheduled and the next condition
         # won't pass anyway

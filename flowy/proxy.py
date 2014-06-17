@@ -58,7 +58,7 @@ class TaskProxy(object):
             if self._error_handling:
                 return Error(error_message)
             else:
-                task._fail(error_message)
+                task.fail(error_message)
                 return Placeholder()
         if self._deps_in_args(args):
             return Placeholder()
