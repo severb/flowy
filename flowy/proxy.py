@@ -5,14 +5,10 @@ from functools import partial
 from flowy.exception import TaskError
 from flowy.results import Error, Placeholder, Result
 from flowy.spec import _sentinel, SWFActivitySpec, SWFWorkflowSpec
+from flowy.task import serialize_args
 
 
 deserialize_result = staticmethod(json.loads)
-
-
-@staticmethod
-def serialize_args(*args, **kwargs):
-    return json.dumps([args, kwargs])
 
 
 class TaskProxy(object):
