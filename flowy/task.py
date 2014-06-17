@@ -1,15 +1,13 @@
 import json
-from functools import partial
 
 from boto.swf.exceptions import SWFResponseError
 from boto.swf.layer1_decisions import Layer1Decisions
-from flowy import logger, posint_or_none, str_or_none
+from flowy import logger
 from flowy.exception import SuspendTask, TaskError
-from flowy.result import Error, Placeholder, Result, Timeout
+from flowy.result import Error, Result, Timeout
 
 
 serialize_result = staticmethod(json.dumps)
-deserialize_result = staticmethod(json.loads)
 deserialize_args = staticmethod(json.loads)
 
 
@@ -74,7 +72,7 @@ class SWFActivity(Task):
         try:
             result = self._serialize_result(result)
         except TypeError:
-            logger.exception('Could not serialize result:')
+            logger.exception('Error while serializing the result:')
             return False
         return _activity_finish(self._swf_client, self.token, result)
 
@@ -97,7 +95,7 @@ class AsyncSWFActivity(object):
         try:
             result = self._serialize_result(result)
         except TypeError:
-            logger.exception('Could not serialize result:')
+            logger.exception('Error while serializing the result:')
             return False
         return _activity_finish(self._swf_client, self._token, result)
 
@@ -128,19 +126,19 @@ def _activity_finish(swf_client, token, result):
         swf_client.respond_activity_task_completed(
             result=str(result), task_token=str(token))
     except SWFResponseError:
-        logger.exception('Error while completing the activity:')
+        logger.exception('Error while finishing the activity:')
         return False
     return True
 
 
-class Workflow(Task):
-    def __init__(self, swf_client, input, token, spec, tags=None):
+class SWFWorkflow(Task):
+    def __init__(self, swf_client, input, token, spec, tags):
         self._swf_client = swf_client
         self._tags = tags
         self._spec = spec
         self._decisions = Layer1Decisions()
         self._closed = False
-        super(Workflow, self).__init__(input, token)
+        super(SWFWorkflow, self).__init__(input, token)
 
     def options(self):  # change restart options, including tags
         pass
@@ -182,7 +180,7 @@ class Workflow(Task):
                 result.result()
             except TaskError as e:
                 return self._fail(e)
-        # No need to cover this case - if we get a placeholder it must be
+        # No need to cover this case - if it's a placeholder it must be
         # because something is running or is scheduled and the next condition
         # won't pass anyway
         # elif isinstance(result, Placeholder):
@@ -210,73 +208,3 @@ class Workflow(Task):
         pass
 
     _serialize_restart_arguments = serialize_args
-
-
-class TaskProxy(object):
-    def __get__(self, obj, objtype):
-        if obj is None:
-            return self
-        if not hasattr(obj, '_scheduler'):
-            raise AttributeError('no scheduler bound to the task')
-        return partial(self, obj._scheduler)
-
-    _serialize_arguments = serialize_args
-    _deserialize_result = deserialize_result
-
-
-class ActivityProxy(TaskProxy):
-    def __init__(self, task_id,
-                 heartbeat=None,
-                 schedule_to_close=None,
-                 schedule_to_start=None,
-                 start_to_close=None,
-                 task_list=None,
-                 retry=3,
-                 delay=0,
-                 error_handling=False):
-        self._kwargs = dict(
-            task_id=task_id,
-            heartbeat=posint_or_none(heartbeat),
-            schedule_to_close=posint_or_none(schedule_to_close),
-            schedule_to_start=posint_or_none(schedule_to_start),
-            start_to_close=posint_or_none(start_to_close),
-            task_list=str_or_none(task_list),
-            retry=max(int(retry), 0),
-            delay=max(int(delay), 0),
-            error_handling=bool(error_handling)
-        )
-
-    def __call__(self, scheduler, *args, **kwargs):
-        return scheduler.remote_activity(
-            args=args, kwargs=kwargs,
-            args_serializer=self._serialize_arguments,
-            result_deserializer=self._deserialize_result,
-            **self._kwargs
-        )
-
-
-class WorkflowProxy(TaskProxy):
-    def __init__(self, task_id,
-                 decision_duration=None,
-                 workflow_duration=None,
-                 task_list=None,
-                 retry=3,
-                 delay=0,
-                 error_handling=False):
-        self._kwargs = dict(
-            task_id=task_id,
-            decision_duration=posint_or_none(decision_duration),
-            workflow_duration=posint_or_none(workflow_duration),
-            task_list=str_or_none(task_list),
-            retry=max(int(retry), 0),
-            delay=max(int(delay), 0),
-            error_handling=bool(error_handling)
-        )
-
-    def __call__(self, scheduler, *args, **kwargs):
-        return scheduler.remote_subworkflow(
-            args=args, kwargs=kwargs,
-            args_serializer=self._serialize_arguments,
-            result_deserializer=self._deserialize_result,
-            **self._kwargs
-        )
