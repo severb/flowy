@@ -91,7 +91,7 @@ class AsyncSWFActivity(object):
         return _activity_heartbeat(self._swf_client, self._token)
 
     def fail(self, reason):
-        return _activity_fail(self._swf_client, self._token)
+        return _activity_fail(self._swf_client, self._token, reason)
 
     def finish(self, result):
         try:
