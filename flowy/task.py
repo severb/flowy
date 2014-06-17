@@ -1,10 +1,12 @@
 import json
+from contextlib import contextmanager
 
 from boto.swf.exceptions import SWFResponseError
 from boto.swf.layer1_decisions import Layer1Decisions
 from flowy import logger
 from flowy.exception import SuspendTask, TaskError
 from flowy.result import Error, Result, Timeout
+from flowy.spec import _sentinel
 
 
 serialize_result = staticmethod(json.dumps)
@@ -140,8 +142,16 @@ class SWFWorkflow(Task):
         self._closed = False
         super(SWFWorkflow, self).__init__(input, token)
 
-    def options(self):  # change restart options, including tags
-        pass
+    @contextmanager
+    def options(self, task_list=_sentinel, decision_duration=_sentinel,
+                workflow_duration=_sentinel, tags=_sentinel):
+        old_tags = self._tags
+        if tags is not _sentinel:
+            self._tags = tags
+        with self._spec.options(task_list, decision_duration,
+                                workflow_duration):
+            yield
+        self._tags = old_tags
 
     def restart(self, *args, **kwargs):
         try:
