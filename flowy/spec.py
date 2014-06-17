@@ -1,4 +1,5 @@
 import uuid
+from contextlib import contextmanager
 
 from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
 from flowy import logger
@@ -31,6 +32,7 @@ class SWFActivitySpec(object):
             task_list=_str_or_none(self._task_list),
             input=str(input))
 
+    @contextmanager
     def options(self, task_list=_sentinel, heartbeat=_sentinel,
                 schedule_to_close=_sentinel, schedule_to_start=_sentinel,
                 start_to_close=_sentinel):
@@ -174,6 +176,7 @@ class SWFWorkflowSpec(object):
             input=str(input)
         )
 
+    @contextmanager
     def options(self, task_list=_sentinel, decision_duration=_sentinel,
                 workflow_duration=_sentinel):
         old_task_list = self._task_list
