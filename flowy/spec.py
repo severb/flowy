@@ -1,5 +1,10 @@
+import uuid
+
 from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
 from flowy import logger
+
+
+_sentinel = object()
 
 
 class SWFActivitySpec(object):
@@ -16,8 +21,7 @@ class SWFActivitySpec(object):
 
     def schedule(self, swf_decisions, call_id, input):
         heartbeat, schedule_to_close, schedule_to_start, start_to_close = (
-            self._encode_timers()
-        )
+            self._timers_encode())
         swf_decisions.schedule_activity_task(
             str(call_id), str(self._name), str(self._version),
             heartbeat_timeout=heartbeat,
@@ -26,6 +30,31 @@ class SWFActivitySpec(object):
             start_to_close_timeout=start_to_close,
             task_list=_str_or_none(self._task_list),
             input=str(input))
+
+    def options(self, task_list=_sentinel, heartbeat=_sentinel,
+                schedule_to_close=_sentinel, schedule_to_start=_sentinel,
+                start_to_close=_sentinel):
+        old_task_list = self._task_list
+        old_heartbeat = self._heartbeat
+        old_schedule_to_close = self._schedule_to_close
+        old_schedule_to_start = self._schedule_to_start
+        old_start_to_close = self._start_to_clone
+        if task_list is not _sentinel:
+            self._task_list = task_list
+        if heartbeat is not _sentinel:
+            self._heartbeat = heartbeat
+        if schedule_to_close is not _sentinel:
+            self._schedule_to_close = schedule_to_close
+        if schedule_to_start is not _sentinel:
+            self._schedule_to_start = schedule_to_start
+        if start_to_close is not _sentinel:
+            self._start_to_close = start_to_close
+        yield
+        self._task_list = old_task_list
+        self._heartbeat = old_heartbeat
+        self._schedule_to_close = old_schedule_to_close
+        self._schedule_to_start = old_schedule_to_start
+        self._start_to_close = old_start_to_close
 
     def register_remote(self, swf_client):
         success = True
@@ -36,8 +65,7 @@ class SWFActivitySpec(object):
 
     def _try_register_remote(self, swf_client):
         heartbeat, schedule_to_close, schedule_to_start, start_to_close = (
-            self._encode_timers()
-        )
+            self._timers_encode())
         try:
             swf_client.register_activity_type(
                 name=str(self._name),
@@ -56,8 +84,7 @@ class SWFActivitySpec(object):
 
     def _check_if_compatible(self, swf_client):
         heartbeat, schedule_to_close, schedule_to_start, start_to_close = (
-            self._encode_timers()
-        )
+            self._timers_encode())
         try:
             a = swf_client.describe_activity_type(
                 activity_name=self._name,
@@ -84,7 +111,7 @@ class SWFActivitySpec(object):
     def __hash__(self):
         return hash(self._key)
 
-    def _encode_timers(self):
+    def _timers_encode(self):
         return (
             _timer_encode(self._heartbeat, 'heartbeat'),
             _timer_encode(self._schedule_to_close, 'schedule_to_close'),
@@ -93,81 +120,75 @@ class SWFActivitySpec(object):
 
     def __repr__(self):
         klass = self.__class__.__name__
-        return ("%s(name=%r, version=%r, task_list=%r, heartbeat=%s,"
-                " schedule_to_close=%s, schedule_to_start=%s,"
-                " start_to_close=%s)") % (
+        return ("%s(name=%r, version=%r, task_list=%r, heartbeat=%r,"
+                " schedule_to_close=%r, schedule_to_start=%r,"
+                " start_to_close=%r)") % (
                     klass, self._name, self._version, self._task_list,
                     self._heartbeat, self._schedule_to_close,
                     self._schedule_to_start, self._start_to_close)
 
 
-class WorkflowSpec(object):
-    def __init__(self, workflow_id, decision_duration=None,
-                 workflow_duration=None):
-        self._workflow_id = workflow_id
-        self._decision_duration = _pos_int_or_none(decision_duration)
-        self._workflow_duration = _pos_int_or_none(workflow_duration)
-        _bail_if_zero(
-            ('decision_duration', decision_duration),
-            ('workflow_duration', workflow_duration))
-
-    def __eq__(self, other):
-        if isinstance(other, WorkflowSpec):
-            return self._workflow_id == other._workflow_id
-        return self._workflow_id == other
-
-    def __hash__(self):
-        return hash(self._workflow_id)
-
-    def __repr__(self):
-        klass = self.__class__.__name__
-        return ("%s(workflow_id=%r, decision_duration=%s,"
-                " workflow_duration=%s,") % (
-                    klass, self._workflow_id, self._decision_duration,
-                    self._workflow_duration)
-
-
-class SWFWorkflowSpec(WorkflowSpec):
+class SWFWorkflowSpec(object):
     def __init__(self, name, version, task_list=None, decision_duration=None,
                  workflow_duration=None):
-        self._name = str(name)
-        self._version = str(version)
-        if task_list is not None:
-            self._task_list = str(task_list)
-        super(SWFActivitySpec, self).__init__(
-            SWFTaskId(self._name, self._version),
-            decision_duration,
-            workflow_duration)
+        self._name = name
+        self._version = version
+        self._task_list = task_list
+        self._decision_duration = decision_duration
+        self._workflow_duration = workflow_duration
 
     def start(self, swf_client, call_id, input, tags=None):
-        if tags is not None:
-            tags = set(map(str, tags))
-            if len(tags) > 5:
-                raise ValueError('Cannot set more than 5 tags')
+        decision_duration, workflow_duration = self._timers_encode()
         try:
             r = swf_client.start_workflow_execution(
-                str(call_id), self._name, self._version,
-                task_start_to_close_timeout=self._decision_duration,
-                execution_start_to_close_timeout=self._workflow_duration,
-                task_list=self._task_list,
+                str(call_id), str(self._name), str(self._version),
+                task_start_to_close_timeout=decision_duration,
+                execution_start_to_close_timeout=workflow_duration,
+                task_list=_str_or_none(self._task_list),
                 input=str(input),
-                tag_list=tags)
+                tag_list=_tags_encode(tags))
         except SWFResponseError:
-            logger.exception('Could not start the workflow:')
+            logger.exception('Error while starting the workflow:')
             return None
         return r['runId']
 
     def restart(self, swf_decisions, input, tags=None):
+        decision_duration, workflow_duration = self._timers_encode()
         # BOTO has a bug in this call when setting the decision_duration
         swf_decisions.continue_as_new_workflow_execution(
-            start_to_close_timeout=self._decision_duration,
-            execution_start_to_close_timeout=self._workflow_duration,
-            task_list=self._task_list,
+            start_to_close_timeout=decision_duration,
+            execution_start_to_close_timeout=workflow_duration,
+            task_list=_str_or_none(self._task_list),
             input=str(input),
-            tag_list=tags)
+            tag_list=_tags_encode(tags))
 
-    def schedule(self, swf_decisions, call_id, input):
-        pass
+    def schedule(self, swf_decisions, call_id, input, subworkflow_id=None):
+        if subworkflow_id is None:
+            subworkflow_id = uuid.uuid4()
+        decision_duration, workflow_duration = self._timers_encode()
+        swf_decisions.start_child_workflow_execution(
+            str(self._name), str(self._version), str(subworkflow_id),
+            task_start_to_close_timeout=decision_duration,
+            execution_start_to_close_timeout=workflow_duration,
+            task_list=_str_or_none(self._task_list),
+            input=str(input)
+        )
+
+    def options(self, task_list=_sentinel, decision_duration=_sentinel,
+                workflow_duration=_sentinel):
+        old_task_list = self._task_list
+        old_decision_duration = self._decision_duration
+        old_workflow_duration = self._workflow_duration
+        if task_list is not _sentinel:
+            self._task_list = task_list
+        if decision_duration is not _sentinel:
+            self._decision_duration = decision_duration
+        if workflow_duration is not _sentinel:
+            self._workflow_duration = workflow_duration
+        yield
+        self._task_list = old_task_list
+        self._decision_duration = old_decision_duration
+        self._workflow_duration = old_workflow_duration
 
     def register_remote(self, swf_client):
         success = True
@@ -177,13 +198,12 @@ class SWFWorkflowSpec(WorkflowSpec):
         return success
 
     def _try_register_remote(self, swf_client):
-        decision_duration = self._decision_duration
-        workflow_duration = self._workflow_duration
+        decision_duration, workflow_duration = self._timers_encode()
         try:
             swf_client.register_workflow_type(
-                name=self._name,
-                version=self._version,
-                task_list=self._task_list,
+                name=str(self._name),
+                version=str(self._version),
+                task_list=_str_or_none(self._task_list),
                 default_task_start_to_close_timeout=decision_duration,
                 default_execution_start_to_close_timeout=workflow_duration,
                 default_child_policy='TERMINATE')
@@ -197,26 +217,50 @@ class SWFWorkflowSpec(WorkflowSpec):
     def _check_if_compatible(self, swf_client):
         try:
             w = swf_client.describe_workflow_type(
-                workflow_name=self._name,
-                workflow_version=self._version)['configuration']
+                workflow_name=str(self._name),
+                workflow_version=str(self._version))['configuration']
         except SWFResponseError:
             logger.exception('Error while checking workflow compatibility:')
             return False
-        decision_duration = self._decision_duration
-        workflow_duration = self._workflow_duration
+        decision_duration, workflow_duration = self._timers_encode()
         return (
-            w['defaultTaskList']['name'] == self._task_list
+            w['defaultTaskList']['name'] == _str_or_none(self._task_list)
             and w['defaultTaskStartToCloseTimeout'] == decision_duration
             and w['defaultExecutionStartToCloseTimeout'] == workflow_duration)
+
+    @property
+    def _key(self):
+        return (str(self._name), str(self._version))
+
+    def __eq__(self, other):
+        if isinstance(other, SWFWorkflowSpec):
+            return self._key == other._key
+        return self._key == other
+
+    def __hash__(self):
+        return hash(self._key)
+
+    def _timers_encode(self):
+        return (
+            _timer_encode(self._decision_duration, 'decision_duration'),
+            _timer_encode(self._workflow_duration, 'workflow_duration'))
+
+    def __repr__(self):
+        klass = self.__class__.__name__
+        return ("%s(name=%r, version=%r, task_list=%r, decision_duration=%r,"
+                " workflow_duration)") % (
+                    klass, self._name, self._version, self._task_list,
+                    self._decision_duration, self._workflow_duration)
 
 
 def _timer_encode(val, name):
     if val is None:
         return None
-    val = str(max(int(val), 0))
-    if val == '0':
+    val = max(int(val), 0)
+    if val == 0:
         raise ValueError("The value of %s must be a strictly"
                          " positive integer" % name)
+    return str(val)
 
 
 def _tags_encode(tags):
