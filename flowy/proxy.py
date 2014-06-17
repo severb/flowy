@@ -83,13 +83,6 @@ class TaskProxy(object):
                  for k, v in kwargs.items())
         return a, k
 
-    def _params(self):
-        return (
-            max(int(self._retry), 0),
-            max(int(self._delay), 0),
-            bool(self._error_handling)
-        )
-
     _serialize_arguments = serialize_args
     _deserialize_result = deserialize_result
 
@@ -115,9 +108,8 @@ class SWFActivityProxy(TaskProxy):
                 yield
 
     def schedule(self, task, input):
-        retry, delay, error_handling = self._params()
-        return task.schedule_activity(self._spec, input, retry, delay,
-                                      error_handling)
+        return task.schedule_activity(self._spec, input, self._retry,
+                                      self._delay, self._error_handling)
 
 
 class SWFWorkflowProxy(TaskProxy):
@@ -139,6 +131,5 @@ class SWFWorkflowProxy(TaskProxy):
                 yield
 
     def schedule(self, task, input):
-        retry, delay, error_handling = self._params()
-        return task.schedule_workflow(self._spec, input, retry, delay,
-                                      error_handling)
+        return task.schedule_workflow(self._spec, input, self._retry,
+                                      self._delay, self._error_handling)
