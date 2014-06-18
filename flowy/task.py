@@ -280,7 +280,7 @@ class SWFWorkflow(Task):
             if self._call_id in self._results:
                 return _FOUND, self._results[self._call_id]
             return _NOTFOUND, None
-        raise _TIMEDOUT, None
+        return _TIMEDOUT, None
 
     def _schedule_task(self, spec, is_act):
         if self._max_schedule > 0:
