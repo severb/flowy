@@ -1,40 +1,29 @@
 from boto.swf.exceptions import SWFResponseError
 
 from flowy import logger
-from flowy.scheduler import ArgsDependencyScheduler, OptionsScheduler
-from flowy.swf import SWFTaskId
-from flowy.swf.scheduler import ActivityScheduler, DecisionScheduler
+from flowy.spec import SWFWorkflowSpec
+from flowy.task import SWFActivity, SWFWorkflow, SWFSpecKey
 
 
-class _PaginationError(RuntimeError):
-    """ A page of the history is unavailable. """
-
-
-class ActivityPoller(object):
-    def __init__(self, client, task_list, scheduler=ActivityScheduler):
-        self._client = client
+class SWFActivityPoller(object):
+    def __init__(self, swf_client, task_list, task_factory=SWFActivity):
+        self._swf_client = swf_client
         self._task_list = task_list
-        self._scheduler = scheduler
+        self._task_factory = task_factory
 
-    def poll_next_task(self, worker):
-        task = None
-        while task is None:
-            swf_response = self._poll_response()
-            task_id, input, token = self._parse_response(swf_response)
-            scheduler = self._scheduler(
-                client=self._client, token=token
-            )
-            task = worker.make_task(
-                task_id=task_id,
-                input=input,
-                scheduler=scheduler,
-                token=token
-            )
-        return task
+    def poll_next_task(self):
+        swf_response = self._poll_response()
+        spec_key, input, token = self._parse_response(swf_response)
+        return self._task_factory(
+            spec_key,
+            swf_client=self._swf_client,
+            input=input,
+            token=token
+        )
 
     def _parse_response(self, swf_response):
         return (
-            SWFTaskId(
+            SWFSpecKey(
                 swf_response['activityType']['name'],
                 swf_response['activityType']['version']
             ),
@@ -46,7 +35,7 @@ class ActivityPoller(object):
         swf_response = {}
         while 'taskToken' not in swf_response or not swf_response['taskToken']:
             try:
-                swf_response = self._client.poll_for_activity_task(
+                swf_response = self._swf_client.poll_for_activity_task(
                     task_list=self._task_list
                 )
             except SWFResponseError:
@@ -55,64 +44,32 @@ class ActivityPoller(object):
         return swf_response
 
 
-def decision_scheduler(client, token, running, timedout, results, errors):
-    return OptionsScheduler(
-        ArgsDependencyScheduler(
-            DecisionScheduler(
-                client=client,
-                token=token,
-                running=running,
-                timedout=timedout,
-                results=results,
-                errors=errors
-            )
-        )
-    )
-
-
 class DecisionPoller(object):
-    def __init__(self, client, task_list, scheduler=decision_scheduler):
-        self._client = client
+    def __init__(self, swf_client, task_list, spec_factory=SWFWorkflowSpec,
+                 task_factory=SWFWorkflow):
+        self._swf_client = swf_client
         self._task_list = task_list
-        self._scheduler = scheduler
+        self._spec_factory = spec_factory
+        self._task_factory = task_factory
 
-    def poll_next_task(self, worker):
-        task = None
-        while task is None:
-            first_page = self._poll_response_first_page()
-            task_id = SWFTaskId(
-                name=first_page['workflowType']['name'],
-                version=first_page['workflowType']['version']
-            )
-            token = first_page['taskToken']
-            all_events = self._events(first_page)
-            # the first page sometimes contains an empty events list, because
-            # of that we can't get the WorkflowExecutionStarted before the
-            # events generator is created - is this an Amazon SWF bug?
-            wes = all_events.next()
-            assert wes['eventType'] == 'WorkflowExecutionStarted'
-            input = wes['workflowExecutionStartedEventAttributes']['input']
-            try:
-                running, timedout, results, errors = self._parse_events(
-                    all_events
-                )
-            except _PaginationError:
-                continue
-            scheduler = self._scheduler(
-                client=self._client,
-                token=token,
-                running=running,
-                timedout=timedout,
-                results=results,
-                errors=errors
-            )
-            task = worker.make_task(
-                task_id=task_id,
-                input=input,
-                scheduler=scheduler,
-                token=token
-            )
-        return task
+    def poll_next_task(self):
+        first_page = self._poll_response_first_page()
+        token = _parse_token(first_page)
+        all_events = self._events(first_page)
+        # the first page sometimes contains an empty events list, because
+        # of that we can't get the WorkflowExecutionStarted before the
+        # events generator is created - is this an Amazon SWF bug?
+        first_event = all_events.next()
+        input = _parse_input(first_event)
+        spec = _parse_spec(first_event, self._spec_factory)
+        tags = _parse_tags(first_event)
+        try:
+            running, timedout, results, errors = self._parse_events(all_events)
+        except _PaginationError:
+            return self.poll_next_task()
+        return self._task_factory(spec, self._swf_client, input, token,
+                                  running, timedout, results, errors, spec,
+                                  tags)
 
     def _events(self, first_page):
         page = first_page
@@ -214,7 +171,7 @@ class DecisionPoller(object):
         swf_response = {}
         while 'taskToken' not in swf_response or not swf_response['taskToken']:
             try:
-                swf_response = self._client.poll_for_decision_task(
+                swf_response = self._swf_client.poll_for_decision_task(
                     task_list=self._task_list
                 )
             except SWFResponseError:
@@ -225,7 +182,7 @@ class DecisionPoller(object):
         swf_response = None
         for _ in range(7):  # give up after a limited number of retries
             try:
-                swf_response = self._client.poll_for_decision_task(
+                swf_response = self._swf_client.poll_for_decision_task(
                     task_list=self._task_list, next_page_token=page_token
                 )
                 break
@@ -236,5 +193,34 @@ class DecisionPoller(object):
         return swf_response
 
 
+def _parse_token(page):
+    return page['taskToken']
+
+
+def _parse_input(event):
+    assert event['eventType'] == 'WorkflowExecutionStarted'
+    return event['workflowExecutionStartedEventAttributes']['input']
+
+
+def _parse_spec(event, factory):
+    assert event['eventType'] == 'WorkflowExecutionStarted'
+    return factory(
+        event['workflowType']['name'],
+        event['workflowType']['version'],
+        event['taskList'],
+        event['taskStartToCloseTimeout'],
+        event['executionStartToCloseTimeout']
+    )
+
+
+def _parse_tags(event):
+    assert event['eventType'] == 'WorkflowExecutionStarted'
+    return event['workflowExecutionStartedEventAttributes']['tagList']
+
+
 def _subworkflow_id(workflow_id):
     return workflow_id.rsplit('-', 1)[-1]
+
+
+class _PaginationError(RuntimeError):
+    """ A page of the history is unavailable. """

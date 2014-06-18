@@ -1,4 +1,5 @@
 import uuid
+from collection import namedtuple
 from contextlib import contextmanager
 
 from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
@@ -6,6 +7,11 @@ from flowy import logger
 
 
 _sentinel = object()
+_SWFKeyTuple = namedtuple('_SWFKeyTuple', 'name version')
+
+
+def SWFSpecKey(name, version):
+    return _SWFKeyTuple((str(name), str(version)))
 
 
 class SWFActivitySpec(object):
@@ -103,7 +109,7 @@ class SWFActivitySpec(object):
 
     @property
     def _key(self):
-        return (str(self._name), str(self._version))
+        return SWFSpecKey(self._name, self._version)
 
     def __eq__(self, other):
         if isinstance(other, SWFActivitySpec):
@@ -233,7 +239,7 @@ class SWFWorkflowSpec(object):
 
     @property
     def _key(self):
-        return (str(self._name), str(self._version))
+        return SWFSpecKey(self._name, self._version)
 
     def __eq__(self, other):
         if isinstance(other, SWFWorkflowSpec):
