@@ -13,6 +13,8 @@ from flowy.spec import _sentinel
 serialize_result = staticmethod(json.dumps)
 deserialize_args = staticmethod(json.loads)
 
+_TIMEDOUT, _RUNNING, _ERROR, _FOUND, _NOTFOUND = range(5)
+
 
 @staticmethod
 def serialize_args(*args, **kwargs):
@@ -227,55 +229,66 @@ class SWFWorkflow(Task):
 
     def _schedule(self, spec, input, retry, delay, default=None, is_act=True):
         initial_call_id = self._call_id
-        result = self._get_existing_result(delay, retry, default)
-        if result is None:
-            if self._max_schedule > 0:
-                call_id = self._call_id
-                if not is_act:
-                    call_id = '%s-%s' % (uuid.uuid4(), self._call_id)
-                spec.schedule(self._decisions, call_id, input)
-                self._max_schedule -= 1
-            result = default
-        self._reserve_call_ids(initial_call_id, delay, retry)
-        return result
-
-    def _get_existing_result(self, delay, retry, default=None):
-        result = self._timer_result(delay, default)
-        if result is not None:
-            return result
-        result = self._search_result(retry, default)
-        if result is not None:
-            return result
-        return None
-
-    def _timer_result(self, delay, default=None):
-        if delay:
-            if self._call_id in self._running:
+        try:
+            if delay:
+                state, _ = self._search_timer()
+                if state == _NOTFOUND:
+                    self._schedule_timer(delay)
+                    return default
+                if state == _RUNNING:
+                    return default
+                assert state == _FOUND
+            state, value = self._search_result(retry)
+            if state == _RUNNING:
                 return default
-            if self._call_id not in self._results:
-                if self._max_schedule > 0:
-                    self._decisions.start_timer(
-                        start_to_fire_timeout=str(delay),
-                        timer_id=str(self._call_id)
-                    )
-                    self._max_schedule -= 1
+            if state == _ERROR:
+                raise TaskError(value)
+            if state == _FOUND:
+                return value
+            if state == _NOTFOUND:
+                self._schedule_task(spec, is_act)
                 return default
-            self._call_id += 1
-        return None
+            if state == _TIMEDOUT:
+                raise TaskTimedout()
+        finally:
+            self._reserve_call_ids(initial_call_id, delay, retry)
 
-    def _search_result(self, retry, default=None):
+    def _search_timer(self):
+        if self._call_id not in self._results:
+            return _NOTFOUND, None
+        self._call_id += 1
+        if self._call_id in self._running:
+            return _RUNNING, None
+        return _FOUND, None
+
+    def _schedule_timer(self, delay):
+        if self._max_schedule > 0:
+            self._decisions.start_timer(
+                start_to_fire_timeout=str(delay),
+                timer_id=str(self._call_id)
+            )
+            self._max_schedule -= 1
+
+    def _search_result(self, retry):
         for self._call_id in range(self._call_id, self._call_id + retry + 1):
             if self._call_id in self._timedout:
                 continue
             if self._call_id in self._running:
-                return default
+                return _RUNNING, None
             if self._call_id in self._errors:
-                error_message = self._errors[self._call_id]
-                raise TaskError(error_message)
+                return _ERROR, self._errors[self._call_id]
             if self._call_id in self._results:
-                return self._results[self._call_id]
-            return False  # There is nothing we could find about this call
-        raise TaskTimedout()
+                return _FOUND, self._results[self._call_id]
+            return _NOTFOUND, None
+        raise _TIMEDOUT, None
+
+    def _schedule_task(self, spec, is_act):
+        if self._max_schedule > 0:
+            call_id = self._call_id
+            if not is_act:
+                call_id = '%s-%s' % (uuid.uuid4(), self._call_id)
+            spec.schedule(self._decisions, call_id, input)
+            self._max_schedule -= 1
 
     def _reserve_call_ids(self, call_id, delay, retry):
         self._call_id = (
