@@ -135,6 +135,12 @@ class DecisionScheduler(object):
         finally:
             self._decisions = Layer1Decisions()
 
+    def restart(self, input):
+        self._decisions = Layer1Decisions()
+        self._decisions.continue_as_new_workflow_execution(
+            input=input
+        )
+
     def _get_existing_result(self, delay, retry, result_deserializer,
                              error_handling):
         result = self._timer_result(delay)
