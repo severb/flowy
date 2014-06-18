@@ -2,8 +2,8 @@ import json
 from contextlib import contextmanager
 from functools import partial
 
-from flowy.exception import TaskError
-from flowy.results import Error, Placeholder, Result
+from flowy.exception import TaskError, TaskTimedout
+from flowy.results import Error, Placeholder, Result, Timeout
 from flowy.spec import _sentinel, SWFActivitySpec, SWFWorkflowSpec
 from flowy.task import serialize_args
 
@@ -12,6 +12,10 @@ deserialize_result = staticmethod(json.loads)
 
 
 class TaskProxy(object):
+
+    timeout_message = "A task has timed-out"
+    error_message = "Error in task: %s"
+
     def __init__(self, retry=3, delay=0, error_handling=False):
         self._retry = retry
         self._delay = delay
@@ -47,9 +51,24 @@ class TaskProxy(object):
         # there is no error handling for argument/result transport
         # we want those to bubble up in the workflow and stop it
         input = self._serialize_arguments(*args, **kwargs)
-        result = self._schedule(task, input)
-        # wrap the result here
-        return result
+        try:
+            placeholder = Placeholder()
+            result = self._schedule(task, input, default=placeholder)
+            if result is placeholder:
+                return placeholder
+            return Result(self._deserialize_result(result))
+        except TaskError as e:
+            if self._error_handling:
+                return Error(str(e))
+            else:
+                task.fail(self.error_message % e)
+                return Placeholder()
+        except TaskTimedout:
+            if self._error_handling:
+                return Timeout()
+            else:
+                task.fail(self.timeout_message)
+                return Placeholder()
 
     def _args_based_result(self, task, args, kwargs):
         args = tuple(args) + tuple(kwargs.values())
@@ -94,6 +113,8 @@ class SWFActivityProxy(TaskProxy):
         self._spec = SWFActivitySpec(name, version, task_list, heartbeat,
                                      schedule_to_close, schedule_to_start,
                                      start_to_close)
+        self.timeout_message = "Activity %r has timed-out" % self._spec
+        self.error_message = "Error in activity %r: %%s" % self._spec
         super(SWFActivityProxy, self).__init__(retry, delay, error_handling)
 
     @contextmanager
@@ -107,9 +128,9 @@ class SWFActivityProxy(TaskProxy):
                                                        error_handling):
                 yield
 
-    def schedule(self, task, input):
+    def schedule(self, task, input, default=None):
         return task.schedule_activity(self._spec, input, self._retry,
-                                      self._delay, self._error_handling)
+                                      self._delay, default=default)
 
 
 class SWFWorkflowProxy(TaskProxy):
@@ -118,6 +139,8 @@ class SWFWorkflowProxy(TaskProxy):
                  error_handling=False):
         self._spec = SWFWorkflowSpec(name, version, task_list,
                                      decision_duration, workflow_duration)
+        self.timeout_message = "Workflow %r has timed-out" % self._spec
+        self.error_message = "Error in workflow %r: %%s" % self._spec
         super(SWFWorkflowProxy, self).__init__(retry, delay, error_handling)
 
     @contextmanager
@@ -130,6 +153,6 @@ class SWFWorkflowProxy(TaskProxy):
                                                        error_handling):
                 yield
 
-    def schedule(self, task, input):
+    def schedule(self, task, input, default=None):
         return task.schedule_workflow(self._spec, input, self._retry,
-                                      self._delay, self._error_handling)
+                                      self._delay, default=default)
