@@ -1,8 +1,8 @@
 from boto.swf.exceptions import SWFResponseError
 
 from flowy import logger
-from flowy.spec import SWFWorkflowSpec
-from flowy.task import SWFActivity, SWFWorkflow, SWFSpecKey
+from flowy.spec import SWFWorkflowSpec, SWFSpecKey
+from flowy.task import SWFActivity
 
 
 class SWFActivityPoller(object):
@@ -44,13 +44,13 @@ class SWFActivityPoller(object):
         return swf_response
 
 
-class DecisionPoller(object):
-    def __init__(self, swf_client, task_list, spec_factory=SWFWorkflowSpec,
-                 task_factory=SWFWorkflow):
+class SWFWorkflowPoller(object):
+    def __init__(self, swf_client, task_list, task_factory,
+                 spec_factory=SWFWorkflowSpec):
         self._swf_client = swf_client
         self._task_list = task_list
-        self._spec_factory = spec_factory
         self._task_factory = task_factory
+        self._spec_factory = spec_factory
 
     def poll_next_task(self):
         first_page = self._poll_response_first_page()

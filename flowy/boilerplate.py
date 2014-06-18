@@ -2,13 +2,8 @@ import sys
 
 from boto.swf.layer1 import Layer1
 from flowy import logger, MagicBind
-from flowy.scanner import Scanner
-from flowy.spec import ActivitySpecCollector, TaskSpec, WorkflowSpecCollector
-from flowy.swf.poller import ActivityPoller, DecisionPoller
-from flowy.swf.scheduler import AsyncActivityScheduler
-from flowy.swf.spec import ActivitySpec as RemoteActivitySpec
-from flowy.swf.spec import WorkflowSpec as RemoteWorkflowSpec
-from flowy.swf.starter import WorkflowStarter
+from flowy.scanner import SWFScanner
+from flowy.poller import SWFWorkflowPoller
 from flowy.worker import SingleThreadedWorker
 
 
@@ -45,42 +40,40 @@ def start_workflow_worker(domain, task_list,
                           package=None,
                           ignore=None):
     swf_client = _get_client(layer1, domain)
-    Spec = TaskSpec
-    if reg_remote:
-        Spec = RemoteWorkflowSpec
-    scanner = Scanner(WorkflowSpecCollector(Spec, swf_client))
+    scanner = SWFScanner()
     scanner.scan_workflows(package=package, ignore=ignore, level=1)
-    poller = DecisionPoller(swf_client, task_list)
+    poller = SWFWorkflowPoller(swf_client, task_list, scanner)
     worker = SingleThreadedWorker(poller)
-    not_registered = scanner.register(worker)
-    if not_registered:
-        logger.error(
-            'Not all workflows could be regestered: %r', not_registered
-        )
-        sys.exit(1)
+    if reg_remote:
+        not_registered = scanner.register_remote(swf_client)
+        if not_registered:
+            logger.error(
+                'Not all workflows could be regestered: %r', not_registered
+            )
+            sys.exit(1)
     try:
         worker.run_forever(loop)
     except KeyboardInterrupt:
         pass
 
 
-def async_scheduler(domain, layer1=None):
-    return AsyncActivityScheduler(client=_get_client(layer1, domain))
+# def async_scheduler(domain, layer1=None):
+#     return AsyncActivityScheduler(client=_get_client(layer1, domain))
 
 
-def workflow_starter(domain, name, version,
-                     task_list=None,
-                     decision_duration=None,
-                     workflow_duration=None,
-                     layer1=None):
-    return WorkflowStarter(
-        name=name,
-        version=version,
-        client=_get_client(layer1, domain),
-        task_list=task_list,
-        decision_duration=decision_duration,
-        workflow_duration=workflow_duration
-    )
+# def workflow_starter(domain, name, version,
+#                      task_list=None,
+#                      decision_duration=None,
+#                      workflow_duration=None,
+#                      layer1=None):
+#     return WorkflowStarter(
+#         name=name,
+#         version=version,
+#         client=_get_client(layer1, domain),
+#         task_list=task_list,
+#         decision_duration=decision_duration,
+#         workflow_duration=workflow_duration
+#     )
 
 
 def _get_client(layer1, domain):

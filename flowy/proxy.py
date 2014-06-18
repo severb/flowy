@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from functools import partial
 
 from flowy.exception import TaskError, TaskTimedout
-from flowy.results import Error, Placeholder, Result, Timeout
+from flowy.result import Error, Placeholder, Result, Timeout
 from flowy.spec import _sentinel, SWFActivitySpec, SWFWorkflowSpec
 from flowy.task import serialize_args
 

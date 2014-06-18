@@ -1,5 +1,5 @@
 import uuid
-from collection import namedtuple
+from collections import namedtuple
 from contextlib import contextmanager
 
 from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
@@ -257,7 +257,7 @@ class SWFWorkflowSpec(object):
     def __repr__(self):
         klass = self.__class__.__name__
         return ("%s(name=%r, version=%r, task_list=%r, decision_duration=%r,"
-                " workflow_duration)") % (
+                " workflow_duration=%r)") % (
                     klass, self._name, self._version, self._task_list,
                     self._decision_duration, self._workflow_duration)
 
