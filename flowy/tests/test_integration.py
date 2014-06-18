@@ -19,9 +19,10 @@ class MockLayer1(Layer1):
     def json_request(self, action, data, object_hook=None):
         self._normalize_request_dict(data)
         nxt_req = next(self.requests)
-        assert nxt_req[0] == action, ('Difference expected %s, got %s'
+        assert nxt_req[0] == action, ('Difference expected:\n%s\nBut got:\n%s'
                                       % (nxt_req[0], action))
-        assert nxt_req[1] == data
+        assert nxt_req[1] == data, ('Difference expected:\n%s\nBut got:\n%s'
+                                      % (nxt_req[1], data))
         nxt_resp = next(self.responses)
         return nxt_resp
 

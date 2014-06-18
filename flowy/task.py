@@ -246,7 +246,7 @@ class SWFWorkflow(Task):
             if state == _FOUND:
                 return value
             if state == _NOTFOUND:
-                self._schedule_task(spec, is_act)
+                self._schedule_task(spec, input, is_act)
                 return default
             if state == _TIMEDOUT:
                 raise TaskTimedout()
@@ -283,7 +283,7 @@ class SWFWorkflow(Task):
             return _NOTFOUND, None
         return _TIMEDOUT, None
 
-    def _schedule_task(self, spec, is_act):
+    def _schedule_task(self, spec, input, is_act):
         if self._max_schedule > 0:
             call_id = self._call_id
             if not is_act:

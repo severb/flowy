@@ -79,7 +79,7 @@ class DelayActivityExample(Workflow):
     def run(self):
         self.identity('no delay')
         self.delayed_identity('5 delay')
-        with self.options(delay=10):
+        with self.identity.options(delay=10):
             self.identity('10 dealy')
 
 
@@ -101,7 +101,7 @@ class HandledErrorExample(Workflow):
     handled_error = ActivityProxy('Error', 77, error_handling=True)
 
     def run(self):
-        with self.options(error_handling=True):
+        with self.error.options(error_handling=True):
             a = self.error('catch me')
         b = self.handled_error('catch me too')
         try:
@@ -125,10 +125,11 @@ class ErrorChainingExample(Workflow):
     identity = ActivityProxy('Identity', 77)
 
     def run(self):
-        with self.options(error_handling=True):
-            a = self.error('err!')
-            b = self.identity(a)
-            c = self.identity(b)
+        with self.error.options(error_handling=True):
+            with self.identity.options(error_handling=True):
+                a = self.error('err!')
+                b = self.identity(a)
+                c = self.identity(b)
         try:
             c.result()
         except TaskError:
@@ -146,7 +147,7 @@ class ErrorResultPassedExample(Workflow):
     identity = ActivityProxy('Identity', 77)
 
     def run(self):
-        with self.options(error_handling=True):
+        with self.error.options(error_handling=True):
             a = self.error('err!')
         return self.identity(a).result()
 

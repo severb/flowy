@@ -10,10 +10,10 @@ def swf_activity(version, task_list=None, heartbeat=None,
 
     def wrapper(activity_factory):
         def callback(scanner, f_name, ob):
-            if name is None:  # noqa
-                name = f_name
+            if name is not None:
+                f_name = name
             activity_spec = SWFActivitySpec(
-                name, version, task_list, heartbeat, schedule_to_close,
+                f_name, version, task_list, heartbeat, schedule_to_close,
                 schedule_to_start, start_to_close)
             scanner.registry.add(activity_spec, activity_factory)
         venusian.attach(activity_factory, callback, category='activity')
@@ -26,10 +26,11 @@ def swf_workflow(version, task_list=None, workflow_duration=3600,
 
     def wrapper(workflow_factory):
         def callback(scanner, f_name, ob):
-            if name is None:  # noqa
-                name = f_name
+            if name is not None:
+                f_name = name
             workflow_spec = SWFWorkflowSpec(
-                name, version, task_list, decision_duration, workflow_duration)
+                f_name, version, task_list, decision_duration,
+                workflow_duration)
             scanner.registry.add(workflow_spec, workflow_factory)
         venusian.attach(workflow_factory, callback, category='workflow')
         return workflow_factory

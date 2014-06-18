@@ -199,23 +199,26 @@ def _parse_token(page):
 
 def _parse_input(event):
     assert event['eventType'] == 'WorkflowExecutionStarted'
-    return event['workflowExecutionStartedEventAttributes']['input']
+    event_attrs = event['workflowExecutionStartedEventAttributes']
+    return event_attrs['input']
 
 
 def _parse_spec(event, factory):
     assert event['eventType'] == 'WorkflowExecutionStarted'
+    event_attrs = event['workflowExecutionStartedEventAttributes']
     return factory(
-        event['workflowType']['name'],
-        event['workflowType']['version'],
-        event['taskList'],
-        event['taskStartToCloseTimeout'],
-        event['executionStartToCloseTimeout']
+        event_attrs['workflowType']['name'],
+        event_attrs['workflowType']['version'],
+        event_attrs['taskList'],
+        event_attrs['taskStartToCloseTimeout'],
+        event_attrs['executionStartToCloseTimeout']
     )
 
 
 def _parse_tags(event):
     assert event['eventType'] == 'WorkflowExecutionStarted'
-    return event['workflowExecutionStartedEventAttributes']['tagList']
+    event_attrs = event['workflowExecutionStartedEventAttributes']
+    return event_attrs.get('tagList', None)
 
 
 def _subworkflow_id(workflow_id):

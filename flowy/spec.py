@@ -11,7 +11,7 @@ _SWFKeyTuple = namedtuple('_SWFKeyTuple', 'name version')
 
 
 def SWFSpecKey(name, version):
-    return _SWFKeyTuple((str(name), str(version)))
+    return _SWFKeyTuple(str(name), str(version))
 
 
 class SWFActivitySpec(object):
@@ -46,7 +46,7 @@ class SWFActivitySpec(object):
         old_heartbeat = self._heartbeat
         old_schedule_to_close = self._schedule_to_close
         old_schedule_to_start = self._schedule_to_start
-        old_start_to_close = self._start_to_clone
+        old_start_to_close = self._start_to_close
         if task_list is not _sentinel:
             self._task_list = task_list
         if heartbeat is not _sentinel:
