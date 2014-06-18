@@ -164,12 +164,12 @@ class SWFWorkflowSpec(object):
             input=str(input),
             tag_list=_tags_encode(tags))
 
-    def schedule(self, swf_decisions, call_id, input, subworkflow_id=None):
-        if subworkflow_id is None:
-            subworkflow_id = uuid.uuid4()
+    def schedule(self, swf_decisions, call_id, input):
+        if call_id is None:
+            call_id = uuid.uuid4()
         decision_duration, workflow_duration = self._timers_encode()
         swf_decisions.start_child_workflow_execution(
-            str(self._name), str(self._version), str(subworkflow_id),
+            str(self._name), str(self._version), str(call_id),
             task_start_to_close_timeout=decision_duration,
             execution_start_to_close_timeout=workflow_duration,
             task_list=_str_or_none(self._task_list),

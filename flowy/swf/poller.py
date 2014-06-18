@@ -208,10 +208,6 @@ class DecisionPoller(object):
                 id = e['timerFiredEventAttributes']['timerId']
                 running.remove(id)
                 results[id] = None
-        running = set(map(int, running))
-        timedout = set(map(int, timedout))
-        results = dict((int(k), v) for k, v in results.items())
-        errors = dict((int(k), v) for k, v in errors.items())
         return running, timedout, results, errors
 
     def _poll_response_first_page(self):
