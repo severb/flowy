@@ -6,7 +6,7 @@ from itertools import izip_longest
 
 
 logging.basicConfig()
-logger = logging.root
+logger = logging.getLogger('flowy')
 
 
 class MagicBind(object):
@@ -143,13 +143,3 @@ class MagicBind(object):
             return func(*actual_args, **actual_kwargs)
         setattr(self, name, wrapper)
         return wrapper
-
-
-def posint_or_none(i):
-    if i is not None and int(i) > 0:
-        return int(i)
-
-
-def str_or_none(s):
-    if s is not None:
-        return str(s)
