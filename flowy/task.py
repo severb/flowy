@@ -254,12 +254,12 @@ class SWFWorkflow(Task):
             self._reserve_call_ids(initial_call_id, delay, retry)
 
     def _search_timer(self):
-        if self._call_id not in self._results:
-            return _NOTFOUND, None
-        self._call_id += 1
+        if self._call_id in self._results:
+            self._call_id += 1
+            return _FOUND, None
         if self._call_id in self._running:
             return _RUNNING, None
-        return _FOUND, None
+        return _NOTFOUND, None
 
     def _schedule_timer(self, delay):
         if self._max_schedule > 0:
@@ -270,6 +270,7 @@ class SWFWorkflow(Task):
             self._max_schedule -= 1
 
     def _search_result(self, retry):
+        # update self._call_id automatically
         for self._call_id in range(self._call_id, self._call_id + retry + 1):
             if self._call_id in self._timedout:
                 continue
