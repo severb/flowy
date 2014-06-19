@@ -119,7 +119,7 @@ class TestWorkflowScheduling(TestCase):
             (self.RUNNING, None)
         )
         self.assert_scheduled(
-            ('TIMER', 10, 0), # 0 for timer, 1 for activity
+            ('TIMER', 10, 0),  # 0 for timer, 1 for activity
             ('TIMER', 20, 2),
             ('ACTIVITY', 'a2', 4, 'in3'),
         )
@@ -135,7 +135,7 @@ class TestWorkflowScheduling(TestCase):
             (self.RUNNING, None)
         )
         self.assert_scheduled(
-            ('ACTIVITY', 'a1', 0, 'in1'), # 1 for activity + 5 retries
+            ('ACTIVITY', 'a1', 0, 'in1'),  # 1 for activity + 5 retries
             ('WORKFLOW', 'w1', 6, 'in2'),
             ('ACTIVITY', 'a2', 10, 'in3'),
         )
@@ -151,7 +151,7 @@ class TestWorkflowScheduling(TestCase):
             (self.RUNNING, None)
         )
         self.assert_scheduled(
-            ('TIMER', 10, 0), # 1 for timer, 1 for activity + 5 retries
+            ('TIMER', 10, 0),  # 1 for timer, 1 for activity + 5 retries
             ('TIMER', 20, 7),
             ('ACTIVITY', 'a2', 12, 'in3'),
         )
@@ -165,7 +165,7 @@ class TestWorkflowScheduling(TestCase):
             (self.RUNNING, None),
         )
         self.assert_scheduled(
-            ('ACTIVITY', 'a1', 1, 'in1'), # 0 was the timer
+            ('ACTIVITY', 'a1', 1, 'in1'),  # 0 was the timer
         )
 
     def test_skip_timer_and_wait(self):
@@ -200,7 +200,6 @@ class TestWorkflowScheduling(TestCase):
         )
         self.assert_scheduled()
 
-
     # TIMEOUT
 
     def test_skip_timeouts_and_reschedule(self):
@@ -210,7 +209,7 @@ class TestWorkflowScheduling(TestCase):
             (self.RUNNING, None),
         )
         self.assert_scheduled(
-            ('ACTIVITY', 'a1', 3, 'in1'), # 0 was the timer
+            ('ACTIVITY', 'a1', 3, 'in1'),  # 0 was the timer
         )
 
     def test_skip_timeouts_and_wait(self):
@@ -254,7 +253,7 @@ class TestWorkflowScheduling(TestCase):
             (self.RUNNING, None),
         )
         self.assert_scheduled(
-            ('ACTIVITY', 'a1', 4, 'in1'), # 0 was the timer
+            ('ACTIVITY', 'a1', 4, 'in1'),  # 0 was the timer
         )
 
     def test_skip_timer_and_timeouts_and_wait(self):
@@ -266,7 +265,7 @@ class TestWorkflowScheduling(TestCase):
         self.assert_scheduled()
 
     def test_skip_timer_and_timeouts_and_result(self):
-        self.set_state(timedout=[1, 2, 3], results={0:None, 4: 40})
+        self.set_state(timedout=[1, 2, 3], results={0: None, 4: 40})
         self.schedule_activity(spec='a1', input='in1', retry=3, delay=10)
         self.assert_state(
             (self.FOUND, 40),
@@ -291,25 +290,7 @@ class TestWorkflowScheduling(TestCase):
         self.assert_scheduled()
 
 
-class TestSimpleWorkflow(TestCase):
-
-    def make_workflow(self):
-        from flowy.task import _SWFWorkflow
-        from flowy.proxy import SWFActivityProxy
-
-        class MyWorkflow(_SWFWorkflow):
-
-            a = SWFActivityProxy(name='a', version=1)
-            b = SWFActivityProxy(name='b', version=1, error_handling=True)
-            c = SWFActivityProxy(name='c', version=1, error_handling=True)
-
-            def run(self):
-                a = self.a('a_input')
-                b = self.b('b_input')
-                return self.c(a, b)
-
-        return MyWorkflow
-
+class TestWorkflowBase(TestCase):
     def set_state(self, running=[], timedout=[], results={}, errors={}):
         self.scheduler = DummyScheduler()
         self.Workflow = self.make_workflow()
@@ -320,6 +301,26 @@ class TestSimpleWorkflow(TestCase):
 
     def assert_scheduled(self, *state):
         return self.assertEquals(self.scheduler.state, list(state))
+
+
+class TestSimpleWorkflow(TestWorkflowBase):
+
+    def make_workflow(self):
+        from flowy.task import _SWFWorkflow
+        from flowy.proxy import SWFActivityProxy
+
+        class MyWorkflow(_SWFWorkflow):
+
+            a = SWFActivityProxy(name='a', version=1)
+            b = SWFActivityProxy(name='b', version=1)
+            c = SWFActivityProxy(name='c', version=1)
+
+            def run(self):
+                a = self.a('a_input')
+                b = self.b('b_input')
+                return self.c(a, b)
+
+        return MyWorkflow
 
     def test_initial_run(self):
         self.set_state()
@@ -355,10 +356,9 @@ class TestSimpleWorkflow(TestCase):
         )
 
     def test_error(self):
-        self.set_state(errors={0: 'err'})
+        self.set_state(errors={0: 'err'}, running=[4])
         self.assert_scheduled(
             ('FAIL', 'err'),
-            ('ACTIVITY', self.Workflow.b._spec, 4, '[["b_input"], {}]'),
             'FLUSH'
         )
 
@@ -368,8 +368,58 @@ class TestSimpleWorkflow(TestCase):
             ('FAIL', 'err'),
         )
 
-    def test_error_bubbles(self):
-        self.set_state(results={0: '1'}, errors={4: 'err'})
+
+class TestErrorBubblingWorkflow(TestWorkflowBase):
+
+    def make_workflow(self):
+        from flowy.task import _SWFWorkflow
+        from flowy.proxy import SWFActivityProxy
+        from flowy.exception import TaskError
+
+        class MyWorkflow(_SWFWorkflow):
+
+            a = SWFActivityProxy(name='a', version=1, error_handling=True)
+            b = SWFActivityProxy(name='b', version=1, error_handling=True)
+            c = SWFActivityProxy(name='c', version=1, error_handling=True)
+
+            def run(self):
+                a = self.a('a_input')
+                self.b(a)
+                try:
+                    a.result()
+                except TaskError:
+                    return self.c(a)
+                return 100
+
+        return MyWorkflow
+
+    def test_error_bubbling(self):
+        self.set_state(errors={0: 'err'})
+        self.assert_scheduled(
+            ('FAIL', 'err'),
+        )
+
+    def test_error_silent(self):
+        self.set_state(results={0: '0'}, errors={4: 'err'})
+        self.assert_scheduled(
+            ('COMPLETE', '100'),
+        )
+
+
+class TestExceptionInWorkflow(TestWorkflowBase):
+
+    def make_workflow(self):
+        from flowy.task import _SWFWorkflow
+
+        class MyWorkflow(_SWFWorkflow):
+
+            def run(self):
+                raise ValueError('err')
+
+        return MyWorkflow
+
+    def test_error_bubbling(self):
+        self.set_state()
         self.assert_scheduled(
             ('FAIL', 'err'),
         )
