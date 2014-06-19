@@ -185,12 +185,7 @@ class _SWFWorkflow(Task):
             try:
                 result.result()
             except TaskError as e:
-                return self.fail(e)
-        # No need to cover this case - if it's a placeholder it must be
-        # because something is running or is scheduled and the next condition
-        # won't pass anyway
-        # elif isinstance(result, Placeholder):
-        #     return self._suspend()
+                return self._scheduler.fail(e)
         if not self._scheduler.has_scheduled() and not self._has_running():
             try:
                 r = self._serialize_result(r)
