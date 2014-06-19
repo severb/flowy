@@ -1,100 +1,96 @@
 import sys
 
 import venusian
+from .spec import SWFActivitySpec, SWFWorkflowSpec
 
 
-def activity(task_id, task_list,
-             heartbeat=None,
-             schedule_to_close=420,
-             schedule_to_start=120,
-             start_to_close=300):
+def swf_activity(version, task_list=None, heartbeat=None,
+                 schedule_to_close=420, schedule_to_start=120,
+                 start_to_close=300, name=None):
 
-    task_list = str(task_list)
-    schedule_to_close = int(schedule_to_close)
-    if schedule_to_close <= 0:
-        raise ValueError('schedule_to_close must be positive')
-    schedule_to_start = int(schedule_to_start)
-    if schedule_to_start <= 0:
-        raise ValueError('schedule_to_start must be positive')
-    start_to_close = int(start_to_close)
-    if start_to_close <= 0:
-        raise ValueError('start_to_close must be positive')
-    if heartbeat is None:
-        heartbeat = start_to_close
-    heartbeat = int(heartbeat)
-    if heartbeat <= 0:
-        raise ValueError('heartbeat must be positive')
-
-    def wrapper(task_factory):
-        def callback(scanner, n, obj):
-            scanner.collector.collect(
-                task_id=task_id,
-                task_factory=task_factory,
-                task_list=task_list,
-                heartbeat=heartbeat,
-                schedule_to_close=schedule_to_close,
-                schedule_to_start=schedule_to_start,
-                start_to_close=start_to_close,
-            )
-        venusian.attach(task_factory, callback, category='activity')
-        return task_factory
+    def wrapper(activity_factory):
+        def callback(scanner, f_name, ob):
+            if name is not None:
+                f_name = name
+            activity_spec = SWFActivitySpec(
+                f_name, version, task_list, heartbeat, schedule_to_close,
+                schedule_to_start, start_to_close)
+            scanner.registry.add(activity_spec, activity_factory)
+        venusian.attach(activity_factory, callback, category='activity')
+        return activity_factory
     return wrapper
 
 
-def workflow(task_id, task_list,
-             workflow_duration=3600,
-             decision_duration=60):
+def swf_workflow(version, task_list=None, workflow_duration=3600,
+                 decision_duration=60, name=None):
 
-    task_list = str(task_list)
-    workflow_duration = int(workflow_duration)
-    if workflow_duration <= 0:
-        raise ValueError('workflow_duration must be positive')
-    decision_duration = int(decision_duration)
-    if decision_duration <= 0:
-        raise ValueError('decision_duration must be positive')
-
-    def wrapper(task_factory):
-        def callback(scanner, n, obj):
-            scanner.collector.collect(
-                task_id=task_id,
-                task_factory=task_factory,
-                task_list=task_list,
-                workflow_duration=workflow_duration,
-                decision_duration=decision_duration
-            )
-        venusian.attach(task_factory, callback, category='workflow')
-        return task_factory
+    def wrapper(workflow_factory):
+        def callback(scanner, f_name, ob):
+            if name is not None:
+                f_name = name
+            workflow_spec = SWFWorkflowSpec(
+                f_name, version, task_list, decision_duration,
+                workflow_duration)
+            scanner.registry.add(workflow_spec, workflow_factory)
+        venusian.attach(workflow_factory, callback, category='workflow')
+        return workflow_factory
     return wrapper
+
+
+class TaskRegistry(object):
+    def __init__(self):
+        self._registry = {}
+
+    def add(self, spec, factory):
+        self._registry[spec] = factory
+
+    def __call__(self, spec, *args, **kwargs):
+        try:
+            fact = self._registry[spec]
+        except KeyError:
+            return lambda: None
+        return fact(*args, **kwargs)
+
+
+class SWFTaskRegistry(TaskRegistry):
+    def register_remote(self, swf_client):
+        unregistered = []
+        for spec in self._registry.keys():
+            if not spec.register_remote(swf_client):
+                unregistered.append(spec)
+        return unregistered
 
 
 class Scanner(object):
-    def __init__(self, collector):
-        self._collector = collector
+    def __init__(self, registry):
+        self._registry = registry
 
     def scan_activities(self, package=None, ignore=None, level=0):
-        self._scan(
-            categories=('activity',),
-            package=package,
-            ignore=ignore,
-            level=level
-        )
+        self._scan(categories=('activity',), package=package, ignore=ignore,
+                   level=level)
 
     def scan_workflows(self, package=None, ignore=None, level=0):
-        self._scan(
-            categories=('workflow',),
-            package=package,
-            ignore=ignore,
-            level=level
-        )
-
-    def register(self, poller=None):
-        self._collector.register(poller)
+        self._scan(categories=('workflow',), package=package, ignore=ignore,
+                   level=level)
 
     def _scan(self, categories=None, package=None, ignore=None, level=0):
-        scanner = venusian.Scanner(collector=self._collector)
+        scanner = venusian.Scanner(registry=self._registry)
         if package is None:
             package = caller_package(level=3 + level)
         scanner.scan(package, categories=categories, ignore=ignore)
+
+    def __call__(self, *args, **kwargs):
+        return self._registry(*args, **kwargs)
+
+
+class SWFScanner(Scanner):
+    def __init__(self, registry=None):
+        if registry is None:
+            registry = SWFTaskRegistry()
+        super(SWFScanner, self).__init__(registry)
+
+    def register_remote(self, swf_client):
+        return self._registry.register_remote(swf_client)
 
 
 # Stolen from Pyramid

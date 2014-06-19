@@ -1,13 +1,15 @@
-import os
-import unittest
 import json
-from boto.swf.layer1 import Layer1
-import workflows
-from flowy.swf.boilerplate import start_workflow_worker
-from itertools import cycle
+import os
+import pprint
 import random
-from mock import patch
 import string
+import unittest
+from itertools import cycle
+
+from boto.swf.layer1 import Layer1
+from flowy.boilerplate import start_workflow_worker
+from flowy.tests import workflows
+from mock import patch
 
 class MockLayer1(Layer1):
 
@@ -18,9 +20,11 @@ class MockLayer1(Layer1):
     def json_request(self, action, data, object_hook=None):
         self._normalize_request_dict(data)
         nxt_req = next(self.requests)
-        assert nxt_req[0] == action, ('Difference expected %s, got %s'
-                                      % (nxt_req[0], action))
-        assert nxt_req[1] == data
+        a, b = pprint.pformat(nxt_req[0]), pprint.pformat(action)
+        assert nxt_req[0] == action, ('Difference expected:\n%s\nBut got:\n%s'
+                                      % (a, b))
+        a, b = pprint.pformat(nxt_req[1]), pprint.pformat(data)
+        assert nxt_req[1] == data, 'Expected:\n%s\nBut got:\n%s' % (a, b)
         nxt_resp = next(self.responses)
         return nxt_resp
 

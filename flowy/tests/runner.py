@@ -2,7 +2,7 @@ import json
 import sys
 
 from boto.swf.layer1 import Layer1
-from flowy.swf.boilerplate import start_activity_worker, start_workflow_worker
+from flowy.boilerplate import start_activity_worker, start_workflow_worker
 
 from mock import patch
 import string
