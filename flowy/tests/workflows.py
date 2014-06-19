@@ -178,3 +178,19 @@ class SubworkflowExample(Workflow):
 
     def run(self):
         return self.subwf()
+
+
+@workflow(77, 'example_list')
+class RestartWorkflowExample(Workflow):
+
+    def run(self, restarted=False):
+        if not restarted:
+            with self.options(decision_duration=10, tags=['a', 'b']):
+                self.restart(restarted=True)
+
+
+@workflow(77, 'example_list')
+class FailFastExample(Workflow):
+
+    def run(self):
+        self.fail('fail fast')
