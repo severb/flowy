@@ -33,15 +33,3 @@ class TestWorkflowScheduling(TestCase):
             id = int(s['scheduleActivityTaskDecisionAttributes']['activityId'])
             scheduled_ids.append(id)
         self.assertEquals(list(ids), scheduled_ids)
-
-    def test_simple_schedule(self):
-        self.prepare(running=[], timedout=[], results={}, errors={})
-        self.schedule_activity(retry=0, delay=0)
-        self.schedule_activity(retry=0, delay=0)
-        self.schedule_activity(retry=0, delay=0)
-        self.assert_states(
-            (self._RUNNING, None),
-            (self._RUNNING, None),
-            (self._RUNNING, None)
-        )
-        self.assert_scheduled(0, 1, 2)

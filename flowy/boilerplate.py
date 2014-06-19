@@ -5,6 +5,7 @@ from flowy import logger, MagicBind
 from flowy.scanner import SWFScanner
 from flowy.poller import SWFWorkflowPoller
 from flowy.worker import SingleThreadedWorker
+from flowy.task import SWFWorkflow, SWFScheduler
 
 
 def start_activity_worker(domain, task_list,

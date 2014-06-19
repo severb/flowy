@@ -134,7 +134,7 @@ def _activity_finish(swf_client, token, result):
     return True
 
 
-class SWFWorkflow(Task):
+class _SWFWorkflow(Task):
 
     _TIMEDOUT, _RUNNING, _ERROR, _FOUND, _NOTFOUND = range(5)
 
@@ -149,7 +149,7 @@ class SWFWorkflow(Task):
         self._tags = tags
         self._call_id = 0
         self._closed = False
-        super(SWFWorkflow, self).__init__(input, token)
+        super(_SWFWorkflow, self).__init__(input, token)
 
     @contextmanager
     def options(self, task_list=_sentinel, decision_duration=_sentinel,
@@ -218,10 +218,10 @@ class SWFWorkflow(Task):
                     return state, None
             state, value = self._search_result(retry)
             if state == self._NOTFOUND:
-                if is_act:
-                    self._scheduler.schedule_activity(spec, input)
-                else:
-                    self._scheduler.schedule_workflow(spec, input)
+                sched = self._scheduler.schedule_activity
+                if not is_act:
+                    sched = self._scheduler.schedule_workflow
+                sched(spec, self._call_id, input)
                 return self._RUNNING, None
             return state, value
         finally:
@@ -259,7 +259,7 @@ class SWFWorkflow(Task):
     _serialize_restart_arguments = serialize_args
 
 
-def SWFScheduler(object):
+class SWFScheduler(object):
     def __init__(self, swf_client, token, rate_limit=64):
         self._swf_client = swf_client
         self._token = token
@@ -296,20 +296,28 @@ def SWFScheduler(object):
         return self.flush()
 
     def schedule_timer(self, delay, call_id):
-        if len(self._decisions.data) < self._rate_limit:
+        if len(self._decisions._data) < self._rate_limit:
             self._decisions.start_timer(
                 start_to_fire_timeout=str(delay),
                 timer_id=str(call_id)
             )
 
     def schedule_activity(self, spec, call_id, input):
-        if len(self._decisions.data) < self._rate_limit:
+        if len(self._decisions._data) < self._rate_limit:
             spec.schedule(self._decisions, call_id, input)
 
     def schedule_workflow(self, spec, call_id, input):
-        if len(self._decisions.data) < self._rate_limit:
+        if len(self._decisions._data) < self._rate_limit:
             call_id = '%s-%s' % (uuid.uuid4(), call_id)
             spec.schedule(self._decisions, call_id, input)
 
-    def nothing_scheduled(self):
-        return len(self._decisions._data) == 0 and not self._closed
+    def has_scheduled(self):
+        return len(self._decisions._data) > 0 and not self._closed
+
+
+class SWFWorkflow(_SWFWorkflow):
+    def __init__(self, swf_client, input, token, running, timedout, results,
+                 errors, spec, tags):
+        s = SWFScheduler(swf_client, token, rate_limit=64 - len(running))
+        super(SWFWorkflow, self).__init__(s, input, token, running, timedout,
+                                          results, errors, spec, tags)
