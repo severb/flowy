@@ -147,8 +147,8 @@ class _SWFWorkflow(Task):
         self._errors = dict((int(k), v) for k, v in errors.items())
         self._spec = spec
         self._tags = tags
+        self._scheduled = False
         self._call_id = 0
-        self._closed = False
         super(_SWFWorkflow, self).__init__(input, token)
 
     @contextmanager
@@ -186,7 +186,7 @@ class _SWFWorkflow(Task):
                 result.result()
             except TaskError as e:
                 return self._scheduler.fail(e)
-        if not self._scheduler.has_scheduled() and not self._has_running():
+        if not self._scheduled and not self._running:
             try:
                 r = self._serialize_result(r)
             except TypeError:
@@ -194,9 +194,6 @@ class _SWFWorkflow(Task):
                 return False
             return self._scheduler.complete(r)
         return self._scheduler.flush()
-
-    def _has_running(self):
-        return bool(self._running)
 
     def schedule_activity(self, spec, input, retry, delay):
         return self._schedule(spec, input, retry, delay, True)
@@ -210,12 +207,14 @@ class _SWFWorkflow(Task):
             if delay:
                 state, _ = self._search_timer()
                 if state == self._NOTFOUND:
+                    self._scheduled = True
                     self._scheduler.schedule_timer(delay, self._call_id)
                     state = self._RUNNING
                 if not(state == self._FOUND):
                     return state, None
             state, value = self._search_result(retry)
             if state == self._NOTFOUND:
+                self._scheduled = True
                 sched = self._scheduler.schedule_activity
                 if not is_act:
                     sched = self._scheduler.schedule_workflow
@@ -257,6 +256,8 @@ class _SWFWorkflow(Task):
     _serialize_restart_arguments = serialize_args
 
 
+# It's important for the scheduler to ignore anything after the first flush
+# since the task doesn't promise calling it only once
 class SWFScheduler(object):
     def __init__(self, swf_client, token, rate_limit=64):
         self._swf_client = swf_client
@@ -308,9 +309,6 @@ class SWFScheduler(object):
         if len(self._decisions._data) < self._rate_limit:
             call_id = '%s-%s' % (uuid.uuid4(), call_id)
             spec.schedule(self._decisions, call_id, input)
-
-    def has_scheduled(self):
-        return len(self._decisions._data) > 0 and not self._closed
 
 
 class SWFWorkflow(_SWFWorkflow):
