@@ -174,6 +174,9 @@ class _SWFWorkflow(Task):
     def fail(self, reason):
         return self._scheduler.fail(reason)
 
+    def _suspend(self):
+        return self._scheduler.flush()
+
     def _finish(self, result):
         r = result
         if isinstance(result, Result):
@@ -212,7 +215,7 @@ class _SWFWorkflow(Task):
             if delay:
                 state, _ = self._search_timer()
                 if state == self._NOTFOUND:
-                    self._scheduler.schedule_timer(delay)
+                    self._scheduler.schedule_timer(delay, self._call_id)
                     state = self._RUNNING
                 if not(state == self._FOUND):
                     return state, None
@@ -268,9 +271,9 @@ class SWFScheduler(object):
         self._closed = False
 
     def flush(self):
-        if self.closed:
+        if self._closed:
             return False
-        self.closed = True
+        self._closed = True
         try:
             self._swf_client.respond_decision_task_completed(
                 task_token=self._token, decisions=self._decisions._data

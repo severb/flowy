@@ -182,6 +182,7 @@ class SWFWorkflowPoller(object):
         for _ in range(7):  # give up after a limited number of retries
             try:
                 swf_response = self._swf_client.poll_for_decision_task(
+                    task_list=self._task_list, next_page_token=page_token)
                 break
             except SWFResponseError:
                 logger.exception('Error while polling for decision page:')
