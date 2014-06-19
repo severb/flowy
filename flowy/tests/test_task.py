@@ -9,11 +9,11 @@ class DummyScheduler(object):
     def flush(self):
         self.state.append('FLUSH')
 
-    def restart(self):
-        self.state.append('RESTART')
+    def restart(self, spec, input, tags):
+        self.state.append('RESTART', spec, input, tags)
 
     def fail(self, reason):
-        self.state.append(('FAIL', reason))
+        self.state.append(('FAIL', str(reason)))
 
     def complete(self, result):
         self.state.append(('COMPLETE', result))
@@ -289,3 +289,87 @@ class TestWorkflowScheduling(TestCase):
             (self.TIMEDOUT, None),
         )
         self.assert_scheduled()
+
+
+class TestSimpleWorkflow(TestCase):
+
+    def make_workflow(self):
+        from flowy.task import _SWFWorkflow
+        from flowy.proxy import SWFActivityProxy
+
+        class MyWorkflow(_SWFWorkflow):
+
+            a = SWFActivityProxy(name='a', version=1)
+            b = SWFActivityProxy(name='b', version=1, error_handling=True)
+            c = SWFActivityProxy(name='c', version=1, error_handling=True)
+
+            def run(self):
+                a = self.a('a_input')
+                b = self.b('b_input')
+                return self.c(a, b)
+
+        return MyWorkflow
+
+    def set_state(self, running=[], timedout=[], results={}, errors={}):
+        self.scheduler = DummyScheduler()
+        self.Workflow = self.make_workflow()
+        self.workflow = self.Workflow(self.scheduler, '[[], {}]', 'token',
+                                      running, timedout, results, errors,
+                                      None, None)
+        self.workflow()
+
+    def assert_scheduled(self, *state):
+        return self.assertEquals(self.scheduler.state, list(state))
+
+    def test_initial_run(self):
+        self.set_state()
+        self.assert_scheduled(
+            ('ACTIVITY', self.Workflow.a._spec, 0, '[["a_input"], {}]'),
+            ('ACTIVITY', self.Workflow.b._spec, 4, '[["b_input"], {}]'),
+            'FLUSH'
+        )
+
+    def test_wait_for_b(self):
+        self.set_state(results={0: '1'}, running=[4])
+        self.assert_scheduled(
+            'FLUSH'
+        )
+
+    def test_schedule_c(self):
+        self.set_state(results={0: '1', 4: '2'})
+        self.assert_scheduled(
+            ('ACTIVITY', self.Workflow.c._spec, 8, '[[1, 2], {}]'),
+            'FLUSH'
+        )
+
+    def test_wait_for_c(self):
+        self.set_state(results={0: '1', 4: '2'}, running=[8])
+        self.assert_scheduled(
+            'FLUSH'
+        )
+
+    def test_finish(self):
+        self.set_state(results={0: '1', 4: '2', 8: '3'})
+        self.assert_scheduled(
+            ('COMPLETE', '3'),
+        )
+
+    def test_error(self):
+        self.set_state(errors={0: 'err'})
+        self.assert_scheduled(
+            ('FAIL', 'err'),
+            ('ACTIVITY', self.Workflow.b._spec, 4, '[["b_input"], {}]'),
+            'FLUSH'
+        )
+
+    def test_return_error(self):
+        self.set_state(results={0: '1', 4: '2'}, errors={8: 'err'})
+        self.assert_scheduled(
+            ('FAIL', 'err'),
+        )
+
+    def test_error_bubbles(self):
+        self.set_state(results={0: '1'}, errors={4: 'err'})
+        self.assert_scheduled(
+            ('FAIL', 'err'),
+        )
