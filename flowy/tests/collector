@@ -1,0 +1,33 @@
+#!/bin/bash
+
+
+mkdir -p logs
+
+waitall() {
+    for job in `jobs -p`
+    do
+        wait $job
+    done
+}
+
+
+for wf_name in \
+    SimpleReturnExample \
+    ActivityReturnExample \
+    SimpleDependencyExample \
+    SequenceExample \
+    MapReduceExample \
+    DelayActivityExample \
+    UnhandledErrorExample \
+    HandledErrorExample \
+    ErrorChainingExample \
+    ErrorResultPassedExample \
+    ErrorInWorkflowExample \
+    TimeoutExample \
+    SubworkflowExample
+do
+    echo $wf_name
+    /usr/bin/env python -m flowy.swf IntegrationTest $wf_name 77 &
+    /usr/bin/env python runner.py > logs/$wf_name.log &
+    waitall
+done
