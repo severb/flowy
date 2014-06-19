@@ -42,7 +42,6 @@ class TestRegistrationDecorators(unittest.TestCase):
         registry.reset_mock()
 
         uut.scan_workflows(package=flowy.tests.specs)
-        print 'aaa', registry.method_calls
 
         registry.add.assert_has_calls([
             call(SWFWorkflowSpec(
