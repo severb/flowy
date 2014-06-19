@@ -423,3 +423,42 @@ class TestExceptionInWorkflow(TestWorkflowBase):
         self.assert_scheduled(
             ('FAIL', 'err'),
         )
+
+
+class TestResultBlocksWorkflow(TestWorkflowBase):
+
+    def make_workflow(self):
+        from flowy.task import _SWFWorkflow
+        from flowy.proxy import SWFActivityProxy
+
+        class MyWorkflow(_SWFWorkflow):
+
+            a = SWFActivityProxy(name='a', version=1)
+            b = SWFActivityProxy(name='b', version=1)
+
+            def run(self):
+                a = self.a('a_input')
+                a.result()
+                self.b('b_input')
+
+        return MyWorkflow
+
+    def test_a_blocks_when_scheduled(self):
+        self.set_state()
+        self.assert_scheduled(
+            ('ACTIVITY', self.Workflow.a._spec, 0, '[["a_input"], {}]'),
+            'FLUSH'
+        )
+
+    def test_a_blocks_when_running(self):
+        self.set_state(running=[0])
+        self.assert_scheduled(
+            'FLUSH'
+        )
+
+    def test_a_doesnt_block_when_finished(self):
+        self.set_state(results={0: '0'})
+        self.assert_scheduled(
+            ('ACTIVITY', self.Workflow.b._spec, 4, '[["b_input"], {}]'),
+            'FLUSH'
+        )
