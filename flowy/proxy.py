@@ -34,7 +34,7 @@ class TaskProxy(object):
         if retry is not _sentinel:
             self._retry = retry
         if delay is not _sentinel:
-            self._delay = self._delay
+            self._delay = delay
         if error_handling is not _sentinel:
             self._error_handling = error_handling
         yield
