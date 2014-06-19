@@ -2,11 +2,10 @@ from boto.swf.exceptions import SWFResponseError
 
 from flowy import logger
 from flowy.spec import SWFWorkflowSpec, SWFSpecKey
-from flowy.task import SWFActivity
 
 
 class SWFActivityPoller(object):
-    def __init__(self, swf_client, task_list, task_factory=SWFActivity):
+    def __init__(self, swf_client, task_list, task_factory):
         self._swf_client = swf_client
         self._task_list = task_list
         self._task_factory = task_factory

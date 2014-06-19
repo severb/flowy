@@ -138,19 +138,17 @@ class SWFWorkflow(Task):
 
     _TIMEDOUT, _RUNNING, _ERROR, _FOUND, _NOTFOUND = range(5)
 
-    def __init__(self, swf_client, input, token, running, timedout, results,
-                 errors, spec, tags, rate_limit=64):
-        self._swf_client = swf_client
-        self._tags = tags
-        self._spec = spec
+    def __init__(self, scheduler, input, token, running, timedout, results,
+                 errors, spec, tags):
+        self._scheduler = scheduler
         self._running = set(map(int, running))
         self._timedout = set(map(int, timedout))
         self._results = dict((int(k), v) for k, v in results.items())
         self._errors = dict((int(k), v) for k, v in errors.items())
-        self._max_schedule = max(0, (rate_limit - len(self._running)))
+        self._spec = spec
+        self._tags = tags
         self._call_id = 0
         self._closed = False
-        self._decisions = Layer1Decisions()
         super(SWFWorkflow, self).__init__(input, token)
 
     @contextmanager
@@ -170,27 +168,11 @@ class SWFWorkflow(Task):
         except TypeError:
             logger.exception('Error while serializing restart arguments:')
             return False
-        decisions = self._decisions = Layer1Decisions()
-        self._spec.restart(decisions, input, self._tags)
-        return self._suspend()
-
-    def _suspend(self):
-        if self._closed:
-            return False
-        self._closed = True
-        try:
-            self._swf_client.respond_decision_task_completed(
-                task_token=self.token, decisions=self._decisions._data
-            )
-            return True
-        except SWFResponseError:
-            logger.exception('Error while sending the decisions:')
-            return False
+        return self._scheduler.restart(self.token, self._spec, input,
+                                       self._tags)
 
     def fail(self, reason):
-        decisions = self._decisions = Layer1Decisions()
-        decisions.fail_workflow_execution(reason=str(reason)[:256])
-        return self._suspend()
+        return self._scheduler.fail(reason)
 
     def _finish(self, result):
         r = result
@@ -206,21 +188,17 @@ class SWFWorkflow(Task):
         # won't pass anyway
         # elif isinstance(result, Placeholder):
         #     return self._suspend()
-        if self._nothing_scheduled() and self._nothing_running():
+        if not self._scheduler.has_scheduled() and not self._has_running():
             try:
                 r = self._serialize_result(r)
             except TypeError:
                 logger.exception("Error while serializing the result:")
                 return False
-            decisions = self._decisions = Layer1Decisions()
-            decisions.complete_workflow_execution(result=r)
-        return self._suspend()
+            return self._scheduler.complete(r)
+        return self._scheduler.flush()
 
-    def _nothing_scheduled(self):
-        return not self._decisions._data
-
-    def _nothing_running(self):
-        return not self._running
+    def _has_running(self):
+        return bool(self._running)
 
     def schedule_activity(self, spec, input, retry, delay):
         return self._schedule(spec, input, retry, delay, True)
@@ -234,13 +212,16 @@ class SWFWorkflow(Task):
             if delay:
                 state, _ = self._search_timer()
                 if state == self._NOTFOUND:
-                    self._schedule_timer(delay)
+                    self._scheduler.schedule_timer(delay)
                     state = self._RUNNING
                 if not(state == self._FOUND):
                     return state, None
             state, value = self._search_result(retry)
             if state == self._NOTFOUND:
-                self._schedule_task(spec, input, is_act)
+                if is_act:
+                    self._scheduler.schedule_activity(spec, input)
+                else:
+                    self._scheduler.schedule_workflow(spec, input)
                 return self._RUNNING, None
             return state, value
         finally:
@@ -253,14 +234,6 @@ class SWFWorkflow(Task):
         if self._call_id in self._running:
             return self._RUNNING, None
         return self._NOTFOUND, None
-
-    def _schedule_timer(self, delay):
-        if self._max_schedule > 0:
-            self._decisions.start_timer(
-                start_to_fire_timeout=str(delay),
-                timer_id=str(self._call_id)
-            )
-            self._max_schedule -= 1
 
     def _search_result(self, retry):
         # update self._call_id automatically
@@ -276,14 +249,6 @@ class SWFWorkflow(Task):
             return self._NOTFOUND, None
         return self._TIMEDOUT, None
 
-    def _schedule_task(self, spec, input, is_act):
-        if self._max_schedule > 0:
-            call_id = self._call_id
-            if not is_act:
-                call_id = '%s-%s' % (uuid.uuid4(), self._call_id)
-            spec.schedule(self._decisions, call_id, input)
-            self._max_schedule -= 1
-
     def _reserve_call_ids(self, call_id, delay, retry):
         self._call_id = (
             1 + call_id         # one for the first call
@@ -292,3 +257,59 @@ class SWFWorkflow(Task):
         )
 
     _serialize_restart_arguments = serialize_args
+
+
+def SWFScheduler(object):
+    def __init__(self, swf_client, token, rate_limit=64):
+        self._swf_client = swf_client
+        self._token = token
+        self._rate_limit = rate_limit
+        self._decisions = Layer1Decisions()
+        self._closed = False
+
+    def flush(self):
+        if self.closed:
+            return False
+        self.closed = True
+        try:
+            self._swf_client.respond_decision_task_completed(
+                task_token=self._token, decisions=self._decisions._data
+            )
+        except SWFResponseError:
+            logger.exception('Error while sending the decisions:')
+            return False
+        return True
+
+    def restart(self, spec, input, tags):
+        decisions = self._decisions = Layer1Decisions()
+        spec.restart(decisions, input, tags)
+        return self.flush()
+
+    def fail(self, reason):
+        decisions = self._decisions = Layer1Decisions()
+        decisions.fail_workflow_execution(reason=str(reason)[:256])
+        return self.flush()
+
+    def complete(self, result):
+        decisions = self._decisions = Layer1Decisions()
+        decisions.complete_workflow_execution(result)
+        return self.flush()
+
+    def schedule_timer(self, delay, call_id):
+        if len(self._decisions.data) < self._rate_limit:
+            self._decisions.start_timer(
+                start_to_fire_timeout=str(delay),
+                timer_id=str(call_id)
+            )
+
+    def schedule_activity(self, spec, call_id, input):
+        if len(self._decisions.data) < self._rate_limit:
+            spec.schedule(self._decisions, call_id, input)
+
+    def schedule_workflow(self, spec, call_id, input):
+        if len(self._decisions.data) < self._rate_limit:
+            call_id = '%s-%s' % (uuid.uuid4(), call_id)
+            spec.schedule(self._decisions, call_id, input)
+
+    def nothing_scheduled(self):
+        return len(self._decisions._data) == 0 and not self._closed
