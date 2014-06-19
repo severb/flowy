@@ -170,7 +170,7 @@ class TestWorkflowScheduling(TestCase):
 
     def test_skip_timer_and_wait(self):
         self.set_state(results={0: None}, running=[1])
-        self.schedule_activity(spec='a1', input='in1', retry=2, delay=10)
+        self.schedule_activity(spec='a1', input='in1', retry=0, delay=10)
         self.assert_state(
             (self.RUNNING, None),
         )
@@ -178,7 +178,7 @@ class TestWorkflowScheduling(TestCase):
 
     def test_skip_timer_and_result(self):
         self.set_state(results={0: None, 1: 10})
-        self.schedule_activity(spec='a1', input='in1', retry=2, delay=10)
+        self.schedule_activity(spec='a1', input='in1', retry=0, delay=10)
         self.assert_state(
             (self.FOUND, 10),
         )
@@ -186,15 +186,15 @@ class TestWorkflowScheduling(TestCase):
 
     def test_skip_timer_and_error(self):
         self.set_state(results={0: None}, errors={1: 'err'})
-        self.schedule_activity(spec='a1', input='in1', retry=2, delay=10)
+        self.schedule_activity(spec='a1', input='in1', retry=0, delay=10)
         self.assert_state(
             (self.ERROR, 'err'),
         )
         self.assert_scheduled()
 
     def test_skip_timer_and_timeout(self):
-        self.set_state(results={0: None}, timedout=[1, 2, 3])
-        self.schedule_activity(spec='a1', input='in1', retry=2, delay=10)
+        self.set_state(results={0: None}, timedout=[1])
+        self.schedule_activity(spec='a1', input='in1', retry=0, delay=10)
         self.assert_state(
             (self.TIMEDOUT, None),
         )
@@ -240,6 +240,51 @@ class TestWorkflowScheduling(TestCase):
     def test_skip_timeouts_and_timeout(self):
         self.set_state(timedout=[0, 1, 2, 3])
         self.schedule_activity(spec='a1', input='in1', retry=3, delay=0)
+        self.assert_state(
+            (self.TIMEDOUT, None),
+        )
+        self.assert_scheduled()
+
+    # TIMER and TIMEOUT
+
+    def test_skip_timer_and_timeouts_and_reschedule(self):
+        self.set_state(results={0: None}, timedout=[1, 2, 3])
+        self.schedule_activity(spec='a1', input='in1', retry=3, delay=10)
+        self.assert_state(
+            (self.RUNNING, None),
+        )
+        self.assert_scheduled(
+            ('ACTIVITY', 'a1', 4, 'in1'), # 0 was the timer
+        )
+
+    def test_skip_timer_and_timeouts_and_wait(self):
+        self.set_state(results={0: None}, timedout=[1, 2, 3], running=[4])
+        self.schedule_activity(spec='a1', input='in1', retry=3, delay=10)
+        self.assert_state(
+            (self.RUNNING, None),
+        )
+        self.assert_scheduled()
+
+    def test_skip_timer_and_timeouts_and_result(self):
+        self.set_state(timedout=[1, 2, 3], results={0:None, 4: 40})
+        self.schedule_activity(spec='a1', input='in1', retry=3, delay=10)
+        self.assert_state(
+            (self.FOUND, 40),
+        )
+        self.assert_scheduled()
+
+    def test_skip_timer_and_timeouts_and_error(self):
+        self.set_state(results={0: None}, timedout=[1, 2, 3],
+                       errors={4: 'err'})
+        self.schedule_activity(spec='a1', input='in1', retry=3, delay=10)
+        self.assert_state(
+            (self.ERROR, 'err'),
+        )
+        self.assert_scheduled()
+
+    def test_skip_timer_and_timeouts_and_timeout(self):
+        self.set_state(results={0: None}, timedout=[1, 2, 3, 4])
+        self.schedule_activity(spec='a1', input='in1', retry=3, delay=10)
         self.assert_state(
             (self.TIMEDOUT, None),
         )
