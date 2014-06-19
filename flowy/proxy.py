@@ -2,7 +2,7 @@ import json
 from contextlib import contextmanager
 
 from flowy import MagicBind
-from flowy.exception import TaskError, TaskTimedout
+from flowy.exception import TaskError
 from flowy.result import Error, Placeholder, Result, Timeout
 from flowy.spec import _sentinel, SWFActivitySpec, SWFWorkflowSpec
 from flowy.task import serialize_args
@@ -50,24 +50,21 @@ class TaskProxy(object):
         # there is no error handling for argument/result transport
         # we want those to bubble up in the workflow and stop it
         input = self._serialize_arguments(*args, **kwargs)
-        try:
-            placeholder = Placeholder()
-            result = self._schedule(task, input, default=placeholder)
-            if result is placeholder:
-                return placeholder
-            return Result(self._deserialize_result(result))
-        except TaskTimedout:
+        state, value = self._schedule(task, input)
+        if state == task._FOUND:
+            return Result(self._deserialize_result(value))
+        elif state == task._RUNNING:
+            return Placeholder()
+        elif state == task._ERROR:
+            if self._error_handling:
+                return Error(value)
+            task.fail(value)
+            return Placeholder()
+        elif state == task._TIMEDOUT:
             if self._error_handling:
                 return Timeout()
-            else:
-                task.fail(self.timeout_message)
-                return Placeholder()
-        except TaskError as e:
-            if self._error_handling:
-                return Error(str(e))
-            else:
-                task.fail(str(e))
-                return Placeholder()
+            task.fail(self.timeout_message)
+            return Placeholder()
 
     def _args_based_result(self, task, args, kwargs):
         args = tuple(args) + tuple(kwargs.values())
@@ -126,9 +123,9 @@ class SWFActivityProxy(TaskProxy):
                                                        error_handling):
                 yield
 
-    def _schedule(self, task, input, default=None):
+    def _schedule(self, task, input):
         return task.schedule_activity(self._spec, input, self._retry,
-                                      self._delay, default=default)
+                                      self._delay)
 
 
 class SWFWorkflowProxy(TaskProxy):
@@ -150,6 +147,6 @@ class SWFWorkflowProxy(TaskProxy):
                                                        error_handling):
                 yield
 
-    def _schedule(self, task, input, default=None):
+    def _schedule(self, task, input):
         return task.schedule_workflow(self._spec, input, self._retry,
-                                      self._delay, default=default)
+                                      self._delay)

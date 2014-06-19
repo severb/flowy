@@ -5,15 +5,13 @@ from contextlib import contextmanager
 from boto.swf.exceptions import SWFResponseError
 from boto.swf.layer1_decisions import Layer1Decisions
 from flowy import logger
-from flowy.exception import SuspendTask, TaskError, TaskTimedout
+from flowy.exception import SuspendTask, TaskError
 from flowy.result import Error, Result, Timeout
 from flowy.spec import _sentinel
 
 
 serialize_result = staticmethod(json.dumps)
 deserialize_args = staticmethod(json.loads)
-
-_TIMEDOUT, _RUNNING, _ERROR, _FOUND, _NOTFOUND = range(5)
 
 
 @staticmethod
@@ -137,6 +135,9 @@ def _activity_finish(swf_client, token, result):
 
 
 class SWFWorkflow(Task):
+
+    _TIMEDOUT, _RUNNING, _ERROR, _FOUND, _NOTFOUND = range(5)
+
     def __init__(self, swf_client, input, token, running, timedout, results,
                  errors, spec, tags, rate_limit=64):
         self._swf_client = swf_client
@@ -221,45 +222,37 @@ class SWFWorkflow(Task):
     def _nothing_running(self):
         return not self._running
 
-    def schedule_activity(self, spec, input, retry, delay, default=None):
-        return self._schedule(spec, input, retry, delay, default, True)
+    def schedule_activity(self, spec, input, retry, delay):
+        return self._schedule(spec, input, retry, delay, True)
 
-    def schedule_workflow(self, spec, input, retry, delay, default=None):
-        return self._schedule(spec, input, retry, delay, default, False)
+    def schedule_workflow(self, spec, input, retry, delay):
+        return self._schedule(spec, input, retry, delay, False)
 
-    def _schedule(self, spec, input, retry, delay, default=None, is_act=True):
+    def _schedule(self, spec, input, retry, delay, is_act=True):
         initial_call_id = self._call_id
         try:
             if delay:
                 state, _ = self._search_timer()
-                if state == _NOTFOUND:
+                if state == self._NOTFOUND:
                     self._schedule_timer(delay)
-                    return default
-                if state == _RUNNING:
-                    return default
-                assert state == _FOUND
+                    state = self._RUNNING
+                if not(state == self._FOUND):
+                    return state, None
             state, value = self._search_result(retry)
-            if state == _RUNNING:
-                return default
-            if state == _ERROR:
-                raise TaskError(value)
-            if state == _FOUND:
-                return value
-            if state == _NOTFOUND:
+            if state == self._NOTFOUND:
                 self._schedule_task(spec, input, is_act)
-                return default
-            if state == _TIMEDOUT:
-                raise TaskTimedout()
+                return self._RUNNING, None
+            return state, value
         finally:
             self._reserve_call_ids(initial_call_id, delay, retry)
 
     def _search_timer(self):
         if self._call_id in self._results:
             self._call_id += 1
-            return _FOUND, None
+            return self._FOUND, None
         if self._call_id in self._running:
-            return _RUNNING, None
-        return _NOTFOUND, None
+            return self._RUNNING, None
+        return self._NOTFOUND, None
 
     def _schedule_timer(self, delay):
         if self._max_schedule > 0:
@@ -275,13 +268,13 @@ class SWFWorkflow(Task):
             if self._call_id in self._timedout:
                 continue
             if self._call_id in self._running:
-                return _RUNNING, None
+                return self._RUNNING, None
             if self._call_id in self._errors:
-                return _ERROR, self._errors[self._call_id]
+                return self._ERROR, self._errors[self._call_id]
             if self._call_id in self._results:
-                return _FOUND, self._results[self._call_id]
-            return _NOTFOUND, None
-        return _TIMEDOUT, None
+                return self._FOUND, self._results[self._call_id]
+            return self._NOTFOUND, None
+        return self._TIMEDOUT, None
 
     def _schedule_task(self, spec, input, is_act):
         if self._max_schedule > 0:
