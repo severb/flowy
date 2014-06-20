@@ -22,7 +22,6 @@ def start_activity_worker(domain, task_list,
     scanner.scan_activities(package=package, ignore=ignore, level=1)
     poller = SWFActivityPoller(swf_client, task_list, scanner)
     worker = SingleThreadedWorker(poller)
-    not_registered = scanner.register(worker)
     if reg_remote:
         not_registered = scanner.register_remote(swf_client)
         if not_registered:

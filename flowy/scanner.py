@@ -5,8 +5,8 @@ from .spec import SWFActivitySpec, SWFWorkflowSpec
 
 
 def swf_activity(version, task_list=None, heartbeat=None,
-                 schedule_to_close=420, schedule_to_start=120,
-                 start_to_close=300, name=None):
+                 schedule_to_close=None, schedule_to_start=None,
+                 start_to_close=None, name=None):
 
     def wrapper(activity_factory):
         def callback(scanner, f_name, ob):
@@ -21,8 +21,8 @@ def swf_activity(version, task_list=None, heartbeat=None,
     return wrapper
 
 
-def swf_workflow(version, task_list=None, workflow_duration=3600,
-                 decision_duration=60, name=None):
+def swf_workflow(version, task_list=None, workflow_duration=None,
+                 decision_duration=None, name=None):
 
     def wrapper(workflow_factory):
         def callback(scanner, f_name, ob):

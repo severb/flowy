@@ -9,30 +9,30 @@ ActivityProxy, WorkflowProxy = SWFActivityProxy, SWFWorkflowProxy
 workflow = swf_workflow
 
 
-@workflow(77, 'example_list', name='SimpleReturnExample')
+@workflow(79, 'example_list', name='SimpleReturnExample')
 class Simple(Workflow):
     """ Does nothing, just returns the argument it receives. """
     def run(self, value='hello'):
         return value
 
 
-@workflow(77, 'example_list')
+@workflow(79, 'example_list')
 class ActivityReturnExample(Workflow):
     """ Returns the value of the activity. """
 
-    identity = ActivityProxy('Identity', 77)
+    identity = ActivityProxy('Identity', 79)
 
     def run(self):
         return self.identity('activity return')
 
 
-@workflow(77, 'example_list')
+@workflow(79, 'example_list')
 class SimpleDependencyExample(Workflow):
     """ Some tasks that depend on other task results. """
 
-    identity = ActivityProxy('Identity', 77)
-    double = ActivityProxy('Double', 77)
-    sum = ActivityProxy('Sum', 77)
+    identity = ActivityProxy('Identity', 79)
+    double = ActivityProxy('Double', 79)
+    sum = ActivityProxy('Sum', 79)
 
     def run(self):
         a = self.identity(10)
@@ -42,11 +42,11 @@ class SimpleDependencyExample(Workflow):
         return self.sum(a, b, c, d).result()
 
 
-@workflow(77, 'example_list')
+@workflow(79, 'example_list')
 class SequenceExample(Workflow):
     """ A sequential set of operations. """
 
-    double = ActivityProxy('Double', 77)
+    double = ActivityProxy('Double', 79)
 
     def run(self, n=5):
         n = int(n)  # when starting a workflow from cmdline this is a string
@@ -56,12 +56,12 @@ class SequenceExample(Workflow):
         return double.result() - 100
 
 
-@workflow(77, 'example_list')
+@workflow(79, 'example_list')
 class MapReduceExample(Workflow):
     """ A toy map reduce example. """
 
-    square = ActivityProxy('Square', 77)
-    sum = ActivityProxy('Sum', 77)
+    square = ActivityProxy('Square', 79)
+    sum = ActivityProxy('Sum', 79)
 
     def run(self, n=5):
         n = int(n)
@@ -69,12 +69,12 @@ class MapReduceExample(Workflow):
         return self.sum(*squares)
 
 
-@workflow(77, 'example_list')
+@workflow(79, 'example_list')
 class DelayActivityExample(Workflow):
     """ Call tasks with different delays. """
 
-    identity = ActivityProxy('Identity', 77)
-    delayed_identity = ActivityProxy('Identity', 77, delay=5)
+    identity = ActivityProxy('Identity', 79)
+    delayed_identity = ActivityProxy('Identity', 79, delay=5)
 
     def run(self):
         self.identity('no delay')
@@ -83,22 +83,22 @@ class DelayActivityExample(Workflow):
             self.identity('10 dealy')
 
 
-@workflow(77, 'example_list')
+@workflow(79, 'example_list')
 class UnhandledErrorExample(Workflow):
     """ When a task has an error the workflow will immediately fail. """
 
-    error = ActivityProxy('Error', 77)
+    error = ActivityProxy('Error', 79)
 
     def run(self):
         self.error('I errd!')
 
 
-@workflow(77, 'example_list')
+@workflow(79, 'example_list')
 class HandledErrorExample(Workflow):
     """ A failed task can be intercepted and handled correctly. """
 
-    error = ActivityProxy('Error', 77)
-    handled_error = ActivityProxy('Error', 77, error_handling=True)
+    error = ActivityProxy('Error', 79)
+    handled_error = ActivityProxy('Error', 79, error_handling=True)
 
     def run(self):
         with self.error.options(error_handling=True):
@@ -114,15 +114,15 @@ class HandledErrorExample(Workflow):
             pass
 
 
-@workflow(77, 'example_list')
+@workflow(79, 'example_list')
 class ErrorChainingExample(Workflow):
     """
     Passing the result of a failed task into another task with error handling
     enabled will generate a new fail result.
 
     """
-    error = ActivityProxy('Error', 77)
-    identity = ActivityProxy('Identity', 77)
+    error = ActivityProxy('Error', 79)
+    identity = ActivityProxy('Identity', 79)
 
     def run(self):
         with self.error.options(error_handling=True):
@@ -136,15 +136,15 @@ class ErrorChainingExample(Workflow):
             pass
 
 
-@workflow(77, 'example_list')
+@workflow(79, 'example_list')
 class ErrorResultPassedExample(Workflow):
     """
     Passing the result of a failed task into another task with error handling
     disabled will immediately fail the entire workflow.
 
     """
-    error = ActivityProxy('Error', 77)
-    identity = ActivityProxy('Identity', 77)
+    error = ActivityProxy('Error', 79)
+    identity = ActivityProxy('Identity', 79)
 
     def run(self):
         with self.error.options(error_handling=True):
@@ -152,7 +152,7 @@ class ErrorResultPassedExample(Workflow):
         return self.identity(a).result()
 
 
-@workflow(77, 'example_list')
+@workflow(79, 'example_list')
 class ErrorInWorkflowExample(Workflow):
     """ An unhandled exception in the run method will stop the workflow. """
 
@@ -160,37 +160,21 @@ class ErrorInWorkflowExample(Workflow):
         raise ValueError('stop')
 
 
-@workflow(77, 'example_list')
+@workflow(79, 'example_list')
 class TimeoutExample(Workflow):
     """ A task that timesout will stop the workflow if it's unhandled. """
 
-    timeout = ActivityProxy('Timeout', 77)
+    timeout = ActivityProxy('Timeout', 79)
 
     def run(self):
         self.timeout()
 
 
-@workflow(77, 'example_list')
+@workflow(79, 'example_list')
 class SubworkflowExample(Workflow):
     """ Start a subworkflow. """
 
-    subwf = WorkflowProxy('SimpleReturnExample', 77)
+    subwf = WorkflowProxy('SimpleReturnExample', 79)
 
     def run(self):
         return self.subwf()
-
-
-@workflow(77, 'example_list')
-class RestartWorkflowExample(Workflow):
-
-    def run(self, restarted=False):
-        if not restarted:
-            with self.options(decision_duration=10, tags=['a', 'b']):
-                self.restart(restarted=True)
-
-
-@workflow(77, 'example_list')
-class FailFastExample(Workflow):
-
-    def run(self):
-        self.fail('fail fast')
