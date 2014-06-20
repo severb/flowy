@@ -30,7 +30,7 @@ class MockLayer1(Layer1):
 
 
 def make(file_name):
-    f = open(os.path.join(here, 'logs', file_name))
+    f = open(os.path.join(here, 'wlogs', file_name))
     responses = []
     requests = []
     for line in f:
@@ -63,6 +63,6 @@ class ExamplesTest(unittest.TestCase):
 
 here = os.path.dirname(__file__)
 
-for file_name in os.listdir(os.path.join(here, 'logs')):
+for file_name in os.listdir(os.path.join(here, 'wlogs')):
     test_name = 'test_' + file_name.rsplit('.', 1)[0]
     setattr(ExamplesTest, test_name, make(file_name))

@@ -38,7 +38,7 @@ if __name__ == '__main__':
         uuid.return_value = ''.join(random.choice(string.ascii_uppercase +
                                     string.digits) for x in range(10))
         if 'activity' in sys.argv:
-            from flowy.swf.tests import activities
+            from flowy.tests import activities
             start_activity_worker(
                 domain='IntegrationTest',
                 task_list='example_list',
@@ -47,7 +47,7 @@ if __name__ == '__main__':
                 reg_remote=reg_remote
             )
         else:
-            from flowy.swf.tests import workflows
+            from flowy.tests import workflows
             start_workflow_worker(
                 domain='IntegrationTest',
                 task_list='example_list',
