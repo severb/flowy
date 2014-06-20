@@ -1,6 +1,7 @@
 import uuid
 from collections import namedtuple
 from contextlib import contextmanager
+from functools import total_ordering
 
 from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
 from flowy import logger
@@ -14,6 +15,7 @@ def SWFSpecKey(name, version):
     return _SWFKeyTuple(str(name), str(version))
 
 
+@total_ordering  # make the registration deterministic
 class SWFActivitySpec(object):
     def __init__(self, name, version, task_list=None, heartbeat=None,
                  schedule_to_close=None, schedule_to_start=None,
@@ -116,6 +118,11 @@ class SWFActivitySpec(object):
             return self._key == other._key
         return self._key == other
 
+    def __lt__(self, other):
+        if isinstance(other, SWFActivitySpec):
+            return self._key < other._key
+        return self._key < other
+
     def __hash__(self):
         return hash(self._key)
 
@@ -136,6 +143,7 @@ class SWFActivitySpec(object):
                     self._schedule_to_start, self._start_to_close)
 
 
+@total_ordering
 class SWFWorkflowSpec(object):
     def __init__(self, name, version, task_list=None, decision_duration=None,
                  workflow_duration=None):
@@ -245,6 +253,11 @@ class SWFWorkflowSpec(object):
         if isinstance(other, SWFWorkflowSpec):
             return self._key == other._key
         return self._key == other
+
+    def __lt__(self, other):
+        if isinstance(other, SWFActivitySpec):
+            return self._key < other._key
+        return self._key < other
 
     def __hash__(self):
         return hash(self._key)

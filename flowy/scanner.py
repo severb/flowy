@@ -55,7 +55,8 @@ class TaskRegistry(object):
 class SWFTaskRegistry(TaskRegistry):
     def register_remote(self, swf_client):
         unregistered = []
-        for spec in self._registry.keys():
+        # sort it to be deterministic, helps on tests
+        for spec in sorted(self._registry.keys()):
             if not spec.register_remote(swf_client):
                 unregistered.append(spec)
         return unregistered
