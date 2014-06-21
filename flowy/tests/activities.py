@@ -4,8 +4,8 @@ from flowy.scanner import swf_activity as activity
 from flowy.task import SWFActivity as Activity
 
 
-@activity(77, 'example_list')
-class Identity(Activity):
+@activity(77, 'example_list', name='Identity')
+class IdentityActivity(Activity):
 
     def run(self, n):
         return n

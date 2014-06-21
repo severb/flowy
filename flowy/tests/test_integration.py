@@ -95,9 +95,8 @@ def run_workflow_registration(layer1, responses, requests):
 
 def run_activity_registration(layer1, responses, requests):
     from flowy.scanner import SWFScanner
-    from flowy.tests import activities
     scanner = SWFScanner()
-    scanner.scan_activities(package=activities)
+    scanner.scan_activities()  # let him firuge it out which package
     assert scanner.register_remote(layer1) == []
 
 
