@@ -64,10 +64,6 @@ def make(file_name, fut):
     return test
 
 
-class ExamplesTest(unittest.TestCase):
-    pass
-
-
 def run_workflow(layer1, responses, requests):
     from flowy.boilerplate import start_workflow_worker
     from flowy.tests import workflows
@@ -78,7 +74,23 @@ def run_workflow(layer1, responses, requests):
                           loop=len(requests) / 2)
 
 
+def run_activity(layer1, responses, requests):
+    from flowy.boilerplate import start_activity_worker
+    from flowy.tests import activities
+    start_activity_worker('IntegrationTest', 'example_list',
+                          layer1=layer1,
+                          reg_remote=False,
+                          package=activities,
+                          loop=len(requests) / 2)
+
+
 here = os.path.dirname(__file__)
+
+
+class ExamplesTest(unittest.TestCase):
+    test_mixed_activities = make(os.path.join(here, 'alogs/mixed.log'),
+                                 run_activity)
+
 
 for file_name in os.listdir(os.path.join(here, 'wlogs')):
     test_name = 'test_' + file_name.rsplit('.', 1)[0]

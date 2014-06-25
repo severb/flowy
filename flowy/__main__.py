@@ -1,4 +1,4 @@
-from flowy.swf.boilerplate import workflow_starter
+from flowy.boilerplate import workflow_starter
 import argparse
 
 parser = argparse.ArgumentParser()
@@ -15,4 +15,4 @@ args = parser.parse_args()
 wf = workflow_starter(args.domain, args.name, args.version, args.task_list,
                       args.decision_duration, args.workflow_duration)
 
-wf(*args.args)
+wf.start(*args.args)
