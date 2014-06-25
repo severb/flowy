@@ -10,7 +10,7 @@ from flowy.result import Error, Result, Timeout
 from flowy.spec import _sentinel
 
 
-logger = logging.getLogger('flowy')
+logger = logging.getLogger(__name__)
 
 
 serialize_result = staticmethod(json.dumps)

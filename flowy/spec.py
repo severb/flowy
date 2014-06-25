@@ -7,7 +7,7 @@ from functools import total_ordering
 from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
 
 
-logger = logging.getLogger('flowy')
+logger = logging.getLogger(__name__)
 
 
 _sentinel = object()

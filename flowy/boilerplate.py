@@ -1,6 +1,7 @@
 import sys
 import uuid
 import logging
+import logging.config
 
 from boto.swf.layer1 import Layer1
 from flowy.util import MagicBind
@@ -12,15 +13,13 @@ from flowy.task import AsyncSWFActivity
 from flowy.worker import SingleThreadedWorker
 
 
-logger = logging.getLogger('flowy')
+logger = logging.getLogger(__name__)
 
 
-def start_activity_worker(domain, task_list,
-                          layer1=None,
-                          reg_remote=True,
-                          loop=-1,
-                          package=None,
-                          ignore=None):
+def start_activity_worker(domain, task_list, layer1=None, reg_remote=True,
+                          loop=-1, package=None, ignore=None, setup_log=True):
+    if setup_log:
+        _setup_default_logger()
     swf_client = _get_client(layer1, domain)
     scanner = SWFScanner()
     scanner.scan_activities(package=package, ignore=ignore, level=1)
@@ -39,12 +38,10 @@ def start_activity_worker(domain, task_list,
         pass
 
 
-def start_workflow_worker(domain, task_list,
-                          layer1=None,
-                          reg_remote=True,
-                          loop=-1,
-                          package=None,
-                          ignore=None):
+def start_workflow_worker(domain, task_list, layer1=None, reg_remote=True,
+                          loop=-1, package=None, ignore=None, setup_log=True):
+    if setup_log:
+        _setup_default_logger()
     swf_client = _get_client(layer1, domain)
     scanner = SWFScanner()
     scanner.scan_workflows(package=package, ignore=ignore, level=1)
@@ -61,6 +58,28 @@ def start_workflow_worker(domain, task_list,
         worker.run_forever(loop)
     except KeyboardInterrupt:
         pass
+
+
+def _setup_default_logger():
+    logging.config.dictConfig({
+        'version': 1,
+        'disable_existing_loggers': False,
+        'formatters': {
+            'simple': {
+                'format': '%(levelname)s\t%(asctime)s\t%(name)s:\t%(message)s'
+            }},
+        'handlers': {
+            'console':{
+                'class':'logging.StreamHandler',
+                'formatter': 'simple'
+            }},
+        'loggers': {
+            'flowy': {
+                'handlers': ['console'],
+                'popagate': False,
+                'level': 'INFO',
+            }}
+    })
 
 
 def async_scheduler(domain, token, layer1=None):

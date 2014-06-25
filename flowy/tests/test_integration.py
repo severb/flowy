@@ -71,7 +71,8 @@ def run_workflow(layer1, responses, requests):
                           layer1=layer1,
                           reg_remote=False,
                           package=workflows,
-                          loop=len(requests) / 2)
+                          loop=len(requests) / 2,
+                          setup_log=False)
 
 
 def run_activity(layer1, responses, requests):
@@ -81,7 +82,8 @@ def run_activity(layer1, responses, requests):
                           layer1=layer1,
                           reg_remote=False,
                           package=activities,
-                          loop=len(requests) / 2)
+                          loop=len(requests) / 2,
+                          setup_log=False)
 
 
 here = os.path.dirname(__file__)

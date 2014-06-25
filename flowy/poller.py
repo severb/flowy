@@ -4,7 +4,7 @@ from boto.swf.exceptions import SWFResponseError
 from flowy.spec import SWFSpecKey, SWFWorkflowSpec
 
 
-logger = logging.getLogger('flowy')
+logger = logging.getLogger(__name__)
 
 
 class SWFActivityPoller(object):
