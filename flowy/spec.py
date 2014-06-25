@@ -1,10 +1,13 @@
+import logging
 import uuid
 from collections import namedtuple
 from contextlib import contextmanager
 from functools import total_ordering
 
 from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
-from flowy import logger
+
+
+logger = logging.getLogger('flowy')
 
 
 _sentinel = object()

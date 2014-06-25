@@ -1,14 +1,18 @@
 import sys
 import uuid
+import logging
 
 from boto.swf.layer1 import Layer1
-from flowy import logger, MagicBind
+from flowy.util import MagicBind
 from flowy.poller import SWFActivityPoller, SWFWorkflowPoller
 from flowy.proxy import serialize_args
 from flowy.scanner import SWFScanner
 from flowy.spec import _sentinel, SWFWorkflowSpec
 from flowy.task import AsyncSWFActivity
 from flowy.worker import SingleThreadedWorker
+
+
+logger = logging.getLogger('flowy')
 
 
 def start_activity_worker(domain, task_list,

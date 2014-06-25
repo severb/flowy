@@ -1,13 +1,16 @@
 import json
+import logging
 import uuid
 from contextlib import contextmanager
 
 from boto.swf.exceptions import SWFResponseError
 from boto.swf.layer1_decisions import Layer1Decisions
-from flowy import logger
 from flowy.exception import SuspendTask, TaskError
 from flowy.result import Error, Result, Timeout
 from flowy.spec import _sentinel
+
+
+logger = logging.getLogger('flowy')
 
 
 serialize_result = staticmethod(json.dumps)

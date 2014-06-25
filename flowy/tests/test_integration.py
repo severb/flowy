@@ -5,10 +5,10 @@ import random
 import string
 import unittest
 
-from boto.swf.layer1 import Layer1
 from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
+from boto.swf.layer1 import Layer1
+from flowy.util import MagicBind
 from mock import patch
-from flowy import MagicBind
 
 
 class MockLayer1(Layer1):

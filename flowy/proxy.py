@@ -1,11 +1,11 @@
 import json
 from contextlib import contextmanager
 
-from flowy import MagicBind
 from flowy.exception import TaskError
 from flowy.result import Error, Placeholder, Result, Timeout
 from flowy.spec import _sentinel, SWFActivitySpec, SWFWorkflowSpec
 from flowy.task import serialize_args
+from flowy.util import MagicBind
 
 
 deserialize_result = staticmethod(json.loads)
