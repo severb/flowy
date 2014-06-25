@@ -171,10 +171,11 @@ class _SWFWorkflow(Task):
         except TypeError:
             logger.exception('Error while serializing restart arguments:')
             return False
-        return self._scheduler.restart(self.token, self._spec, input,
-                                       self._tags)
+        self._scheduled = True
+        return self._scheduler.restart(self._spec, input, self._tags)
 
     def fail(self, reason):
+        self._scheduled = True
         return self._scheduler.fail(reason)
 
     def _suspend(self):
@@ -217,6 +218,7 @@ class _SWFWorkflow(Task):
                     return state, None
             state, value = self._search_result(retry)
             if state == self._NOTFOUND:
+                print 'setting scheduled to true'
                 self._scheduled = True
                 sched = self._scheduler.schedule_activity
                 if not is_act:

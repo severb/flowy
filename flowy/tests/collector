@@ -24,10 +24,12 @@ for wf_name in \
     ErrorResultPassedExample \
     ErrorInWorkflowExample \
     TimeoutExample \
-    SubworkflowExample
+    SubworkflowExample \
+    HBExample \
+    RestartExample
 do
     echo $wf_name
-    /usr/bin/env python -m flowy IntegrationTest $wf_name 77 &
+    /usr/bin/env python -m flowy --decision-duration=5 --workflow-duration=60 IntegrationTest $wf_name 77 &
     /usr/bin/env python runner.py > wlogs/$wf_name.log &
     waitall
 done

@@ -178,3 +178,21 @@ class SubworkflowExample(Workflow):
 
     def run(self):
         return self.subwf()
+
+
+@workflow(77, 'example_list')
+class HBExample(Workflow):
+
+    h = SWFActivityProxy('Heartbeat', 77)
+
+    def run(self):
+        return self.h()
+
+
+@workflow(77, 'example_list')
+class RestartExample(Workflow):
+    def run(self, restart=True):
+        if restart:
+            with self.options(decision_duration=100, workflow_duration=200,
+                              tags=['a', 'b']):
+                self.restart(False)

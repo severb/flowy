@@ -66,7 +66,7 @@ def _setup_default_logger():
         'disable_existing_loggers': False,
         'formatters': {
             'simple': {
-                'format': '%(levelname)s\t%(asctime)s\t%(name)s:\t%(message)s'
+                'format': '%(asctime)s %(levelname)s\t%(name)s: %(message)s'
             }},
         'handlers': {
             'console':{

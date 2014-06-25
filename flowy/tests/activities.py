@@ -44,3 +44,11 @@ class Timeout(Activity):
 
     def run(self):
         time.sleep(5)
+
+
+@activity(77, 'example_list')
+class Heartbeat(Activity):
+    def run(self, n):
+        self.heartbeat()
+        self.heartbeat()
+        return 'heartbeat'
