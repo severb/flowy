@@ -60,35 +60,15 @@ def start_workflow_worker(domain, task_list, layer1=None, reg_remote=True,
         pass
 
 
-def _setup_default_logger():
-    logging.config.dictConfig({
-        'version': 1,
-        'disable_existing_loggers': False,
-        'formatters': {
-            'simple': {
-                'format': '%(asctime)s %(levelname)s\t%(name)s: %(message)s'
-            }},
-        'handlers': {
-            'console':{
-                'class':'logging.StreamHandler',
-                'formatter': 'simple'
-            }},
-        'loggers': {
-            'flowy': {
-                'handlers': ['console'],
-                'popagate': False,
-                'level': 'INFO',
-            }}
-    })
-
-
 def async_scheduler(domain, token, layer1=None):
     return AsyncSWFActivity(_get_client(layer1, domain), token)
 
 
 def workflow_starter(domain, name, version, task_list=None,
                      decision_duration=None, workflow_duration=None,
-                     id=None, tags=None, layer1=None):
+                     id=None, tags=None, layer1=None, setup_log=True):
+    if setup_log:
+        _setup_default_logger()
     spec = SWFWorkflowSpec(name, version, task_list, decision_duration,
                            workflow_duration)
     client = _get_client(layer1, domain)
@@ -131,3 +111,25 @@ class SWFWorkflowStarter(object):
         return self._spec.start(self._client, id, input, self._tags)
 
     _serialize_arguments = serialize_args
+
+
+def _setup_default_logger():
+    logging.config.dictConfig({
+        'version': 1,
+        'disable_existing_loggers': False,
+        'formatters': {
+            'simple': {
+                'format': '%(asctime)s %(levelname)s\t%(name)s: %(message)s'
+            }},
+        'handlers': {
+            'console':{
+                'class':'logging.StreamHandler',
+                'formatter': 'simple'
+            }},
+        'loggers': {
+            'flowy': {
+                'handlers': ['console'],
+                'popagate': False,
+                'level': 'INFO',
+            }}
+    })

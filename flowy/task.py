@@ -218,7 +218,6 @@ class _SWFWorkflow(Task):
                     return state, None
             state, value = self._search_result(retry)
             if state == self._NOTFOUND:
-                print 'setting scheduled to true'
                 self._scheduled = True
                 sched = self._scheduler.schedule_activity
                 if not is_act:

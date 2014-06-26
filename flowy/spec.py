@@ -96,8 +96,6 @@ class SWFActivitySpec(object):
         return True
 
     def _check_if_compatible(self, swf_client):
-        heartbeat, schedule_to_close, schedule_to_start, start_to_close = (
-            self._timers_encode())
         try:
             a = swf_client.describe_activity_type(
                 activity_name=str(self._name),
@@ -105,8 +103,11 @@ class SWFActivitySpec(object):
         except SWFResponseError:
             logger.exception('Error while checking %r compatibility:' % self)
             return False
+        heartbeat, schedule_to_close, schedule_to_start, start_to_close = (
+            self._timers_encode())
+        task_list = _str_or_none(self._task_list)
         return (
-            a['defaultTaskList']['name'] == _str_or_none(self._task_list)
+            a.get('defaultTaskList', {}).get('name') == task_list
             and a.get('defaultTaskHeartbeatTimeout') == heartbeat
             and a.get('defaultTaskScheduleToCloseTimeout') == schedule_to_close
             and a.get('defaultTaskScheduleToStartTimeout') == schedule_to_start
@@ -243,8 +244,9 @@ class SWFWorkflowSpec(object):
             logger.exception('Error while checking workflow compatibility:')
             return False
         decision_duration, wf_duration = self._timers_encode()
+        task_list = _str_or_none(self._task_list)
         return (
-            w['defaultTaskList']['name'] == _str_or_none(self._task_list)
+            w.get('defaultTaskList', {}).get('name') == task_list
             and w.get('defaultTaskStartToCloseTimeout') == decision_duration
             and w.get('defaultExecutionStartToCloseTimeout') == wf_duration)
 
