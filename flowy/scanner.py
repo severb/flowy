@@ -1,7 +1,11 @@
 import sys
+import logging
 
 import venusian
 from .spec import SWFActivitySpec, SWFWorkflowSpec
+
+
+logger = logging.getLogger(__name__)
 
 
 def swf_activity(version, task_list=None, heartbeat=None,
@@ -48,6 +52,7 @@ class TaskRegistry(object):
         try:
             fact = self._registry[spec]
         except KeyError:
+            logger.warning('Spec %r not found.' % spec)
             return lambda: None
         return fact(*args, **kwargs)
 
