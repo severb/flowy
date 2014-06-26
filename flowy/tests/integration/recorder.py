@@ -74,7 +74,7 @@ if __name__ == '__main__':
                 'name': run['name'],
                 'version': run['version'],
                 'task_list': run['task_list'],
-                #'layer1': workflow_client
+                'layer1': workflow_client
             }
             if run.get('decision_duration') is not None:
                 kwargs['decision_duration'] = run['decision_duration']
@@ -108,7 +108,6 @@ if __name__ == '__main__':
             activity_thread.start()
             workflow_thread.start()
 
-            sentinel = object()
             starter.start(*run.get('args', []), **run.get('kwargs', {}))
 
             workflow_thread.join()
