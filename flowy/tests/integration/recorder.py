@@ -2,11 +2,12 @@ import argparse
 import functools
 import importlib
 import json
+import os
 import random
 import string
 import sys
 import threading
-import os
+import time
 
 from boto.swf.layer1 import Layer1
 from flowy.boilerplate import (start_activity_worker, start_workflow_worker,
@@ -54,7 +55,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
     module = importlib.import_module(args.module)
 
+    print 'Found %s different runs in %s.' % (len(module.runs), module)
     for i, run in enumerate(module.runs):
+        print 'Iteration %s:' % i
         workflow_file_name = module.__name__ + '.%s.workflow.log' % i
         activity_file_name = module.__name__ + '.%s.activity.log' % i
         logs = os.path.join(os.path.dirname(__file__), 'logs')
@@ -75,6 +78,9 @@ if __name__ == '__main__':
                 'version': run['version'],
                 'task_list': run['task_list'],
                 #'layer1': workflow_client
+                # can't log the workflow starter since it will interfere with
+                # the logging from the workflow worker which must start first
+                # in order to do the registration
             }
             if run.get('decision_duration') is not None:
                 kwargs['decision_duration'] = run['decision_duration']
@@ -105,12 +111,18 @@ if __name__ == '__main__':
             activity_thread = threading.Thread(target=start_activity)
             workflow_thread = threading.Thread(target=start_workflow)
 
+            print 'Starting activity worker thread.'
             activity_thread.start()
+            print 'Starting workflow worker thread.'
             workflow_thread.start()
 
-            sentinel = object()
+            time.sleep(5)  # wait for everything to register
+
+            print 'Starting workflow.'
             starter.start(*run.get('args', []), **run.get('kwargs', {}))
 
+            print 'Waiting for the workflow thread...'
             workflow_thread.join()
             activity_client.close = True
+            print 'Waiting for the activity thread...'
             activity_thread.join()
