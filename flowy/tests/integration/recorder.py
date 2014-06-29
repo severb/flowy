@@ -15,10 +15,10 @@ from flowy.boilerplate import (start_activity_worker, start_workflow_worker,
 from mock import patch
 
 
-class Layer1WorkflowRecorder(Layer1):
+class Layer1Recorder(Layer1):
 
     def __init__(self, f, *args, **kwargs):
-        super(Layer1WorkflowRecorder, self).__init__(*args, **kwargs)
+        super(Layer1Recorder, self).__init__(*args, **kwargs)
         self.f = f
         self.close = False
 
@@ -33,7 +33,7 @@ class Layer1WorkflowRecorder(Layer1):
             sys.exit()
         self._print_out('%s\t%s' % (action, body))
         try:
-            result = super(Layer1WorkflowRecorder, self).make_request(
+            result = super(Layer1Recorder, self).make_request(
                 action, body, object_hook
             )
         except Exception as e:
@@ -61,10 +61,10 @@ if __name__ == '__main__':
         workflow_file_name = module.__name__ + '.%s.workflow.log' % i
         activity_file_name = module.__name__ + '.%s.activity.log' % i
         logs = os.path.join(os.path.dirname(__file__), 'logs')
-        workflow_client = Layer1WorkflowRecorder(
+        workflow_client = Layer1Recorder(
             open(os.path.join(logs, workflow_file_name), 'w+')
         )
-        activity_client = Layer1WorkflowRecorder(
+        activity_client = Layer1Recorder(
             open(os.path.join(logs, activity_file_name), 'w+')
         )
 

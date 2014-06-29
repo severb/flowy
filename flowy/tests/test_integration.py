@@ -1,121 +1,127 @@
+import importlib
 import json
 import os
-import pprint
 import random
 import string
+import sys
 import unittest
+from pprint import pformat as pf
 
 from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
 from boto.swf.layer1 import Layer1
+from flowy.boilerplate import start_activity_worker, start_workflow_worker
 from flowy.util import MagicBind
-from mock import patch
 
 
-class MockLayer1(Layer1):
+test_modules = [
+    ('flowy.tests.integration.simple', 'IntegrationTest'),
+    ('flowy.tests.integration.dependency', 'IntegrationTest'),
+]
 
-    def __init__(self, responses, requests):
-        self.responses = iter(responses)
-        self.requests = iter(requests)
+
+class Layer1Playback(Layer1):
+
+    def __len__(self):
+        assert len(self.responses) == len(self.requests)
+        regs = 0
+        for action, data in self.requests:
+            if action in ['RegisterWorkflowType', 'DescribeWorkflowType',
+                          'RegisterActivityType', 'DescribeActivityType']:
+                regs += 1
+        return len(self.responses) / 2 - regs
+
+    def __init__(self, log_file):
+        self.responses = []
+        self.requests = []
+        for line in log_file:
+            sep, data = line.split('\t', 1)
+            if sep == '<<<':
+                try:
+                    data = json.loads(data)
+                except ValueError:
+                    pass
+                self.responses.append(data)
+            else:
+                action, request = data.split('\t', 1)
+                self.requests.append((action, json.loads(request)))
+        log_file.close()
+        if not len(self.responses) == len(self.requests):
+            raise ValueError('Unbalanced log file.')
+        self.responses_i = iter(self.responses)
+        self.requests_i = iter(self.requests)
 
     def json_request(self, action, data, object_hook=None):
         self._normalize_request_dict(data)
-        nxt_req = next(self.requests)
-        a, b = pprint.pformat(nxt_req[0]), pprint.pformat(action)
-        assert nxt_req[0] == action, ('Difference expected:\n%s\nBut got:\n%s'
-                                      % (a, b))
-        a, b = pprint.pformat(nxt_req[1]), pprint.pformat(data)
-        assert nxt_req[1] == data, 'Expected:\n%s\nBut got:\n%s' % (a, b)
-        nxt_resp = next(self.responses)
+        next_action, next_data = next(self.requests_i)
+        action_msg = ("The actions don't match."
+                      " Expected action: %s. Actual action: %s.")
+        assert next_action == action, action_msg % (next_action, action)
+        data_msg = ("Request data doesn't match."
+                    " Expected data:\n%s\nActual data:\n%s\n")
+        assert next_data == data, data_msg % (pf(next_data), pf(data))
+        next_response = next(self.responses_i)
         try:
-            if nxt_resp.strip() == 'SWFResponseError':
+            if next_response.strip() == 'SWFResponseError':
                 raise SWFResponseError(None, None)
-            if nxt_resp.strip() == 'SWFTypeAlreadyExistsError':
+            if next_response.strip() == 'SWFTypeAlreadyExistsError':
                 raise SWFTypeAlreadyExistsError(None, None)
         except AttributeError:
             pass
-        return nxt_resp
+        return next_response
 
 
-def make(file_name, fut):
-    f = open(os.path.join(here, 'wlogs', file_name))
-    responses = []
-    requests = []
-    for line in f:
-        line = line.split('\t')
-        if line[0] == '<<<':
-            res = line[1]
-            try:
-                res = json.loads(res)
-            except ValueError:
-                pass
-            responses.append(res)
-        else:
-            requests.append((line[1], json.loads(line[2])))
-    f.close()
-
-    @patch('uuid.uuid4')
-    def test(self, uuid):
+class TestIntegration(unittest.TestCase):
+    def set_up(self):
         random.seed(0)
-        uuid.return_value = ''.join(random.choice(string.ascii_uppercase +
-                                    string.digits) for x in range(10))
-        mock_layer1 = MagicBind(MockLayer1(responses, requests),
-                                domain='IntegrationTest')
-        fut(mock_layer1, responses, requests)
+        import uuid
+        self._old_uuid4 = uuid.uuid4
+        uuid.uuid4 = lambda: ''.join(random.choice(string.ascii_uppercase +
+                                     string.digits) for x in range(10))
+
+    def tear_down(self):
+        random.seed()
+        uuid.uuid4 = self._old_uuid4
+
+
+def make_workflow_runner(log_path, package, domain, task_list):
+    def test(self):
+        layer1 = Layer1Playback(open(log_path))
+        start_workflow_worker(domain, task_list, layer1=layer1,
+                              package=package,
+                              loop=len(layer1),
+                              setup_log=False)
     return test
 
 
-def run_workflow(layer1, responses, requests):
-    from flowy.boilerplate import start_workflow_worker
-    from flowy.tests import workflows
-    start_workflow_worker('IntegrationTest', 'example_list',
-                          layer1=layer1,
-                          reg_remote=False,
-                          package=workflows,
-                          loop=len(requests) / 2,
-                          setup_log=False)
+def make_activity_runner(log_path, package, domain, task_list):
+    def test(self):
+        layer1 = Layer1Playback(open(log_path))
+        start_activity_worker(domain, task_list, layer1=layer1,
+                              package=package,
+                              loop=len(layer1),
+                              setup_log=False)
+    return test
 
 
-def run_activity(layer1, responses, requests):
-    from flowy.boilerplate import start_activity_worker
-    from flowy.tests import activities
-    start_activity_worker('IntegrationTest', 'example_list',
-                          layer1=layer1,
-                          reg_remote=False,
-                          package=activities,
-                          loop=len(requests) / 2,
-                          setup_log=False)
-
-
-here = os.path.dirname(__file__)
-
-
-class ExamplesTest(unittest.TestCase):
-    test_mixed_activities = make(os.path.join(here, 'alogs/mixed.log'),
-                                 run_activity)
-
-
-for file_name in os.listdir(os.path.join(here, 'wlogs')):
-    test_name = 'test_' + file_name.rsplit('.', 1)[0]
-    setattr(ExamplesTest, test_name, make(file_name, run_workflow))
-
-
-def run_workflow_registration(layer1, responses, requests):
-    from flowy.scanner import SWFScanner
-    from flowy.tests import workflows
-    scanner = SWFScanner()
-    scanner.scan_workflows(package=workflows)
-    assert scanner.register_remote(layer1) == []
-
-
-def run_activity_registration(layer1, responses, requests):
-    from flowy.scanner import SWFScanner
-    scanner = SWFScanner()
-    scanner.scan_activities()  # let him firuge it out which package
-    assert scanner.register_remote(layer1) == []
-
-
-class RegistrationTest(unittest.TestCase):
-    test_workflow_registration = make(os.path.join(here, 'rlogs/w.log'),
-                                      run_workflow_registration)
-    test_activity_registration = make(os.path.join(here, 'rlogs/a.log'),
-                                      run_activity_registration)
+for module_name, domain in test_modules:
+    try:
+        module = importlib.import_module(module_name)
+        for i, run in enumerate(module.runs):
+            workflow_file_name = module.__name__ + '.%s.workflow.log' % i
+            activity_file_name = module.__name__ + '.%s.activity.log' % i
+            logs = os.path.join(os.path.dirname(__file__),
+                                'integration', 'logs')
+            workflow_file = os.path.join(logs, workflow_file_name)
+            activity_file = os.path.join(logs, activity_file_name)
+            test_module_name = module_name.replace('.', '_')
+            workflow_test = 'test_workflow_%s_%s' % (test_module_name, i)
+            activity_test = 'test_activity_%s_%s' % (test_module_name, i)
+            setattr(TestIntegration, workflow_test,
+                    make_workflow_runner(workflow_file, module,
+                                         domain, run['task_list']))
+            setattr(TestIntegration, activity_test,
+                    make_activity_runner(activity_file, module,
+                                         domain, run['task_list']))
+    except Exception as e:
+        print >> sys.stderr, 'Could not load module %s!' % module_name
+        print >> sys.stderr, str(e)

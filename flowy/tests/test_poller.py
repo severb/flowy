@@ -92,7 +92,7 @@ class TestSWFWorkflowPoller(unittest.TestCase):
                     'name': 'n',
                     'version': 'v1'
                 },
-                'taskList': 'tl',
+                'taskList': {'name': 'tl'},
                 'taskStartToCloseTimeout': '60',
                 'executionStartToCloseTimeout': 120
             }

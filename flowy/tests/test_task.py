@@ -366,6 +366,7 @@ class TestSimpleWorkflow(TestWorkflowBase):
         self.set_state(results={0: '1', 4: '2'}, errors={8: 'err'})
         self.assert_scheduled(
             ('FAIL', 'err'),
+            'FLUSH',
         )
 
 

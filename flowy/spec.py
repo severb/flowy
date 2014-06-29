@@ -1,5 +1,4 @@
 import logging
-import uuid
 from collections import namedtuple
 from contextlib import contextmanager
 from functools import total_ordering
@@ -183,8 +182,6 @@ class SWFWorkflowSpec(object):
             tag_list=_tags_encode(tags))
 
     def schedule(self, swf_decisions, call_id, input):
-        if call_id is None:
-            call_id = uuid.uuid4()
         decision_duration, workflow_duration = self._timers_encode()
         swf_decisions.start_child_workflow_execution(
             str(self._name), str(self._version), str(call_id),
