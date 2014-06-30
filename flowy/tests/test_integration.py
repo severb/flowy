@@ -16,6 +16,7 @@ from flowy.util import MagicBind
 test_modules = [
     ('flowy.tests.integration.simple', 'IntegrationTest'),
     ('flowy.tests.integration.dependency', 'IntegrationTest'),
+    ('flowy.tests.integration.sequence', 'IntegrationTest'),
 ]
 
 
