@@ -29,7 +29,7 @@ def start_activity_worker(domain, task_list, layer1=None, reg_remote=True,
         not_registered = scanner.register_remote(swf_client)
         if not_registered:
             logger.error(
-                'Not all activities could be regestered: %r', not_registered
+                'Not all activities could be regestered: %s', not_registered
             )
             sys.exit(1)
     try:
@@ -51,7 +51,7 @@ def start_workflow_worker(domain, task_list, layer1=None, reg_remote=True,
         not_registered = scanner.register_remote(swf_client)
         if not_registered:
             logger.error(
-                'Not all workflows could be regestered: %r', not_registered
+                'Not all workflows could be regestered: %s', not_registered
             )
             sys.exit(1)
     try:

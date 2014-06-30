@@ -109,7 +109,7 @@ class SWFActivityProxy(TaskProxy):
         self._spec = SWFActivitySpec(name, version, task_list, heartbeat,
                                      schedule_to_close, schedule_to_start,
                                      start_to_close)
-        self.timeout_message = "Activity %r has timed-out" % self._spec
+        self.timeout_message = "Activity %s has timed-out" % self._spec
         super(SWFActivityProxy, self).__init__(retry, delay, error_handling)
 
     @contextmanager
@@ -134,7 +134,7 @@ class SWFWorkflowProxy(TaskProxy):
                  error_handling=False):
         self._spec = SWFWorkflowSpec(name, version, task_list,
                                      decision_duration, workflow_duration)
-        self.timeout_message = "Workflow %r has timed-out" % self._spec
+        self.timeout_message = "Workflow %s has timed-out" % self._spec
         super(SWFWorkflowProxy, self).__init__(retry, delay, error_handling)
 
     @contextmanager

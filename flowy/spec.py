@@ -90,7 +90,7 @@ class SWFActivitySpec(object):
         except SWFTypeAlreadyExistsError:
             return False
         except SWFResponseError:
-            logger.exception('Error while registering %r:' % self)
+            logger.exception('Error while registering %s:', self)
             return False
         return True
 
@@ -100,7 +100,7 @@ class SWFActivitySpec(object):
                 activity_name=str(self._name),
                 activity_version=str(self._version))['configuration']
         except SWFResponseError:
-            logger.exception('Error while checking %r compatibility:' % self)
+            logger.exception('Error while checking %s compatibility:', self)
             return False
         heartbeat, schedule_to_close, schedule_to_start, start_to_close = (
             self._timers_encode())

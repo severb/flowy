@@ -52,7 +52,7 @@ class TaskRegistry(object):
         try:
             fact = self._registry[spec]
         except KeyError:
-            logger.warning('Spec %r not found.' % spec)
+            logger.warning('Spec %s not found.', spec)
             return lambda: None
         return fact(*args, **kwargs)
 
