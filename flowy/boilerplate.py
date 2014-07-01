@@ -1,15 +1,17 @@
-import sys
-import uuid
 import logging
 import logging.config
+import sys
+import uuid
+from contextlib import contextmanager
 
 from boto.swf.layer1 import Layer1
-from flowy.util import MagicBind
+
 from flowy.poller import SWFActivityPoller, SWFWorkflowPoller
 from flowy.proxy import serialize_args
 from flowy.scanner import SWFScanner
 from flowy.spec import _sentinel, SWFWorkflowSpec
 from flowy.task import AsyncSWFActivity
+from flowy.util import MagicBind
 from flowy.worker import SingleThreadedWorker
 
 
@@ -88,6 +90,7 @@ class SWFWorkflowStarter(object):
         self._id = id
         self._tags = tags
 
+    @contextmanager
     def options(self, task_list=_sentinel, decision_duration=_sentinel,
                 workflow_duration=_sentinel, id=_sentinel, tags=_sentinel):
         old_tags = tags

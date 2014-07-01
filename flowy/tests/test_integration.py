@@ -1,14 +1,16 @@
 import importlib
+import itertools
 import json
 import os
-import random
 import string
 import sys
 import unittest
+import uuid
 from pprint import pformat as pf
 
 from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
 from boto.swf.layer1 import Layer1
+
 from flowy.boilerplate import start_activity_worker, start_workflow_worker
 from flowy.util import MagicBind
 
@@ -18,6 +20,7 @@ test_modules = [
     ('flowy.tests.integration.dependency', 'IntegrationTest'),
     ('flowy.tests.integration.sequence', 'IntegrationTest'),
     ('flowy.tests.integration.mapreduce', 'IntegrationTest'),
+    ('flowy.tests.integration.options', 'IntegrationTest'),
 ]
 
 
@@ -73,15 +76,11 @@ class Layer1Playback(Layer1):
 
 
 class TestIntegration(unittest.TestCase):
-    def set_up(self):
-        random.seed(0)
-        import uuid
+    def setUp(self):
         self._old_uuid4 = uuid.uuid4
-        uuid.uuid4 = lambda: ''.join(random.choice(string.ascii_uppercase +
-                                     string.digits) for x in range(10))
+        uuid.uuid4 = itertools.count(1000).next
 
-    def tear_down(self):
-        random.seed()
+    def tearDown(self):
         uuid.uuid4 = self._old_uuid4
 
 

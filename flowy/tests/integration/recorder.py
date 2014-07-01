@@ -1,9 +1,9 @@
 import argparse
+import itertools
 import functools
 import importlib
 import json
 import os
-import random
 import string
 import sys
 import threading
@@ -12,7 +12,6 @@ import time
 from boto.swf.layer1 import Layer1
 from flowy.boilerplate import (start_activity_worker, start_workflow_worker,
                                workflow_starter)
-from mock import patch
 
 
 class Layer1Recorder(Layer1):
@@ -21,6 +20,7 @@ class Layer1Recorder(Layer1):
         super(Layer1Recorder, self).__init__(*args, **kwargs)
         self.f = f
         self.close = False
+        self.subworkflows = 1
 
     def _print_out(self, msg):
         self.f.write('>>>\t%s\n' %  msg)
@@ -44,7 +44,12 @@ class Layer1Recorder(Layer1):
             failed = decision['decisionType'] == 'FailWorkflowExecution'
             com = decision['decisionType'] == 'CompleteWorkflowExecution'
             if failed or com:
-                self.close = True
+                self.subworkflows -= 1
+                if self.subworkflows == 0:
+                    self.close = True
+            started = decision['decisionType'] == 'StartChildWorkflowExecution'
+            if started:
+                self.subworkflows += 1
         return result
 
 if __name__ == '__main__':
@@ -68,61 +73,67 @@ if __name__ == '__main__':
             open(os.path.join(logs, activity_file_name), 'w+')
         )
 
-        with patch('uuid.uuid4') as uuid:
-            random.seed(0)
-            uuid.return_value = ''.join(random.choice(string.ascii_uppercase +
-                                        string.digits) for x in range(10))
-            kwargs = {
-                'domain': args.domain,
-                'name': run['name'],
-                'version': run['version'],
-                'task_list': run['task_list'],
-                #'layer1': workflow_client
-                # can't log the workflow starter since it will interfere with
-                # the logging from the workflow worker which must start first
-                # in order to do the registration
-            }
-            if run.get('decision_duration') is not None:
-                kwargs['decision_duration'] = run['decision_duration']
-            if run.get('workflow_duration') is not None:
-                kwargs['workflow_duration'] = run['workflow_duration']
-            if run.get('id') is not None:
-                kwargs['id'] = run['id']
-            if run.get('tags') is not None:
-                kwargs['tags'] = run['tags']
+        # patch uuid4
+        import uuid
+        _old_uuid4 = uuid.uuid4
+        uuid.uuid4 = itertools.count(1000).next
 
-            starter = workflow_starter(**kwargs)
+        kwargs = {
+            'domain': args.domain,
+            'name': run['name'],
+            'version': run['version'],
+            'task_list': run['task_list'],
+            #'layer1': workflow_client
+            # can't log the workflow starter since it will interfere with
+            # the logging from the workflow worker which must start first
+            # in order to do the registration
+        }
+        if run.get('decision_duration') is not None:
+            kwargs['decision_duration'] = run['decision_duration']
+        if run.get('workflow_duration') is not None:
+            kwargs['workflow_duration'] = run['workflow_duration']
+        if run.get('id') is not None:
+            kwargs['id'] = run['id']
+        if run.get('tags') is not None:
+            kwargs['tags'] = run['tags']
 
-            start_activity = functools.partial(
-                start_activity_worker,
-                domain=args.domain,
-                task_list=run['task_list'],
-                layer1=activity_client,
-                package=module,
-            )
-            start_workflow = functools.partial(
-                start_workflow_worker,
-                domain=args.domain,
-                task_list=run['task_list'],
-                package=module,
-                layer1=workflow_client
-            )
+        starter = workflow_starter(**kwargs)
 
-            activity_thread = threading.Thread(target=start_activity)
-            workflow_thread = threading.Thread(target=start_workflow)
+        start_activity = functools.partial(
+            start_activity_worker,
+            domain=args.domain,
+            task_list=run['task_list'],
+            layer1=activity_client,
+            package=module,
+        )
+        start_workflow = functools.partial(
+            start_workflow_worker,
+            domain=args.domain,
+            task_list=run['task_list'],
+            package=module,
+            layer1=workflow_client
+        )
 
-            print 'Starting activity worker thread.'
-            activity_thread.start()
-            print 'Starting workflow worker thread.'
-            workflow_thread.start()
+        activity_thread = threading.Thread(target=start_activity)
+        workflow_thread = threading.Thread(target=start_workflow)
 
-            time.sleep(5)  # wait for everything to register
+        print 'Starting activity worker thread.'
+        activity_thread.start()
+        print 'Starting workflow worker thread.'
+        workflow_thread.start()
 
-            print 'Starting workflow.'
+        time.sleep(5)  # wait for everything to register
+
+        print 'Starting workflow.'
+        # don't let the starter consume the first uuid4
+        with starter.options(id='testintegration'):
             starter.start(*run.get('args', []), **run.get('kwargs', {}))
 
-            print 'Waiting for the workflow thread...'
-            workflow_thread.join()
-            activity_client.close = True
-            print 'Waiting for the activity thread...'
-            activity_thread.join()
+        print 'Waiting for the workflow thread...'
+        workflow_thread.join()
+        activity_client.close = True
+        print 'Waiting for the activity thread...'
+        activity_thread.join()
+
+        # patch uuid4
+        uuid.uuid4 = _old_uuid4
