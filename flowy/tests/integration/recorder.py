@@ -122,7 +122,8 @@ if __name__ == '__main__':
         print 'Starting workflow worker thread.'
         workflow_thread.start()
 
-        time.sleep(5)  # wait for everything to register
+        print 'Waiting 5 seconds for everything to register...'
+        time.sleep(5)
 
         print 'Starting workflow.'
         # don't let the starter consume the first uuid4
@@ -131,8 +132,10 @@ if __name__ == '__main__':
 
         print 'Waiting for the workflow thread...'
         workflow_thread.join()
+        print 'Waiting 5 seconds for timed-out tasks to finish...'
+        time.sleep(5)
         activity_client.close = True
-        print 'Waiting for the activity thread...'
+        print 'Waiting for the activity thread (this may take a while)...'
         activity_thread.join()
 
         # patch uuid4

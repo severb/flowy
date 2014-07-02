@@ -15,8 +15,11 @@ class Error(object):
 
 
 class Timeout(object):
+    def __init__(self, reason):
+        self._reason = reason
+
     def result(self):
-        raise TaskTimedout()
+        raise TaskTimedout(self._reason)
 
 
 class Result(object):

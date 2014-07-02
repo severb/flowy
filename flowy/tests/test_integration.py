@@ -21,6 +21,7 @@ test_modules = [
     ('flowy.tests.integration.sequence', 'IntegrationTest'),
     ('flowy.tests.integration.mapreduce', 'IntegrationTest'),
     ('flowy.tests.integration.options', 'IntegrationTest'),
+    ('flowy.tests.integration.errors', 'IntegrationTest'),
 ]
 
 
@@ -33,7 +34,7 @@ class Layer1Playback(Layer1):
             if action in ['RegisterWorkflowType', 'DescribeWorkflowType',
                           'RegisterActivityType', 'DescribeActivityType']:
                 regs += 1
-        return len(self.responses) / 2 - regs
+        return (len(self.responses) - regs) / 2
 
     def __init__(self, log_file):
         self.responses = []

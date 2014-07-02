@@ -62,7 +62,7 @@ class TaskProxy(object):
             return Placeholder()
         elif state == task._TIMEDOUT:
             if self._error_handling:
-                return Timeout()
+                return Timeout(self.timeout_message)
             task.fail(self.timeout_message)
             return Placeholder()
 
@@ -84,7 +84,7 @@ class TaskProxy(object):
     def _errs_in_args(self, args):
         errors = []
         for arg in args:
-            if isinstance(arg, Error):
+            if isinstance(arg, (Error, Timeout)):
                 try:
                     arg.result()
                 except TaskError as e:
