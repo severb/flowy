@@ -41,11 +41,11 @@ class ErrorChaining(Workflow):
 class ErrorShortcircuit(Workflow):
     identity = ActivityProxy('Identity', 1, task_list='example_list2',
                              heartbeat=10, schedule_to_close=20,
-                             schedule_to_start=10, start_to_close=15,
-                             error_handling=True)
+                             schedule_to_start=10, start_to_close=15)
     error = ActivityProxy('Error', 1, task_list='example_list2',
                           heartbeat=5, schedule_to_close=20,
-                          schedule_to_start=10, start_to_close=15)
+                          schedule_to_start=10, start_to_close=15,
+                          error_handling=True)
     def run(self):
         e = self.error()
         return self.identity(e)
