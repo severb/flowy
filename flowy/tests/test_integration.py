@@ -22,6 +22,7 @@ test_modules = [
     ('flowy.tests.integration.mapreduce', 'IntegrationTest'),
     ('flowy.tests.integration.options', 'IntegrationTest'),
     ('flowy.tests.integration.errors', 'IntegrationTest'),
+    ('flowy.tests.integration.heartbeat', 'IntegrationTest'),
 ]
 
 
@@ -32,7 +33,8 @@ class Layer1Playback(Layer1):
         regs = 0
         for action, data in self.requests:
             if action in ['RegisterWorkflowType', 'DescribeWorkflowType',
-                          'RegisterActivityType', 'DescribeActivityType']:
+                          'RegisterActivityType', 'DescribeActivityType',
+                          'RecordActivityTaskHeartbeat']:
                 regs += 1
         return (len(self.responses) - regs) / 2
 
