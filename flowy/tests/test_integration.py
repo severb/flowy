@@ -23,6 +23,7 @@ test_modules = [
     ('flowy.tests.integration.options', 'IntegrationTest'),
     ('flowy.tests.integration.errors', 'IntegrationTest'),
     ('flowy.tests.integration.heartbeat', 'IntegrationTest'),
+    ('flowy.tests.integration.restart', 'IntegrationTest'),
 ]
 
 
