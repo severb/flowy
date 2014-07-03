@@ -24,6 +24,7 @@ test_modules = [
     ('flowy.tests.integration.errors', 'IntegrationTest'),
     ('flowy.tests.integration.heartbeat', 'IntegrationTest'),
     ('flowy.tests.integration.restart', 'IntegrationTest'),
+    ('flowy.tests.integration.long', 'IntegrationTest'),
 ]
 
 
@@ -31,13 +32,15 @@ class Layer1Playback(Layer1):
 
     def __len__(self):
         assert len(self.responses) == len(self.requests)
-        regs = 0
+        skip = 0
         for action, data in self.requests:
             if action in ['RegisterWorkflowType', 'DescribeWorkflowType',
                           'RegisterActivityType', 'DescribeActivityType',
                           'RecordActivityTaskHeartbeat']:
-                regs += 1
-        return (len(self.responses) - regs) / 2
+                skip += 1
+            if action == 'PollForDecisionTask' and data.get('nextPageToken'):
+                skip += 1
+        return (len(self.responses) - skip) / 2
 
     def __init__(self, log_file):
         self.responses = []
