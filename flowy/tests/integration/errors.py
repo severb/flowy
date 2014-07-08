@@ -1,3 +1,4 @@
+import os
 import time
 
 from flowy.proxy import SWFActivityProxy as ActivityProxy
@@ -16,6 +17,7 @@ class WorkflowFailure(Workflow):
     error = ActivityProxy('Error', 1, task_list='example_list2',
                           heartbeat=5, schedule_to_close=20,
                           schedule_to_start=10, start_to_close=15)
+
     def run(self):
         return self.error()
 
@@ -30,6 +32,7 @@ class ErrorChaining(Workflow):
                           heartbeat=5, schedule_to_close=20,
                           schedule_to_start=10, start_to_close=15,
                           error_handling=True)
+
     def run(self):
         e = self.error()
         return self.identity(e)
@@ -44,6 +47,7 @@ class ErrorShortcircuit(Workflow):
                           heartbeat=5, schedule_to_close=20,
                           schedule_to_start=10, start_to_close=15,
                           error_handling=True)
+
     def run(self):
         e = self.error()
         return self.identity(e)
@@ -54,6 +58,7 @@ class TimeoutFailure(Workflow):
     error = ActivityProxy('Error', 1, task_list='example_list2',
                           heartbeat=1, schedule_to_close=20,
                           schedule_to_start=10, start_to_close=15, retry=0)
+
     def run(self):
         return self.error(2)
 
@@ -68,6 +73,7 @@ class TimeoutChaining(Workflow):
                           heartbeat=1, schedule_to_close=20,
                           schedule_to_start=10, start_to_close=15,
                           error_handling=True, retry=0)
+
     def run(self):
         t = self.error(2)
         return self.identity(t)
@@ -82,7 +88,7 @@ class WorkflowError(Workflow):
 @activity(1)
 class Error(Activity):
     def run(self, delay=0):
-        if delay:
+        if delay and not os.environ.get('TESTING'):
             time.sleep(delay)
         raise ValueError('err!')
 
