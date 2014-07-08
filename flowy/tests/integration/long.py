@@ -1,10 +1,8 @@
 from flowy.proxy import SWFActivityProxy as ActivityProxy
-from flowy.scanner import swf_workflow as workflow
 from flowy.scanner import swf_activity as activity
+from flowy.scanner import swf_workflow as workflow
 from flowy.task import SWFWorkflow as Workflow
-
 from flowy.tests.integration.dependency import Identity
-
 
 # make Double available for the scanner
 Identity = activity(1)(Identity)

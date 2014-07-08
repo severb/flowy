@@ -1,7 +1,7 @@
 import argparse
-import itertools
 import functools
 import importlib
+import itertools
 import json
 import os
 import string
@@ -10,8 +10,10 @@ import threading
 import time
 
 from boto.swf.layer1 import Layer1
-from flowy.boilerplate import (start_activity_worker, start_workflow_worker,
-                               workflow_starter)
+
+from flowy.boilerplate import start_activity_worker
+from flowy.boilerplate import start_workflow_worker
+from flowy.boilerplate import workflow_starter
 
 
 class Layer1Recorder(Layer1):

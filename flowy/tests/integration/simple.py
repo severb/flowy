@@ -1,5 +1,5 @@
-from flowy.task import SWFWorkflow as Workflow
 from flowy.scanner import swf_workflow as workflow
+from flowy.task import SWFWorkflow as Workflow
 
 
 @workflow(2)

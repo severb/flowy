@@ -8,12 +8,13 @@ import unittest
 import uuid
 from pprint import pformat as pf
 
-from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
+from boto.swf.exceptions import SWFResponseError
+from boto.swf.exceptions import SWFTypeAlreadyExistsError
 from boto.swf.layer1 import Layer1
 
-from flowy.boilerplate import start_activity_worker, start_workflow_worker
+from flowy.boilerplate import start_activity_worker
+from flowy.boilerplate import start_workflow_worker
 from flowy.util import MagicBind
-
 
 test_modules = [
     ('flowy.tests.integration.simple', 'IntegrationTest'),

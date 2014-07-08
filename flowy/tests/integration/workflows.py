@@ -1,8 +1,8 @@
 from flowy.exception import TaskError
-from flowy.proxy import SWFActivityProxy, SWFWorkflowProxy
+from flowy.proxy import SWFActivityProxy
+from flowy.proxy import SWFWorkflowProxy
 from flowy.scanner import swf_workflow
 from flowy.task import SWFWorkflow
-
 
 Workflow = SWFWorkflow
 ActivityProxy, WorkflowProxy = SWFActivityProxy, SWFWorkflowProxy
