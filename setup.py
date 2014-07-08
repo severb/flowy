@@ -19,4 +19,9 @@ setup(
     install_requires=['boto==2.19.0', 'venusian>=1.0a8'],
     tests_require=['mock', 'coverage'],
     test_suite="nose.collector",
+    entry_points={
+        "console_scripts": [
+            "flowy = flowy.__main__:main"
+        ]
+    }
 )
