@@ -15,9 +15,9 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     zip_safe=False,
-    setup_requires=['nose>=1.0', 'setuptools_git>=0.3', 'wheel'],
+    setup_requires=['nose', 'setuptools_git', 'wheel'],
     install_requires=['boto==2.19.0', 'venusian>=1.0a8'],
-    tests_require=['mock', 'coverage'],
+    tests_require=['coverage'],
     test_suite="nose.collector",
     entry_points={
         "console_scripts": [
