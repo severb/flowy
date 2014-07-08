@@ -1,4 +1,0 @@
-include LICENSE
-include README.rst
-graft flowy/tests/integration/logs
-graft docs
