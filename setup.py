@@ -7,7 +7,7 @@ setup(
     version='0.2.1',
     description="Python library for Amazon Simple Workflow Service",
     long_description=open('README.rst').read(),
-    keywords='amazon swf simple workflow',
+    keywords='AWS SWF workflow',
     author='Sever Banesiu',
     author_email='banesiu.sever@gmail.com',
     url='https://github.com/pbs/flowy',
