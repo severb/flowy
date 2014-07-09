@@ -72,7 +72,7 @@ if __name__ == '__main__':
         print 'Iteration %s:' % i
         workflow_file_name = module.__name__ + '.%s.workflow.log' % i
         activity_file_name = module.__name__ + '.%s.activity.log' % i
-        logs = os.path.join(os.path.dirname(__file__), 'logs')
+        logs = os.path.join(os.path.dirname(__file__), 'integration', 'logs')
         workflow_client = Layer1Recorder(
             open(os.path.join(logs, workflow_file_name), 'w+')
         )
