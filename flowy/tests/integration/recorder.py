@@ -4,7 +4,6 @@ import importlib
 import itertools
 import json
 import os
-import string
 import sys
 import threading
 import time
@@ -22,13 +21,18 @@ class Layer1Recorder(Layer1):
         super(Layer1Recorder, self).__init__(*args, **kwargs)
         self.f = f
         self.close = False
-        self.subworkflows = 1
+        self.run_id = None
+        self.task_token = None
 
     def _print_out(self, msg):
-        self.f.write('>>>\t%s\n' %  msg)
+        m = '>>>\t%s' % msg
+        self.f.write("%s\n" % m)
+        print ("\t%s..." if len(m) > 79 else "\t%s") % m[:79]
 
     def _print_in(self, msg):
-        self.f.write('<<<\t%s\n' %  msg)
+        m = '<<<\t%s' % msg
+        self.f.write("%s\n" % m)
+        print ("\t%s..." if len(m) > 79 else "\t%s") % m[:79]
 
     def make_request(self, action, body, object_hook=None):
         if self.close:
@@ -38,20 +42,21 @@ class Layer1Recorder(Layer1):
             result = super(Layer1Recorder, self).make_request(
                 action, body, object_hook
             )
+            if result is not None:
+                if self.run_id is None:
+                    self.run_id = result.get('runId')
+                if result.get('runId') == self.run_id:
+                    self.task_token = result.get('taskToken')
         except Exception as e:
             self._print_in(e.__class__.__name__)
             raise
         self._print_in(json.dumps(result))
-        for decision in json.loads(body).get('decisions', []):
-            failed = decision['decisionType'] == 'FailWorkflowExecution'
-            com = decision['decisionType'] == 'CompleteWorkflowExecution'
-            if failed or com:
-                self.subworkflows -= 1
-                if self.subworkflows == 0:
+        loaded_body = json.loads(body)
+        for decision in loaded_body.get('decisions', []):
+            dt = decision['decisionType']
+            if dt in ['FailWorkflowExecution', 'CompleteWorkflowExecution']:
+                if loaded_body['taskToken'] == self.task_token:
                     self.close = True
-            started = decision['decisionType'] == 'StartChildWorkflowExecution'
-            if started:
-                self.subworkflows += 1
         return result
 
 if __name__ == '__main__':

@@ -29,6 +29,7 @@ test_modules = [
     # This fails because of boto restart bug
     # ('flowy.tests.integration.restart', 'IntegrationTest'),
     ('flowy.tests.integration.long', 'IntegrationTest'),
+    ('flowy.tests.integration.notfound', 'IntegrationTest'),
 ]
 
 
