@@ -125,8 +125,8 @@ def _setup_default_logger():
                 'format': '%(asctime)s %(levelname)s\t%(name)s: %(message)s'
             }},
         'handlers': {
-            'console':{
-                'class':'logging.StreamHandler',
+            'console': {
+                'class': 'logging.StreamHandler',
                 'formatter': 'simple'
             }},
         'loggers': {

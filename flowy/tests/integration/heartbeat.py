@@ -11,6 +11,7 @@ class HB(Workflow):
     hb = ActivityProxy('Heartbeat', 1, task_list='example_list2',
                        heartbeat=2, schedule_to_close=20,
                        schedule_to_start=10, start_to_close=15)
+
     def run(self):
         return self.hb()
 
