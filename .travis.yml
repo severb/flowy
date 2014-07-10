@@ -1,3 +1,9 @@
+before_install:
+  - python --version
+  - virtualenv --version
+  - pip --version
+  - uname -a
+  - lsb_release -a
 language: python
 install: pip install coveralls
 python:
@@ -7,3 +13,7 @@ python:
   # - "3.3"
 script: python setup.py nosetests
 after_success: coveralls
+notifications:
+  email:
+    on_success: never
+    on_failure: always

@@ -1,0 +1,14 @@
+>>>	RegisterActivityType	{"domain": "IntegrationTest", "version": "1", "name": "Error"}
+<<<	SWFTypeAlreadyExistsError
+>>>	DescribeActivityType	{"domain": "IntegrationTest", "activityType": {"version": "1", "name": "Error"}}
+<<<	{"configuration": {}, "typeInfo": {"status": "REGISTERED", "creationDate": 1404301664.31, "activityType": {"version": "1", "name": "Error"}}}
+>>>	RegisterActivityType	{"domain": "IntegrationTest", "version": "1", "name": "Identity"}
+<<<	SWFTypeAlreadyExistsError
+>>>	DescribeActivityType	{"domain": "IntegrationTest", "activityType": {"version": "1", "name": "Identity"}}
+<<<	{"configuration": {}, "typeInfo": {"status": "REGISTERED", "creationDate": 1403876856.153, "activityType": {"version": "1", "name": "Identity"}}}
+>>>	PollForActivityTask	{"domain": "IntegrationTest", "taskList": {"name": "example_list2"}}
+<<<	{"activityType": {"version": "1", "name": "Error"}, "workflowExecution": {"workflowId": "testintegration", "runId": "127Egex+Ro2K9rvC70dl9kyRvmhAVkMfKP+4xUdYhtEaI="}, "startedEventId": 6, "activityId": "0", "input": "[[], {}]", "taskToken": "AAAAKgAAAAIAAAAAAAAAAtXNV3R9V2aookdYGDJUp5e2jnOq6y7HIqK0/KHZL1GENovFfLKf/zVkrFtH97G1pjGh+kCCp3cWppx4cgieNFSxuahXwfo2aRd0RmNI1WaFILCe7j+cLxUM5oHG7A0gYa+qxElIvsSotfNsO7JNiRy1qQSuBgXnJB7ahTr19pRwOiUfhIoiBulF/Ysed+IcizQzPKGgX5QBe6sSmt9E6VvWEElID0B/UK1GLEspB4uESPCLyjmbgQRhp72HQYhmByfkd7esgZJ4aIEoqAYN7C1XLT5dikn8YBScw/oBsEtY"}
+>>>	RespondActivityTaskFailed	{"reason": "err!", "taskToken": "AAAAKgAAAAIAAAAAAAAAAtXNV3R9V2aookdYGDJUp5e2jnOq6y7HIqK0/KHZL1GENovFfLKf/zVkrFtH97G1pjGh+kCCp3cWppx4cgieNFSxuahXwfo2aRd0RmNI1WaFILCe7j+cLxUM5oHG7A0gYa+qxElIvsSotfNsO7JNiRy1qQSuBgXnJB7ahTr19pRwOiUfhIoiBulF/Ysed+IcizQzPKGgX5QBe6sSmt9E6VvWEElID0B/UK1GLEspB4uESPCLyjmbgQRhp72HQYhmByfkd7esgZJ4aIEoqAYN7C1XLT5dikn8YBScw/oBsEtY"}
+<<<	null
+>>>	PollForActivityTask	{"domain": "IntegrationTest", "taskList": {"name": "example_list2"}}
+<<<	{"startedEventId": 0}

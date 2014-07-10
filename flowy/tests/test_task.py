@@ -1,199 +1,465 @@
-import unittest
-
-from mock import sentinel as s
-from mock import Mock
+from unittest import TestCase
 
 
-class TestTask(unittest.TestCase):
-    def _get_uut(self, input='[[], {}]', scheduler=None):
-        from flowy.task import Task
-        if scheduler is None:
-            scheduler = Mock()
-        return Task(input, scheduler, 'token1'), scheduler
+class DummyScheduler(object):
 
-    def test_successful_run(self):
-        task, scheduler = self._get_uut(
-            input='[[1, "a"], {"x": 2, "y": "y"}]',
+    def __init__(self):
+        self.state = []
+
+    def flush(self):
+        self.state.append('FLUSH')
+
+    def restart(self, spec, input, tags):
+        self.state.append('RESTART', spec, input, tags)
+
+    def fail(self, reason):
+        self.state.append(('FAIL', str(reason)))
+
+    def complete(self, result):
+        self.state.append(('COMPLETE', result))
+
+    def schedule_timer(self, delay, call_id):
+        self.state.append(('TIMER', delay, call_id))
+
+    def schedule_activity(self, spec, call_id, input):
+        self.state.append(('ACTIVITY', spec, call_id, input))
+
+    def schedule_workflow(self, spec, call_id, input):
+        self.state.append(('WORKFLOW', spec, call_id, input))
+
+
+class TestWorkflowScheduling(TestCase):
+
+    def set_state(self, running=[], timedout=[], results={}, errors={}):
+        from flowy.task import _SWFWorkflow
+        self.scheduler = DummyScheduler()
+        self.workflow = _SWFWorkflow(self.scheduler, 'input', 'token', running,
+                                     timedout, results, errors, None, None)
+        self.RUNNING = self.workflow._RUNNING
+        self.FOUND = self.workflow._FOUND
+        self.ERROR = self.workflow._ERROR
+        self.TIMEDOUT = self.workflow._TIMEDOUT
+        self.state = []
+
+    def schedule_activity(self, spec, input='i', retry=0, delay=0):
+        r = self.workflow.schedule_activity(spec, input, retry, delay)
+        self.state.append(r)
+
+    def schedule_workflow(self, spec, input='i', retry=0, delay=0):
+        r = self.workflow.schedule_workflow(spec, input, retry, delay)
+        self.state.append(r)
+
+    def assert_state(self, *state):
+        self.assertEquals(list(state), self.state)
+
+    def assert_scheduled(self, *l):
+        self.assertEquals(list(l), self.scheduler.state)
+
+    def test_simple_scheduling_not_found(self):
+        self.set_state(running=[], timedout=[], results={}, errors={})
+        self.schedule_activity(spec='a1', input='in1', retry=0, delay=0)
+        self.schedule_workflow(spec='w1', input='in2', retry=0, delay=0)
+        self.assert_state(
+            (self.RUNNING, None),
+            (self.RUNNING, None)
         )
-        task.run = Mock()
-        task.run.return_value = [1, 2, 'a']
-        task()
-        task.run.assert_called_once_with(1, 'a', x=2, y='y')
-        scheduler.complete.assert_called_once_with('[1, 2, "a"]')
-
-    def test_suspend_task(self):
-        task, scheduler = self._get_uut()
-        task.run = Mock()
-        from flowy.task import SuspendTask
-        task.run.side_effect = SuspendTask()
-        task()
-        task.run.assert_called_once_with()
-        scheduler.suspend.assert_called_once_with()
-
-    def test_fail_task(self):
-        task, scheduler = self._get_uut()
-        task.run = Mock()
-        task.run.side_effect = RuntimeError('err')
-        task()
-        task.run.assert_called_once_with()
-        scheduler.fail.assert_called_once_with('err')
-
-
-class TestHeartbeat(unittest.TestCase):
-    def test_heartbeat(self):
-        from flowy.task import Activity
-        scheduler = Mock()
-        a = Activity(input='[[], {}]', scheduler=scheduler, token='t1')
-        a.heartbeat()
-        scheduler.heartbeat.assert_called_once_with()
-
-
-class TestWorkflow(unittest.TestCase):
-    def _get_uut(self):
-        from flowy.task import Workflow
-        scheduler = Mock()
-        return Workflow('[[], {}]', scheduler, 'token1'), scheduler
-
-    def test_restart(self):
-        uut, scheduler = self._get_uut()
-        uut.restart(1, 2, a=1, b=2)
-        scheduler.restart.assert_called_once_with('[[1, 2], {"a": 1, "b": 2}]')
-
-    def test_options(self):
-        uut, scheduler = self._get_uut()
-        uut.options(x=1, y=2, z='abc')
-        scheduler.options.assert_called_once_with(x=1, y=2, z='abc')
-
-    def test_run_return_error(self):
-        from flowy.result import Error
-        uut, scheduler = self._get_uut()
-        uut.run = Mock()
-        uut.run.return_value = Error('reason')
-        uut()
-        uut.run.assert_called_once_with()
-        scheduler.fail.assert_called_once_with('reason')
-
-    def test_run_return_placeholder(self):
-        from flowy.result import Placeholder
-        uut, scheduler = self._get_uut()
-        uut.run = Mock()
-        uut.run.return_value = Placeholder()
-        uut()
-        uut.run.assert_called_once_with()
-        scheduler.suspend.assert_called_once_with()
-
-    def test_run_return_result(self):
-        from flowy.result import Result
-        uut, scheduler = self._get_uut()
-        uut.run = Mock()
-        uut.run.return_value = Result(12)
-        uut()
-        uut.run.assert_called_once_with()
-        scheduler.complete.assert_called_once_with('12')
-
-    def test_run_return_value(self):
-        uut, scheduler = self._get_uut()
-        uut.run = Mock()
-        uut.run.return_value = 12
-        uut()
-        uut.run.assert_called_once_with()
-        scheduler.complete.assert_called_once_with('12')
-
-
-class TestTaskProxy(unittest.TestCase):
-    def _get_uut(self, args=[], kwargs={}):
-        from flowy.task import Task, TaskProxy
-        tp = TaskProxy()
-        input = tp._serialize_arguments(*args, **kwargs)
-        t = Task(input=input, scheduler=Mock(), token='token1')
-        return tp, t
-
-    def test_results(self):
-        tp, t = self._get_uut()
-        r = tp._deserialize_result(t._serialize_result([1, 'a']))
-        self.assertEquals(r, [1, 'a'])
-
-
-class TestActivityProxy(unittest.TestCase):
-    def _get_uut(self):
-        from flowy.task import ActivityProxy
-        return ActivityProxy(
-            task_id=s.task_id,
-            heartbeat=-10,
-            schedule_to_close='100',
-            schedule_to_start=20,
-            start_to_close=20.2,
-            task_list=s.task_list,
-            retry=-3,
-            delay='10',
-            error_handling=s.error_handling
+        self.assert_scheduled(
+            ('ACTIVITY', 'a1', 0, 'in1'),
+            ('WORKFLOW', 'w1', 1, 'in2'),
         )
 
-    def test_binding(self):
+    def test_simple_scheduling_running(self):
+        self.set_state(running=[0, 1])
+        self.schedule_activity(spec='a1', input='in1', retry=0, delay=0)
+        self.schedule_workflow(spec='w1', input='in2', retry=0, delay=0)
+        self.assert_state(
+            (self.RUNNING, None),
+            (self.RUNNING, None)
+        )
+        self.assert_scheduled()
 
-        class X(object):
-            _scheduler = Mock()
-            a = self._get_uut()
+    def test_simple_scheduling_timedout(self):
+        self.set_state(timedout=[0, 1])
+        self.schedule_activity(spec='a1', input='in1', retry=0, delay=0)
+        self.schedule_workflow(spec='w1', input='in2', retry=0, delay=0)
+        self.assert_state(
+            (self.TIMEDOUT, None),
+            (self.TIMEDOUT, None)
+        )
+        self.assert_scheduled()
 
-        x = X()
-        x.a(1, 2, a=1, b=2)
+    def test_simple_scheduling_found(self):
+        self.set_state(results={0: 10, 1: 20})
+        self.schedule_activity(spec='a1', input='in1', retry=0, delay=0)
+        self.schedule_workflow(spec='w1', input='in2', retry=0, delay=0)
+        self.assert_state(
+            (self.FOUND, 10),
+            (self.FOUND, 20)
+        )
+        self.assert_scheduled()
 
-        X._scheduler.remote_activity.assert_called_once_with(
-            args=(1, 2),
-            kwargs=dict(a=1, b=2),
-            args_serializer=X.a._serialize_arguments,
-            result_deserializer=X.a._deserialize_result,
-            task_id=s.task_id,
-            heartbeat=None,
-            schedule_to_close=100,
-            schedule_to_start=20,
-            start_to_close=20,
-            task_list='sentinel.task_list',
-            retry=0,
-            delay=10,
-            error_handling=True
+    def test_simple_scheduling_error(self):
+        self.set_state(errors={0: 'e1', 1: 'e2'})
+        self.schedule_activity(spec='a1', input='in1', retry=0, delay=0)
+        self.schedule_workflow(spec='w1', input='in2', retry=0, delay=0)
+        self.assert_state(
+            (self.ERROR, 'e1'),
+            (self.ERROR, 'e2')
+        )
+        self.assert_scheduled()
+
+    def test_schedule_delay(self):
+        self.set_state()
+        self.schedule_activity(spec='a1', input='in1', retry=0, delay=10)
+        self.schedule_workflow(spec='w1', input='in2', retry=0, delay=20)
+        self.schedule_activity(spec='a2', input='in3', retry=0, delay=0)
+        self.assert_state(
+            (self.RUNNING, None),
+            (self.RUNNING, None),
+            (self.RUNNING, None)
+        )
+        self.assert_scheduled(
+            ('TIMER', 10, 0),  # 0 for timer, 1 for activity
+            ('TIMER', 20, 2),
+            ('ACTIVITY', 'a2', 4, 'in3'),
         )
 
-    def test_no_scheduler(self):
-        class X(object):
-            a = self._get_uut()
-
-        x = X()
-        self.assertRaises(AttributeError, lambda: x.a())
-
-
-class TestWorkflowProxy(unittest.TestCase):
-    def _get_uut(self):
-        from flowy.task import WorkflowProxy
-        return WorkflowProxy(
-            task_id=s.task_id,
-            workflow_duration=-10,
-            decision_duration='100',
-            task_list=s.task_list,
-            retry=-3,
-            delay='10',
-            error_handling=s.error_handling
+    def test_schedule_retry(self):
+        self.set_state()
+        self.schedule_activity(spec='a1', input='in1', retry=5, delay=0)
+        self.schedule_workflow(spec='w1', input='in2', retry=3, delay=0)
+        self.schedule_activity(spec='a2', input='in3', retry=0, delay=0)
+        self.assert_state(
+            (self.RUNNING, None),
+            (self.RUNNING, None),
+            (self.RUNNING, None)
+        )
+        self.assert_scheduled(
+            ('ACTIVITY', 'a1', 0, 'in1'),  # 1 for activity + 5 retries
+            ('WORKFLOW', 'w1', 6, 'in2'),
+            ('ACTIVITY', 'a2', 10, 'in3'),
         )
 
-    def test_binding(self):
+    def test_schedule_retry_and_delay(self):
+        self.set_state()
+        self.schedule_activity(spec='a1', input='in1', retry=5, delay=10)
+        self.schedule_workflow(spec='w1', input='in2', retry=3, delay=20)
+        self.schedule_activity(spec='a2', input='in3', retry=0, delay=0)
+        self.assert_state(
+            (self.RUNNING, None),
+            (self.RUNNING, None),
+            (self.RUNNING, None)
+        )
+        self.assert_scheduled(
+            ('TIMER', 10, 0),  # 1 for timer, 1 for activity + 5 retries
+            ('TIMER', 20, 7),
+            ('ACTIVITY', 'a2', 12, 'in3'),
+        )
 
-        class X(object):
-            _scheduler = Mock()
-            a = self._get_uut()
+    # TIMER
 
-        x = X()
-        x.a(1, 2, a=1, b=2)
+    def test_skip_timer_and_reschedule(self):
+        self.set_state(results={0: None})
+        self.schedule_activity(spec='a1', input='in1', retry=0, delay=10)
+        self.assert_state(
+            (self.RUNNING, None),
+        )
+        self.assert_scheduled(
+            ('ACTIVITY', 'a1', 1, 'in1'),  # 0 was the timer
+        )
 
-        X._scheduler.remote_subworkflow.assert_called_once_with(
-            args=(1, 2),
-            kwargs=dict(a=1, b=2),
-            args_serializer=X.a._serialize_arguments,
-            result_deserializer=X.a._deserialize_result,
-            task_id=s.task_id,
-            workflow_duration=None,
-            decision_duration=100,
-            task_list='sentinel.task_list',
-            retry=0,
-            delay=10,
-            error_handling=True
+    def test_skip_timer_and_wait(self):
+        self.set_state(results={0: None}, running=[1])
+        self.schedule_activity(spec='a1', input='in1', retry=0, delay=10)
+        self.assert_state(
+            (self.RUNNING, None),
+        )
+        self.assert_scheduled()
+
+    def test_skip_timer_and_result(self):
+        self.set_state(results={0: None, 1: 10})
+        self.schedule_activity(spec='a1', input='in1', retry=0, delay=10)
+        self.assert_state(
+            (self.FOUND, 10),
+        )
+        self.assert_scheduled()
+
+    def test_skip_timer_and_error(self):
+        self.set_state(results={0: None}, errors={1: 'err'})
+        self.schedule_activity(spec='a1', input='in1', retry=0, delay=10)
+        self.assert_state(
+            (self.ERROR, 'err'),
+        )
+        self.assert_scheduled()
+
+    def test_skip_timer_and_timeout(self):
+        self.set_state(results={0: None}, timedout=[1])
+        self.schedule_activity(spec='a1', input='in1', retry=0, delay=10)
+        self.assert_state(
+            (self.TIMEDOUT, None),
+        )
+        self.assert_scheduled()
+
+    # TIMEOUT
+
+    def test_skip_timeouts_and_reschedule(self):
+        self.set_state(timedout=[0, 1, 2])
+        self.schedule_activity(spec='a1', input='in1', retry=3, delay=0)
+        self.assert_state(
+            (self.RUNNING, None),
+        )
+        self.assert_scheduled(
+            ('ACTIVITY', 'a1', 3, 'in1'),  # 0 was the timer
+        )
+
+    def test_skip_timeouts_and_wait(self):
+        self.set_state(timedout=[0, 1, 2], running=[3])
+        self.schedule_activity(spec='a1', input='in1', retry=3, delay=0)
+        self.assert_state(
+            (self.RUNNING, None),
+        )
+        self.assert_scheduled()
+
+    def test_skip_timeouts_and_result(self):
+        self.set_state(timedout=[0, 1, 2], results={3: 30})
+        self.schedule_activity(spec='a1', input='in1', retry=3, delay=0)
+        self.assert_state(
+            (self.FOUND, 30),
+        )
+        self.assert_scheduled()
+
+    def test_skip_timeouts_and_error(self):
+        self.set_state(timedout=[0, 1, 2], errors={3: 'err'})
+        self.schedule_activity(spec='a1', input='in1', retry=3, delay=0)
+        self.assert_state(
+            (self.ERROR, 'err'),
+        )
+        self.assert_scheduled()
+
+    def test_skip_timeouts_and_timeout(self):
+        self.set_state(timedout=[0, 1, 2, 3])
+        self.schedule_activity(spec='a1', input='in1', retry=3, delay=0)
+        self.assert_state(
+            (self.TIMEDOUT, None),
+        )
+        self.assert_scheduled()
+
+    # TIMER and TIMEOUT
+
+    def test_skip_timer_and_timeouts_and_reschedule(self):
+        self.set_state(results={0: None}, timedout=[1, 2, 3])
+        self.schedule_activity(spec='a1', input='in1', retry=3, delay=10)
+        self.assert_state(
+            (self.RUNNING, None),
+        )
+        self.assert_scheduled(
+            ('ACTIVITY', 'a1', 4, 'in1'),  # 0 was the timer
+        )
+
+    def test_skip_timer_and_timeouts_and_wait(self):
+        self.set_state(results={0: None}, timedout=[1, 2, 3], running=[4])
+        self.schedule_activity(spec='a1', input='in1', retry=3, delay=10)
+        self.assert_state(
+            (self.RUNNING, None),
+        )
+        self.assert_scheduled()
+
+    def test_skip_timer_and_timeouts_and_result(self):
+        self.set_state(timedout=[1, 2, 3], results={0: None, 4: 40})
+        self.schedule_activity(spec='a1', input='in1', retry=3, delay=10)
+        self.assert_state(
+            (self.FOUND, 40),
+        )
+        self.assert_scheduled()
+
+    def test_skip_timer_and_timeouts_and_error(self):
+        self.set_state(results={0: None}, timedout=[1, 2, 3],
+                       errors={4: 'err'})
+        self.schedule_activity(spec='a1', input='in1', retry=3, delay=10)
+        self.assert_state(
+            (self.ERROR, 'err'),
+        )
+        self.assert_scheduled()
+
+    def test_skip_timer_and_timeouts_and_timeout(self):
+        self.set_state(results={0: None}, timedout=[1, 2, 3, 4])
+        self.schedule_activity(spec='a1', input='in1', retry=3, delay=10)
+        self.assert_state(
+            (self.TIMEDOUT, None),
+        )
+        self.assert_scheduled()
+
+
+class TestWorkflowBase(TestCase):
+    def set_state(self, running=[], timedout=[], results={}, errors={}):
+        self.scheduler = DummyScheduler()
+        self.Workflow = self.make_workflow()
+        self.workflow = self.Workflow(self.scheduler, '[[], {}]', 'token',
+                                      running, timedout, results, errors,
+                                      None, None)
+        self.workflow()
+
+    def assert_scheduled(self, *state):
+        return self.assertEquals(self.scheduler.state, list(state))
+
+
+class TestSimpleWorkflow(TestWorkflowBase):
+
+    def make_workflow(self):
+        from flowy.task import _SWFWorkflow
+        from flowy.proxy import SWFActivityProxy
+
+        class MyWorkflow(_SWFWorkflow):
+
+            a = SWFActivityProxy(name='a', version=1)
+            b = SWFActivityProxy(name='b', version=1)
+            c = SWFActivityProxy(name='c', version=1)
+
+            def run(self):
+                a = self.a('a_input')
+                b = self.b('b_input')
+                return self.c(a, b)
+
+        return MyWorkflow
+
+    def test_initial_run(self):
+        self.set_state()
+        self.assert_scheduled(
+            ('ACTIVITY', self.Workflow.a._spec, 0, '[["a_input"], {}]'),
+            ('ACTIVITY', self.Workflow.b._spec, 4, '[["b_input"], {}]'),
+            'FLUSH'
+        )
+
+    def test_wait_for_b(self):
+        self.set_state(results={0: '1'}, running=[4])
+        self.assert_scheduled(
+            'FLUSH'
+        )
+
+    def test_schedule_c(self):
+        self.set_state(results={0: '1', 4: '2'})
+        self.assert_scheduled(
+            ('ACTIVITY', self.Workflow.c._spec, 8, '[[1, 2], {}]'),
+            'FLUSH'
+        )
+
+    def test_wait_for_c(self):
+        self.set_state(results={0: '1', 4: '2'}, running=[8])
+        self.assert_scheduled(
+            'FLUSH'
+        )
+
+    def test_finish(self):
+        self.set_state(results={0: '1', 4: '2', 8: '3'})
+        self.assert_scheduled(
+            ('COMPLETE', '3'),
+        )
+
+    def test_error(self):
+        self.set_state(errors={0: 'err'}, running=[4])
+        self.assert_scheduled(
+            ('FAIL', 'err'),
+            'FLUSH'
+        )
+
+    def test_return_error(self):
+        self.set_state(results={0: '1', 4: '2'}, errors={8: 'err'})
+        self.assert_scheduled(
+            ('FAIL', 'err'),
+            'FLUSH',
+        )
+
+
+class TestErrorBubblingWorkflow(TestWorkflowBase):
+
+    def make_workflow(self):
+        from flowy.task import _SWFWorkflow
+        from flowy.proxy import SWFActivityProxy
+        from flowy.exception import TaskError
+
+        class MyWorkflow(_SWFWorkflow):
+
+            a = SWFActivityProxy(name='a', version=1, error_handling=True)
+            b = SWFActivityProxy(name='b', version=1, error_handling=True)
+            c = SWFActivityProxy(name='c', version=1, error_handling=True)
+
+            def run(self):
+                a = self.a('a_input')
+                self.b(a)
+                try:
+                    a.result()
+                except TaskError:
+                    return self.c(a)
+                return 100
+
+        return MyWorkflow
+
+    def test_error_bubbling(self):
+        self.set_state(errors={0: 'err'})
+        self.assert_scheduled(
+            ('FAIL', 'err'),
+        )
+
+    def test_error_silent(self):
+        self.set_state(results={0: '0'}, errors={4: 'err'})
+        self.assert_scheduled(
+            ('COMPLETE', '100'),
+        )
+
+
+class TestExceptionInWorkflow(TestWorkflowBase):
+
+    def make_workflow(self):
+        from flowy.task import _SWFWorkflow
+
+        class MyWorkflow(_SWFWorkflow):
+
+            def run(self):
+                raise ValueError('err')
+
+        return MyWorkflow
+
+    def test_error_bubbling(self):
+        self.set_state()
+        self.assert_scheduled(
+            ('FAIL', 'err'),
+        )
+
+
+class TestResultBlocksWorkflow(TestWorkflowBase):
+
+    def make_workflow(self):
+        from flowy.task import _SWFWorkflow
+        from flowy.proxy import SWFActivityProxy
+
+        class MyWorkflow(_SWFWorkflow):
+
+            a = SWFActivityProxy(name='a', version=1)
+            b = SWFActivityProxy(name='b', version=1)
+
+            def run(self):
+                a = self.a('a_input')
+                a.result()
+                self.b('b_input')
+
+        return MyWorkflow
+
+    def test_a_blocks_when_scheduled(self):
+        self.set_state()
+        self.assert_scheduled(
+            ('ACTIVITY', self.Workflow.a._spec, 0, '[["a_input"], {}]'),
+            'FLUSH'
+        )
+
+    def test_a_blocks_when_running(self):
+        self.set_state(running=[0])
+        self.assert_scheduled(
+            'FLUSH'
+        )
+
+    def test_a_doesnt_block_when_finished(self):
+        self.set_state(results={0: '0'})
+        self.assert_scheduled(
+            ('ACTIVITY', self.Workflow.b._spec, 4, '[["b_input"], {}]'),
+            'FLUSH'
         )
