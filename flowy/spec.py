@@ -180,6 +180,11 @@ class SWFWorkflowSpec(object):
             task_list=_str_or_none(self._task_list),
             input=str(input),
             tag_list=_tags_encode(tags))
+        CANWEDA = 'continueAsNewWorkflowExecutionDecisionAttributes'
+        last_decision_attrs = swf_decisions._data[-1][CANWEDA]
+        STCT, TSTCT = 'startToCloseTimeout', 'taskStartToCloseTimeout'
+        if STCT in last_decision_attrs:
+            last_decision_attrs[TSTCT] = last_decision_attrs.pop(STCT)
 
     def schedule(self, swf_decisions, call_id, input):
         decision_duration, workflow_duration = self._timers_encode()
