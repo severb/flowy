@@ -43,9 +43,10 @@ class Layer1Recorder(Layer1):
                 action, body, object_hook
             )
             if result is not None:
+                run_id = result.get('workflowExecution', {}).get('runId')
                 if self.run_id is None:
-                    self.run_id = result.get('runId')
-                if result.get('runId') == self.run_id:
+                    self.run_id = run_id
+                if run_id == self.run_id:
                     self.task_token = result.get('taskToken')
         except Exception as e:
             self._print_in(e.__class__.__name__)

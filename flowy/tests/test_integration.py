@@ -25,6 +25,7 @@ test_modules = [
     ('flowy.tests.integration.mapreduce', 'IntegrationTest'),
     ('flowy.tests.integration.options', 'IntegrationTest'),
     ('flowy.tests.integration.errors', 'IntegrationTest'),
+    ('flowy.tests.integration.werrors', 'IntegrationTest'),
     ('flowy.tests.integration.heartbeat', 'IntegrationTest'),
     ('flowy.tests.integration.restart', 'IntegrationTest'),
     ('flowy.tests.integration.long', 'IntegrationTest'),
