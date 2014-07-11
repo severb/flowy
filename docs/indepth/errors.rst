@@ -1,6 +1,6 @@
-.. _transport:
+.. _error:
 
-Data Transport
+Error Handling
 ==============
 
 

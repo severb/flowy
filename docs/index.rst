@@ -1,14 +1,14 @@
-Flowy Library Documentation
-===========================
+Flowy Documentation
+===================
 
 
-`Flowy`_ is a library that makes it easy to write distributed asynchronous
-workflows. Using Flowy you can write many dependend jobs and put them in a
-queue for asynchronous execution but without the spaghetti code. It uses
-`Amazon SWF`_ as a backend. It's ideal for applications that deal with media
-encoding, long-running tasks or background processing.
+`Flowy`_ is a library for distributed asynchronous workflows built on top of
+`Amazon SWF`_. With Flowy you can write many dependend jobs and put them in a
+queue for asynchronous execution but without the spaghetti code.  It's ideal
+for applications that deal with media encoding, long-running tasks or
+background processing.
 
-A toy map-reduce workflow using Flowy looks like this::
+A toy map-reduce workflow with Flowy looks like this::
 
     @workflow(version='0.1-example')
     class SumSquares(Workflow):
@@ -20,7 +20,7 @@ A toy map-reduce workflow using Flowy looks like this::
                     squares = map(self.square, range(n))
                     return self.sum(*squares)
 
-Before you start you should read the :ref:`SWF Introduction <introduction>`. It
+Before you start you should read the :ref:`intro`. It
 explains important concepts about the execution model of the workflows. Next,
 you should follow :ref:`the tutorial <tutorial>`. It provides a narrative
 introduction of the most important features of Flowy and a complete example of
@@ -35,6 +35,15 @@ Flowy is available on the Python Package Index. To install it use `pip`_::
     pip install flowy
 
 
+Introduction
+------------
+
+.. toctree::
+    :maxdepth: 2
+
+    introduction/intro
+
+
 Tutorial
 --------
 
@@ -44,21 +53,34 @@ Tutorial
     tutorial/tutorial
 
 
-In Depth
+In depth
 --------
+.. toctree::
+    :maxdepth: 2
+
+    indepth/errors
+    indepth/transport
+    indepth/options
+    indepth/versioning
+
+
+Development
+-----------
 
 .. toctree::
     :maxdepth: 2
 
-    indepth/activity
-    indepth/workflow
-    indepth/error
-    indepth/settings
-    indepth/transport
-    indepth/versioning
-    indepth/production
-    indepth/contribute
+    dev/production
+    dev/faq
+    dev/changelog
+    dev/contribute
 
+
+API Reference
+-------------
+
+.. toctree::
+    reference/reference
 
 
 .. _Flowy: http://github.com/pbs/flowy/
