@@ -53,7 +53,7 @@ Tutorial
     tutorial/tutorial
 
 
-In depth
+In Depth
 --------
 .. toctree::
     :maxdepth: 2
