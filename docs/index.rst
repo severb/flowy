@@ -35,51 +35,27 @@ Flowy is available on the Python Package Index. To install it use `pip`_::
     pip install flowy
 
 
-Introduction
-------------
+.. include:: dev/changelog.rst
+
 
 .. toctree::
     :maxdepth: 2
+    :hidden:
 
     introduction/intro
 
-
-Tutorial
---------
-
-.. toctree::
-    :maxdepth: 2
-
     tutorial/tutorial
-
-
-In Depth
---------
-.. toctree::
-    :maxdepth: 2
 
     indepth/errors
     indepth/transport
     indepth/options
-    indepth/versioning
 
-
-Development
------------
-
-.. toctree::
-    :maxdepth: 2
-
+    dev/versioning
     dev/production
     dev/faq
     dev/changelog
     dev/contribute
 
-
-API Reference
--------------
-
-.. toctree::
     reference/reference
 
 
