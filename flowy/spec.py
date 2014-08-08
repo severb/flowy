@@ -294,9 +294,10 @@ def _timer_encode(val, name):
 
 def _tags_encode(tags):
     if tags is not None:
-        tags = set(map(str, tags))
+        tags = list(set(map(str, tags)))
         if len(tags) > 5:
             raise ValueError('Cannot set more than 5 tags')
+    return tags
 
 
 def _str_or_none(val):
