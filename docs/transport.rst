@@ -1,5 +1,3 @@
-.. _transport:
-
 Data Transport
 ==============
 

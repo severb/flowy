@@ -1,11 +1,10 @@
-.. _intro:
-
-SWF Introduction
+Granular Options
 ================
 
 
 Subtitle1
 ---------
+
 
 Subtitle2
 ---------

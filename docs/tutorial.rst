@@ -1,7 +1,5 @@
-.. contribute::
-
-Contribute
-==========
+Tutorial
+========
 
 
 Subtitle1

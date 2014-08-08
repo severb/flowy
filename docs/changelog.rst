@@ -1,7 +1,5 @@
-.. _tutorial:
-
-Tutorial
-========
+Changelog
+=========
 
 
 Subtitle1

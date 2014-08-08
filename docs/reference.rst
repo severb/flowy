@@ -1,5 +1,3 @@
-.. reference::
-
 API Reference
 =============
 

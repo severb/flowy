@@ -1,12 +1,9 @@
-.. changelog::
-
-Changelog
-=========
+SWF Introduction
+================
 
 
 Subtitle1
 ---------
-
 
 Subtitle2
 ---------

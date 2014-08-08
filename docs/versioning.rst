@@ -1,7 +1,5 @@
-.. faq::
-
-FAQ
-===
+Task Versioning
+===============
 
 
 Subtitle1

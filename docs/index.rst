@@ -20,11 +20,10 @@ A toy map-reduce workflow with Flowy looks like this::
                     squares = map(self.square, range(n))
                     return self.sum(*squares)
 
-Before you start you should read the :ref:`intro`. It
-explains important concepts about the execution model of the workflows. Next,
-you should follow :ref:`the tutorial <tutorial>`. It provides a narrative
-introduction of the most important features of Flowy and a complete example of
-a workflow.
+Before you start you should read the :doc:`introduction`. It explains important
+concepts about the execution model of the workflows. Next, you should follow
+:doc:`the tutorial <tutorial>`. It provides a narrative introduction of the
+most important features of Flowy and a complete example of a workflow.
 
 
 Installation
@@ -35,28 +34,29 @@ Flowy is available on the Python Package Index. To install it use `pip`_::
     pip install flowy
 
 
-.. include:: dev/changelog.rst
+.. include:: changelog.rst
 
 
 .. toctree::
     :maxdepth: 2
     :hidden:
 
-    introduction/intro
+    introduction
 
-    tutorial/tutorial
+    tutorial
 
-    indepth/errors
-    indepth/transport
-    indepth/options
+    errors
+    transport
+    options
 
-    dev/versioning
-    dev/production
-    dev/faq
-    dev/changelog
-    dev/contribute
+    versioning
+    production
+    faq
+    contribute
 
-    reference/reference
+    changelog
+
+    reference
 
 
 .. _Flowy: http://github.com/pbs/flowy/

@@ -1,7 +1,5 @@
-.. _error:
-
-Error Handling
-==============
+Contribute
+==========
 
 
 Subtitle1

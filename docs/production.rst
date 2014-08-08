@@ -1,5 +1,3 @@
-.. production::
-
 Production Setup
 ================
 
