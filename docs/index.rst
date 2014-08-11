@@ -22,8 +22,8 @@ A toy map-reduce workflow with Flowy looks like this::
 
 Before you start you should read the :doc:`introduction`. It explains important
 concepts about the execution model of the workflows. Next, you should follow
-:doc:`the tutorial <tutorial>`. It provides a narrative introduction of the
-most important features of Flowy and a complete example of a workflow.
+the :doc:`tutorial`. It provides a narrative introduction of the most important
+features of Flowy and a complete example of a workflow.
 
 
 Installation
