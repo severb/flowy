@@ -1,15 +1,19 @@
 import logging
 import logging.config
+import os
+import socket
 import sys
 import uuid
 from contextlib import contextmanager
 
 from boto.swf.layer1 import Layer1
 
-from flowy.poller import SWFActivityPoller, SWFWorkflowPoller
+from flowy.poller import SWFActivityPoller
+from flowy.poller import SWFWorkflowPoller
 from flowy.proxy import serialize_args
 from flowy.scanner import SWFScanner
-from flowy.spec import _sentinel, SWFWorkflowSpec
+from flowy.spec import _sentinel
+from flowy.spec import SWFWorkflowSpec
 from flowy.task import AsyncSWFActivity
 from flowy.util import MagicBind
 from flowy.worker import SingleThreadedWorker
@@ -19,10 +23,13 @@ logger = logging.getLogger(__name__)
 
 
 def start_activity_worker(domain, task_list, layer1=None, reg_remote=True,
-                          loop=-1, package=None, ignore=None, setup_log=True):
+                          loop=-1, package=None, ignore=None, setup_log=True,
+                          identity=None):
     if setup_log:
         _setup_default_logger()
-    swf_client = _get_client(layer1, domain)
+    if identity is None:
+        identity = _default_identity()
+    swf_client = _get_client(layer1, domain, identity)
     scanner = SWFScanner()
     scanner.scan_activities(package=package, ignore=ignore, level=1)
     poller = SWFActivityPoller(swf_client, task_list, scanner)
@@ -41,10 +48,13 @@ def start_activity_worker(domain, task_list, layer1=None, reg_remote=True,
 
 
 def start_workflow_worker(domain, task_list, layer1=None, reg_remote=True,
-                          loop=-1, package=None, ignore=None, setup_log=True):
+                          loop=-1, package=None, ignore=None, setup_log=True,
+                          identity=None):
     if setup_log:
         _setup_default_logger()
-    swf_client = _get_client(layer1, domain)
+    if identity is None:
+        identity = _default_identity()
+    swf_client = _get_client(layer1, domain, identity)
     scanner = SWFScanner()
     scanner.scan_workflows(package=package, ignore=ignore, level=1)
     poller = SWFWorkflowPoller(swf_client, task_list, scanner)
@@ -77,10 +87,15 @@ def workflow_starter(domain, name, version, task_list=None,
     return SWFWorkflowStarter(spec, client, id, tags)
 
 
-def _get_client(layer1, domain):
+def _get_client(layer1, domain, identity=None):
     if layer1 is None:
         layer1 = Layer1()
-    return MagicBind(layer1, domain=str(domain))
+    return MagicBind(layer1, domain=str(domain), identity=str(identity))
+
+
+def _default_identity():
+    id = "%s-%s" % (socket.getfqdn(), os.getpid())
+    return id[-256:]
 
 
 class SWFWorkflowStarter(object):

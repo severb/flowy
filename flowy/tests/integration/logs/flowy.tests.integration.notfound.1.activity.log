@@ -1,2 +1,2 @@
->>>	PollForActivityTask	{"domain": "IntegrationTest", "taskList": {"name": "example_list2"}}
+>>>	PollForActivityTask	{"domain": "IntegrationTest", "taskList": {"name": "example_list2"}, "identity": "ATestID"}
 <<<	{"startedEventId": 0}
