@@ -90,7 +90,9 @@ def workflow_starter(domain, name, version, task_list=None,
 def _get_client(layer1, domain, identity=None):
     if layer1 is None:
         layer1 = Layer1()
-    return MagicBind(layer1, domain=str(domain), identity=str(identity))
+    if identity is not None:
+        identity = str(identity)
+    return MagicBind(layer1, domain=str(domain), identity=identity)
 
 
 def _default_identity():
