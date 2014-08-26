@@ -2,7 +2,7 @@
 <<<	SWFTypeAlreadyExistsError
 >>>	DescribeActivityType	{"domain": "IntegrationTest", "activityType": {"version": "1", "name": "Heartbeat"}}
 <<<	{"configuration": {}, "typeInfo": {"status": "REGISTERED", "creationDate": 1404382860.15, "activityType": {"version": "1", "name": "Heartbeat"}}}
->>>	PollForActivityTask	{"domain": "IntegrationTest", "taskList": {"name": "example_list2"}}
+>>>	PollForActivityTask	{"domain": "IntegrationTest", "taskList": {"name": "example_list2"}, "identity": "ATestID"}
 <<<	{"activityType": {"version": "1", "name": "Heartbeat"}, "workflowExecution": {"workflowId": "testintegration", "runId": "12bChDZKZxhQ9YP779iEIDXHCzactdNYZ2gqxPu29mk5o="}, "startedEventId": 12, "activityId": "1", "input": "[[], {}]", "taskToken": "AAAAKgAAAAIAAAAAAAAAAiHwAiXY4TpapAOUd9+iOtooTKguhItkdgEfjSXgJJpnvghoaAD2WJhZyDDzD6GB5CPUcPezRBJPFKj24j72eeHIoRmA2t8yl3Pks5tIrSqXAFlETAsPjOWLQuYpRYop7Sywku5fIsPJwbGL28o7hS24oS2pKx/VONPbCQgGF6VfnSztUm4eC+ozxnc6oc/qqJgSZdQ8ED4rE7BNjxx6/Xjwg1L3q1uaCXt5CJUJ4n/v9aCnhMxKFeCz99U4kU7WsGR7Ri57graDtilIOxxJxuknu/wYTgtT3048z72+lOUj"}
 >>>	RecordActivityTaskHeartbeat	{"taskToken": "AAAAKgAAAAIAAAAAAAAAAiHwAiXY4TpapAOUd9+iOtooTKguhItkdgEfjSXgJJpnvghoaAD2WJhZyDDzD6GB5CPUcPezRBJPFKj24j72eeHIoRmA2t8yl3Pks5tIrSqXAFlETAsPjOWLQuYpRYop7Sywku5fIsPJwbGL28o7hS24oS2pKx/VONPbCQgGF6VfnSztUm4eC+ozxnc6oc/qqJgSZdQ8ED4rE7BNjxx6/Xjwg1L3q1uaCXt5CJUJ4n/v9aCnhMxKFeCz99U4kU7WsGR7Ri57graDtilIOxxJxuknu/wYTgtT3048z72+lOUj"}
 <<<	{"cancelRequested": false}
@@ -10,5 +10,5 @@
 <<<	{"cancelRequested": false}
 >>>	RespondActivityTaskCompleted	{"result": "null", "taskToken": "AAAAKgAAAAIAAAAAAAAAAiHwAiXY4TpapAOUd9+iOtooTKguhItkdgEfjSXgJJpnvghoaAD2WJhZyDDzD6GB5CPUcPezRBJPFKj24j72eeHIoRmA2t8yl3Pks5tIrSqXAFlETAsPjOWLQuYpRYop7Sywku5fIsPJwbGL28o7hS24oS2pKx/VONPbCQgGF6VfnSztUm4eC+ozxnc6oc/qqJgSZdQ8ED4rE7BNjxx6/Xjwg1L3q1uaCXt5CJUJ4n/v9aCnhMxKFeCz99U4kU7WsGR7Ri57graDtilIOxxJxuknu/wYTgtT3048z72+lOUj"}
 <<<	null
->>>	PollForActivityTask	{"domain": "IntegrationTest", "taskList": {"name": "example_list2"}}
+>>>	PollForActivityTask	{"domain": "IntegrationTest", "taskList": {"name": "example_list2"}, "identity": "ATestID"}
 <<<	{"startedEventId": 0}

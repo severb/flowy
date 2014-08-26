@@ -113,13 +113,15 @@ if __name__ == '__main__':
             task_list=run['task_list'],
             layer1=activity_client,
             package=module,
+            identity='ATestID'
         )
         start_workflow = functools.partial(
             start_workflow_worker,
             domain=args.domain,
             task_list=run['task_list'],
             package=module,
-            layer1=workflow_client
+            layer1=workflow_client,
+            identity='WTestID'
         )
 
         activity_thread = threading.Thread(target=start_activity)

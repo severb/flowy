@@ -102,7 +102,8 @@ def make_workflow_runner(log_path, package, domain, task_list):
         start_workflow_worker(domain, task_list, layer1=layer1,
                               package=package,
                               loop=len(layer1),
-                              setup_log=False)
+                              setup_log=False,
+                              identity='WTestID')
     return test
 
 
@@ -112,7 +113,8 @@ def make_activity_runner(log_path, package, domain, task_list):
         start_activity_worker(domain, task_list, layer1=layer1,
                               package=package,
                               loop=len(layer1),
-                              setup_log=False)
+                              setup_log=False,
+                              identity='ATestID')
     return test
 
 
