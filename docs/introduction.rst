@@ -1,10 +1,10 @@
 SWF Introduction
 ================
 
-Before we start using Flowy lets get familiar with what Amazon SWF is and how
-it works. If you already know this stuff you can skip and head straight to the
-Tutorial. If you never used SWF before then you should continue reading because
-we'll be using a lot the concepts and the terms we introduce here.
+Before we start using Flowy lets get familiar with Amazon SWF. If you already
+know how SWF works you can head straight to the Tutorial. If you never used SWF
+before then you should continue reading because we'll be using a lot the
+concepts and the terms we introduce here.
 
 SWF is a web service offered by Amazon as part of their Cloud Computing
 Services. It's advertised as something that helps you build, run, and scale
@@ -27,3 +27,48 @@ we do this with long polling. Here's a diagram of this process:
    :align: center
 
    Polling tasks from the task lists using HTTP long polling
+
+Here we can see the two different types of task lists in action:
+
+* The activities task list is like your regular job queue, each activity
+  represents a specific task, part of a workflow. The activity workers consume
+  this task list, polling and executing activities in a never ending loop. You
+  can have many workers of this type doing the polling and executing tasks in
+  parallel.
+
+* The decisions task list is  similar with the activities task list. You have
+  some workers polling decisions and executing them in a never ending loop. The
+  difference between a decision and an activity is that the decision doesn't do
+  any actual processing. The decisions act as coordinators for activities. You
+  can say that a workflow logic is the sum of all decisions needed for it. At
+  the same time the actual computation of a workflow is the sum of all
+  activities executed.
+
+
+Polling activities
+------------------
+
+Lets focus on running activities now. We said earlier that activities are just
+like your regular jobs in a job queue. But we didn't mention what happens after
+an activity is executed. Where does the result go and how does that affect the
+workflow?
+
+.. figure:: imgs/swf_activities.png
+   :align: center
+
+   Polling and running activities
+
+This is the entire lifetime of an activity. Lets go over it step by step:
+
+1. The worker starts by long polling the SWF web service.
+2. As soon as there is an activity waiting in the activity task list it will be
+   sent to one (and only one) of the listening workers. *(We'll see later how an
+   activity is added to a task list.)*
+3. Each activity has two parts: an identity composed by a name and a version
+   and some input data. After a worker retrieved an activity it uses the
+   identity to locate the corresponding code and launches it passing the input
+   data. Note that there is no code passed with the activity so the worker must
+   know the activity code beforehand.
+4. After the activity is executed the final result is sent back to SWF.
+5. When the result is sent, a new decision will automatically be added in the
+   decisions task list.
