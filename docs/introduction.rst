@@ -17,7 +17,7 @@ behavior that queues don't have. But for now we're better of if we're thinking
 of them as queues.
 
 
-Polling tasks
+Polling Tasks
 -------------
 
 One of the things that we usually do with queues is to pop values out. In SWF
@@ -45,7 +45,7 @@ Here we can see the two different types of task lists in action:
   activities executed.
 
 
-Polling activities
+Activity Lifecycle
 ------------------
 
 Lets focus on running activities now. We said earlier that activities are just
@@ -58,7 +58,7 @@ workflow?
 
    Polling and running activities
 
-This is the entire lifetime of an activity. Lets go over it step by step:
+This is the entire lifecycle of an activity. Lets go over it step by step:
 
 1. The worker starts by long polling the SWF web service.
 2. As soon as there is an activity waiting in the activity task list it will be
@@ -72,3 +72,7 @@ This is the entire lifetime of an activity. Lets go over it step by step:
 4. After the activity is executed the final result is sent back to SWF.
 5. When the result is sent, a new decision will automatically be added in the
    decisions task list.
+
+
+Decision Lifecycle
+------------------
