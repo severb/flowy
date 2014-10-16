@@ -19,6 +19,7 @@ setup(
     install_requires=['boto==2.19.0', 'venusian>=1.0a8'],
     tests_require=['coverage'],
     test_suite="nose.collector",
+    extras_require={'docs': ['sphinx', 'sphinx_rtd_theme']},
     entry_points={
         "console_scripts": [
             "flowy = flowy.__main__:main"

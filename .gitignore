@@ -35,3 +35,6 @@ cover/
 .project
 .pydevproject
 docs/_build/
+
+# virtualfish connect
+.venv

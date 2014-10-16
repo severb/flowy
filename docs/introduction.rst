@@ -60,15 +60,15 @@ workflow?
 
 This is the entire lifecycle of an activity. Lets go over it step by step:
 
-1. The worker starts by long polling the SWF web service.
-2. As soon as there is an activity waiting in the activity task list it will be
-   sent to one (and only one) of the listening workers. *(We'll see later how an
-   activity is added to a task list.)*
-3. Each activity has two parts: an identity composed by a name and a version
-   and some input data. After a worker retrieved an activity it uses the
-   identity to locate the corresponding code and launches it passing the input
-   data. Note that there is no code passed with the activity so the worker must
-   know the activity code beforehand.
+1. The activity workers start by long polling the SWF web service.
+2. As soon as there is an activity waiting in the activities task list it will
+   be sent to one (and only one) of the listening workers. *(We'll see later
+   how an activity is added to a task list.)*
+3. Each scheduled activity has two parts: an identity composed by a name and a
+   version and some input data. After a worker retrieved an activity it uses
+   the identity to locate the corresponding code and launches it passing the
+   input data. *Note that there is no code passed with the activity so the
+   worker must know the activity code beforehand.*
 4. After the activity is executed the final result is sent back to SWF.
 5. When the result is sent, a new decision will automatically be added in the
    decisions task list.
@@ -76,3 +76,34 @@ This is the entire lifecycle of an activity. Lets go over it step by step:
 
 Decision Lifecycle
 ------------------
+
+Decisions are similar with activities in how they run but serve a different
+purpose. Instead of executing different types of data processing, a decision
+orchestrates activities based on the current workflow execution history.
+
+.. figure:: imgs/swf_decisions.png
+   :align: center
+
+   Polling and running decisions
+
+As you can see, this diagram is very similar with the previous one but the
+direction of the arrows is reversed. Lets go again over all the steps one by
+one:
+
+1. The workflow workers start by long polling the SWF web service.
+2. As soon as there is a decision waiting in the decisions task list it will be
+   sent to one (and only one) of the listening workers. *(As we already saw,
+   when an activity is completed and sends back its result, a decision is
+   automatically added in the task list).*
+3. Each scheduled decision has two parts: an identity composed by a name and a
+   version and an execution history. The execution history contains the entire
+   state of the workflow: the previous activities that have been scheduled,
+   their status and results. The worker identifies the corresponding workflow
+   logic using the identity and figures out what other activities can be
+   scheduled if any.
+4. It then sends back the list of new activities that have been scheduled,
+   together with their input data.
+5. The activities that have been scheduled will appear on the activities task
+   list to be consumed by the activity workers which in turn create more
+   decisions. The cycle repeats itself until a decision chooses to finish the
+   workflow.
