@@ -107,3 +107,12 @@ one:
    list to be consumed by the activity workers which in turn create more
    decisions. The cycle repeats itself until a decision chooses to finish the
    workflow.
+
+
+Execution Timeout
+-----------------
+
+.. figure:: imgs/swf_timeouts.png
+   :align: center
+
+   Different types of execution timeouts
