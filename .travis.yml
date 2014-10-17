@@ -7,7 +7,7 @@ before_install:
 language: python
 install: pip install coveralls
 python:
-  # - "2.6"
+  - "2.6"
   - "2.7"
   - "pypy"
   # - "3.2"
