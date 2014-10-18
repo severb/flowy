@@ -4,6 +4,9 @@
 .. image:: https://coveralls.io/repos/pbs/flowy/badge.png?branch=master
    :target: https://coveralls.io/r/pbs/flowy?branch=master
 
+.. image:: https://landscape.io/github/pbs/flowy/master/landscape.png
+    :target: https://landscape.io/github/pbs/flowy/master
+
 .. image:: https://pypip.in/version/flowy/badge.png
    :target: https://pypi.python.org/pypi/flowy/
 
