@@ -61,7 +61,7 @@ class SWFWorkflowPoller(object):
         # the first page sometimes contains an empty events list, because
         # of that we can't get the WorkflowExecutionStarted before the
         # events generator is created - is this an Amazon SWF bug?
-        first_event = all_events.next()
+        first_event = next(all_events)
         input = _parse_input(first_event)
         spec = _parse_spec(first_event, self._spec_factory)
         tags = _parse_tags(first_event)

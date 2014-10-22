@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import argparse
 import functools
 import importlib
@@ -27,12 +29,12 @@ class Layer1Recorder(Layer1):
     def _print_out(self, msg):
         m = '>>>\t%s' % msg
         self.f.write("%s\n" % m)
-        print ("\t%s..." if len(m) > 79 else "\t%s") % m[:79]
+        print(("\t%s..." if len(m) > 79 else "\t%s") % m[:79])
 
     def _print_in(self, msg):
         m = '<<<\t%s' % msg
         self.f.write("%s\n" % m)
-        print ("\t%s..." if len(m) > 79 else "\t%s") % m[:79]
+        print(("\t%s..." if len(m) > 79 else "\t%s") % m[:79])
 
     def make_request(self, action, body, object_hook=None):
         if self.close:
@@ -68,9 +70,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
     module = importlib.import_module(args.module)
 
-    print 'Found %s different runs in %s.' % (len(module.runs), module)
+    print('Found %s different runs in %s.' % (len(module.runs), module))
     for i, run in enumerate(module.runs):
-        print 'Iteration %s:' % i
+        print('Iteration %s:' % i)
         workflow_file_name = module.__name__ + '.%s.workflow.log' % i
         activity_file_name = module.__name__ + '.%s.activity.log' % i
         logs = os.path.join(os.path.dirname(__file__), 'integration', 'logs')
@@ -127,25 +129,25 @@ if __name__ == '__main__':
         activity_thread = threading.Thread(target=start_activity)
         workflow_thread = threading.Thread(target=start_workflow)
 
-        print 'Starting activity worker thread.'
+        print('Starting activity worker thread.')
         activity_thread.start()
-        print 'Starting workflow worker thread.'
+        print('Starting workflow worker thread.')
         workflow_thread.start()
 
-        print 'Waiting 5 seconds for everything to register...'
+        print('Waiting 5 seconds for everything to register...')
         time.sleep(5)
 
-        print 'Starting workflow.'
+        print('Starting workflow.')
         # don't let the starter consume the first uuid4
         with starter.options(id='testintegration'):
             starter.start(*run.get('args', []), **run.get('kwargs', {}))
 
-        print 'Waiting for the workflow thread...'
+        print('Waiting for the workflow thread...')
         workflow_thread.join()
-        print 'Waiting 5 seconds for timed-out tasks to finish...'
+        print('Waiting 5 seconds for timed-out tasks to finish...')
         time.sleep(5)
         activity_client.close = True
-        print 'Waiting for the activity thread (this may take a while)...'
+        print('Waiting for the activity thread (this may take a while)...')
         activity_thread.join()
 
         # patch uuid4

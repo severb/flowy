@@ -8,6 +8,7 @@ language: python
 install: pip install coveralls
 python:
   - "2.7"
+  - "3.4"
   - "pypy"
 script: python setup.py nosetests
 after_success: coveralls

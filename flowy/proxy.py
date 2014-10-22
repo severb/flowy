@@ -13,6 +13,11 @@ deserialize_result = staticmethod(json.loads)
 
 class TaskProxy(object):
 
+    Error = Error
+    Placeholder = Placeholder
+    Result = Result
+    Timeout = Timeout
+
     timeout_message = "A task has timed-out"
 
     def __init__(self, retry=3, delay=0, error_handling=False):
@@ -52,31 +57,31 @@ class TaskProxy(object):
         input = self._serialize_arguments(*args, **kwargs)
         state, value = self._schedule(task, input)
         if state == task._FOUND:
-            return Result(self._deserialize_result(value))
+            return self.Result(self._deserialize_result(value))
         elif state == task._RUNNING:
-            return Placeholder()
+            return self.Placeholder()
         elif state == task._ERROR:
             if self._error_handling:
-                return Error(value)
+                return self.Error(value)
             task.fail(value)
-            return Placeholder()
+            return self.Placeholder()
         elif state == task._TIMEDOUT:
             if self._error_handling:
-                return Timeout(self.timeout_message)
+                return self.Timeout(self.timeout_message)
             task.fail(self.timeout_message)
-            return Placeholder()
+            return self.Placeholder()
 
     def _args_based_result(self, task, args, kwargs):
         args = tuple(args) + tuple(kwargs.values())
         error_message = self._errs_in_args(args)
         if error_message:
             if self._error_handling:
-                return Error(error_message)
+                return self.Error(error_message)
             else:
                 task.fail(error_message)
-                return Placeholder()
+                return self.Placeholder()
         if self._deps_in_args(args):
-            return Placeholder()
+            return self.Placeholder()
 
     def _deps_in_args(self, args):
         return any(isinstance(r, Placeholder) for r in args)

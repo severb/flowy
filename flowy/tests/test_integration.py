@@ -45,7 +45,7 @@ class Layer1Playback(Layer1):
                 skip += 1
             if action == 'PollForDecisionTask' and data.get('nextPageToken'):
                 skip += 1
-        return (len(self.responses) - skip) / 2
+        return (len(self.responses) - skip) // 2
 
     def __init__(self, log_file):
         self.responses = []
@@ -74,7 +74,7 @@ class Layer1Playback(Layer1):
                       " Expected action: %s. Actual action: %s.")
         assert next_action == action, action_msg % (next_action, action)
         data_msg = ("Request data doesn't match."
-                    " Expected data:\n%s\nActual data:\n%s\n")
+                    " Expected data:\n%r\nActual data:\n%r\n")
         assert next_data == data, data_msg % (pf(next_data), pf(data))
         next_response = next(self.responses_i)
         try:
@@ -90,7 +90,8 @@ class Layer1Playback(Layer1):
 class TestIntegration(unittest.TestCase):
     def setUp(self):
         self._old_uuid4 = uuid.uuid4
-        uuid.uuid4 = itertools.count(1000).next
+        c = itertools.count(1000)
+        uuid.uuid4 = lambda: next(c)
 
     def tearDown(self):
         uuid.uuid4 = self._old_uuid4
