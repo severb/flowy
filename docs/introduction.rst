@@ -2,9 +2,9 @@ SWF Introduction
 ================
 
 Before we start using Flowy lets get familiar with Amazon SWF. If you already
-know how SWF works you can head straight to the Tutorial. If you never used SWF
-before then you should continue reading because we'll be using a lot the
-concepts and the terms we introduce here.
+know how SWF works you can head straight to the :doc:`tutorial`. If you never
+used SWF before then you should continue reading because this will help you
+better understand how the library works.
 
 SWF is a web service offered by Amazon as part of their Cloud Computing
 Services. It's advertised as something that helps you build, run, and scale
@@ -33,8 +33,7 @@ Here we can see the two different types of task lists in action:
 * The activities task list is like your regular job queue, each activity
   represents a specific task, part of a workflow. The activity workers consume
   this task list, polling and executing activities in a never ending loop. You
-  can have many workers of this type doing the polling and executing tasks in
-  parallel.
+  can have many workers of this type working in parallel.
 
 * The decisions task list is  similar with the activities task list. You have
   some workers polling decisions and executing them in a never ending loop. The
@@ -60,17 +59,17 @@ workflow?
 
 This is the entire lifecycle of an activity. Lets go over it step by step:
 
-1. The activity workers start by long polling the SWF web service.
-2. As soon as there is an activity waiting in the activities task list it will
+#. The activity workers start by long polling the SWF web service.
+#. As soon as there is an activity waiting in the activities task list it will
    be sent to one (and only one) of the listening workers. *(We'll see later
    how an activity is added to a task list.)*
-3. Each scheduled activity has two parts: an identity composed by a name and a
+#. Each scheduled activity has two parts: an identity composed by a name and a
    version and some input data. After a worker retrieved an activity it uses
    the identity to locate the corresponding code and launches it passing the
    input data. *Note that there is no code passed with the activity so the
    worker must know the activity code beforehand.*
-4. After the activity is executed the final result is sent back to SWF.
-5. When the result is sent, a new decision will automatically be added in the
+#. After the activity is executed the final result is sent back to SWF.
+#. When the result is sent, a new decision will automatically be added in the
    decisions task list.
 
 
@@ -90,23 +89,30 @@ As you can see, this diagram is very similar with the previous one but the
 direction of the arrows is reversed. Lets go again over all the steps one by
 one:
 
-1. The workflow workers start by long polling the SWF web service.
-2. As soon as there is a decision waiting in the decisions task list it will be
+#. The workflow workers start by long polling the SWF web service.
+#. As soon as there is a decision waiting in the decisions task list it will be
    sent to one (and only one) of the listening workers. *(As we already saw,
    when an activity is completed and sends back its result, a decision is
    automatically added in the task list).*
-3. Each scheduled decision has two parts: an identity composed by a name and a
+#. Each scheduled decision has two parts: an identity composed by a name and a
    version and an execution history. The execution history contains the entire
    state of the workflow: the previous activities that have been scheduled,
    their status and results. The worker identifies the corresponding workflow
    logic using the identity and figures out what other activities can be
    scheduled if any.
-4. It then sends back the list of new activities that have been scheduled,
+#. It then sends back the list of new activities that have been scheduled,
    together with their input data.
-5. The activities that have been scheduled will appear on the activities task
+#. The activities that have been scheduled will appear on the activities task
    list to be consumed by the activity workers which in turn create more
    decisions. The cycle repeats itself until a decision chooses to finish the
    workflow.
+
+The decision task list has some additional guarantees:
+
+* No two workers can process decisions for the same workflow at the same time,
+  making each workflow decision sequential.
+* The worker always gets the most recent history of a workflow when a decision
+  is polled.
 
 
 Execution Timeout
