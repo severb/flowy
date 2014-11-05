@@ -1,11 +1,11 @@
-.. image:: https://travis-ci.org/pbs/flowy.svg?branch=master
-   :target: https://travis-ci.org/pbs/flowy
+.. image:: https://travis-ci.org/severb/flowy.svg?branch=master
+   :target: https://travis-ci.org/severb/flowy
 
-.. image:: https://coveralls.io/repos/pbs/flowy/badge.png?branch=master
-   :target: https://coveralls.io/r/pbs/flowy?branch=master
+.. image:: https://coveralls.io/repos/severb/flowy/badge.png?branch=master
+   :target: https://coveralls.io/r/severb/flowy?branch=master
 
-.. image:: https://landscape.io/github/pbs/flowy/master/landscape.png
-    :target: https://landscape.io/github/pbs/flowy/master
+.. image:: https://landscape.io/github/severb/flowy/master/landscape.png
+    :target: https://landscape.io/github/severb/flowy/master
 
 .. image:: https://pypip.in/version/flowy/badge.png
    :target: https://pypi.python.org/pypi/flowy/
