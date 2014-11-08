@@ -30,11 +30,15 @@ class DummyScheduler(object):
 
 class TestWorkflowScheduling(TestCase):
 
-    def set_state(self, running=[], timedout=[], results={}, errors={}):
+    def set_state(self, running=[], timedout=[], results={}, errors={},
+                  order=None):
         from flowy.task import _SWFWorkflow
         self.scheduler = DummyScheduler()
+        if order is None:
+            order = list(range(100000))
         self.workflow = _SWFWorkflow(self.scheduler, 'input', 'token', running,
-                                     timedout, results, errors, None, None)
+                                     timedout, results, errors, order, None,
+                                     None)
         self.RUNNING = self.workflow._RUNNING
         self.FOUND = self.workflow._FOUND
         self.ERROR = self.workflow._ERROR
@@ -60,8 +64,8 @@ class TestWorkflowScheduling(TestCase):
         self.schedule_activity(spec='a1', input='in1', retry=0, delay=0)
         self.schedule_workflow(spec='w1', input='in2', retry=0, delay=0)
         self.assert_state(
-            (self.RUNNING, None),
-            (self.RUNNING, None)
+            (self.RUNNING, None, None),
+            (self.RUNNING, None, None)
         )
         self.assert_scheduled(
             ('ACTIVITY', 'a1', 0, 'in1'),
@@ -73,8 +77,8 @@ class TestWorkflowScheduling(TestCase):
         self.schedule_activity(spec='a1', input='in1', retry=0, delay=0)
         self.schedule_workflow(spec='w1', input='in2', retry=0, delay=0)
         self.assert_state(
-            (self.RUNNING, None),
-            (self.RUNNING, None)
+            (self.RUNNING, None, None),
+            (self.RUNNING, None, None)
         )
         self.assert_scheduled()
 
@@ -83,8 +87,8 @@ class TestWorkflowScheduling(TestCase):
         self.schedule_activity(spec='a1', input='in1', retry=0, delay=0)
         self.schedule_workflow(spec='w1', input='in2', retry=0, delay=0)
         self.assert_state(
-            (self.TIMEDOUT, None),
-            (self.TIMEDOUT, None)
+            (self.TIMEDOUT, None, 0),
+            (self.TIMEDOUT, None, 1)
         )
         self.assert_scheduled()
 
@@ -93,8 +97,8 @@ class TestWorkflowScheduling(TestCase):
         self.schedule_activity(spec='a1', input='in1', retry=0, delay=0)
         self.schedule_workflow(spec='w1', input='in2', retry=0, delay=0)
         self.assert_state(
-            (self.FOUND, 10),
-            (self.FOUND, 20)
+            (self.FOUND, 10, 0),
+            (self.FOUND, 20, 1)
         )
         self.assert_scheduled()
 
@@ -103,8 +107,8 @@ class TestWorkflowScheduling(TestCase):
         self.schedule_activity(spec='a1', input='in1', retry=0, delay=0)
         self.schedule_workflow(spec='w1', input='in2', retry=0, delay=0)
         self.assert_state(
-            (self.ERROR, 'e1'),
-            (self.ERROR, 'e2')
+            (self.ERROR, 'e1', 0),
+            (self.ERROR, 'e2', 1)
         )
         self.assert_scheduled()
 
@@ -114,9 +118,9 @@ class TestWorkflowScheduling(TestCase):
         self.schedule_workflow(spec='w1', input='in2', retry=0, delay=20)
         self.schedule_activity(spec='a2', input='in3', retry=0, delay=0)
         self.assert_state(
-            (self.RUNNING, None),
-            (self.RUNNING, None),
-            (self.RUNNING, None)
+            (self.RUNNING, None, None),
+            (self.RUNNING, None, None),
+            (self.RUNNING, None, None)
         )
         self.assert_scheduled(
             ('TIMER', 10, 0),  # 0 for timer, 1 for activity
@@ -130,9 +134,9 @@ class TestWorkflowScheduling(TestCase):
         self.schedule_workflow(spec='w1', input='in2', retry=3, delay=0)
         self.schedule_activity(spec='a2', input='in3', retry=0, delay=0)
         self.assert_state(
-            (self.RUNNING, None),
-            (self.RUNNING, None),
-            (self.RUNNING, None)
+            (self.RUNNING, None, None),
+            (self.RUNNING, None, None),
+            (self.RUNNING, None, None)
         )
         self.assert_scheduled(
             ('ACTIVITY', 'a1', 0, 'in1'),  # 1 for activity + 5 retries
@@ -146,9 +150,9 @@ class TestWorkflowScheduling(TestCase):
         self.schedule_workflow(spec='w1', input='in2', retry=3, delay=20)
         self.schedule_activity(spec='a2', input='in3', retry=0, delay=0)
         self.assert_state(
-            (self.RUNNING, None),
-            (self.RUNNING, None),
-            (self.RUNNING, None)
+            (self.RUNNING, None, None),
+            (self.RUNNING, None, None),
+            (self.RUNNING, None, None)
         )
         self.assert_scheduled(
             ('TIMER', 10, 0),  # 1 for timer, 1 for activity + 5 retries
@@ -162,7 +166,7 @@ class TestWorkflowScheduling(TestCase):
         self.set_state(results={0: None})
         self.schedule_activity(spec='a1', input='in1', retry=0, delay=10)
         self.assert_state(
-            (self.RUNNING, None),
+            (self.RUNNING, None, None),
         )
         self.assert_scheduled(
             ('ACTIVITY', 'a1', 1, 'in1'),  # 0 was the timer
@@ -172,7 +176,7 @@ class TestWorkflowScheduling(TestCase):
         self.set_state(results={0: None}, running=[1])
         self.schedule_activity(spec='a1', input='in1', retry=0, delay=10)
         self.assert_state(
-            (self.RUNNING, None),
+            (self.RUNNING, None, None),
         )
         self.assert_scheduled()
 
@@ -180,7 +184,7 @@ class TestWorkflowScheduling(TestCase):
         self.set_state(results={0: None, 1: 10})
         self.schedule_activity(spec='a1', input='in1', retry=0, delay=10)
         self.assert_state(
-            (self.FOUND, 10),
+            (self.FOUND, 10, 1),
         )
         self.assert_scheduled()
 
@@ -188,7 +192,7 @@ class TestWorkflowScheduling(TestCase):
         self.set_state(results={0: None}, errors={1: 'err'})
         self.schedule_activity(spec='a1', input='in1', retry=0, delay=10)
         self.assert_state(
-            (self.ERROR, 'err'),
+            (self.ERROR, 'err', 1),
         )
         self.assert_scheduled()
 
@@ -196,7 +200,7 @@ class TestWorkflowScheduling(TestCase):
         self.set_state(results={0: None}, timedout=[1])
         self.schedule_activity(spec='a1', input='in1', retry=0, delay=10)
         self.assert_state(
-            (self.TIMEDOUT, None),
+            (self.TIMEDOUT, None, 1),
         )
         self.assert_scheduled()
 
@@ -206,7 +210,7 @@ class TestWorkflowScheduling(TestCase):
         self.set_state(timedout=[0, 1, 2])
         self.schedule_activity(spec='a1', input='in1', retry=3, delay=0)
         self.assert_state(
-            (self.RUNNING, None),
+            (self.RUNNING, None, None),
         )
         self.assert_scheduled(
             ('ACTIVITY', 'a1', 3, 'in1'),  # 0 was the timer
@@ -216,7 +220,7 @@ class TestWorkflowScheduling(TestCase):
         self.set_state(timedout=[0, 1, 2], running=[3])
         self.schedule_activity(spec='a1', input='in1', retry=3, delay=0)
         self.assert_state(
-            (self.RUNNING, None),
+            (self.RUNNING, None, None),
         )
         self.assert_scheduled()
 
@@ -224,7 +228,7 @@ class TestWorkflowScheduling(TestCase):
         self.set_state(timedout=[0, 1, 2], results={3: 30})
         self.schedule_activity(spec='a1', input='in1', retry=3, delay=0)
         self.assert_state(
-            (self.FOUND, 30),
+            (self.FOUND, 30, 3),
         )
         self.assert_scheduled()
 
@@ -232,7 +236,7 @@ class TestWorkflowScheduling(TestCase):
         self.set_state(timedout=[0, 1, 2], errors={3: 'err'})
         self.schedule_activity(spec='a1', input='in1', retry=3, delay=0)
         self.assert_state(
-            (self.ERROR, 'err'),
+            (self.ERROR, 'err', 3),
         )
         self.assert_scheduled()
 
@@ -240,7 +244,7 @@ class TestWorkflowScheduling(TestCase):
         self.set_state(timedout=[0, 1, 2, 3])
         self.schedule_activity(spec='a1', input='in1', retry=3, delay=0)
         self.assert_state(
-            (self.TIMEDOUT, None),
+            (self.TIMEDOUT, None, 3),
         )
         self.assert_scheduled()
 
@@ -250,7 +254,7 @@ class TestWorkflowScheduling(TestCase):
         self.set_state(results={0: None}, timedout=[1, 2, 3])
         self.schedule_activity(spec='a1', input='in1', retry=3, delay=10)
         self.assert_state(
-            (self.RUNNING, None),
+            (self.RUNNING, None, None),
         )
         self.assert_scheduled(
             ('ACTIVITY', 'a1', 4, 'in1'),  # 0 was the timer
@@ -260,7 +264,7 @@ class TestWorkflowScheduling(TestCase):
         self.set_state(results={0: None}, timedout=[1, 2, 3], running=[4])
         self.schedule_activity(spec='a1', input='in1', retry=3, delay=10)
         self.assert_state(
-            (self.RUNNING, None),
+            (self.RUNNING, None, None),
         )
         self.assert_scheduled()
 
@@ -268,7 +272,7 @@ class TestWorkflowScheduling(TestCase):
         self.set_state(timedout=[1, 2, 3], results={0: None, 4: 40})
         self.schedule_activity(spec='a1', input='in1', retry=3, delay=10)
         self.assert_state(
-            (self.FOUND, 40),
+            (self.FOUND, 40, 4),
         )
         self.assert_scheduled()
 
@@ -277,7 +281,7 @@ class TestWorkflowScheduling(TestCase):
                        errors={4: 'err'})
         self.schedule_activity(spec='a1', input='in1', retry=3, delay=10)
         self.assert_state(
-            (self.ERROR, 'err'),
+            (self.ERROR, 'err', 4),
         )
         self.assert_scheduled()
 
@@ -285,18 +289,20 @@ class TestWorkflowScheduling(TestCase):
         self.set_state(results={0: None}, timedout=[1, 2, 3, 4])
         self.schedule_activity(spec='a1', input='in1', retry=3, delay=10)
         self.assert_state(
-            (self.TIMEDOUT, None),
+            (self.TIMEDOUT, None, 4),
         )
         self.assert_scheduled()
 
 
 class TestWorkflowBase(TestCase):
-    def set_state(self, running=[], timedout=[], results={}, errors={}):
+    def set_state(self, running=[], timedout=[], results={}, errors={},
+                  order=None):
         self.scheduler = DummyScheduler()
         self.Workflow = self.make_workflow()
+        order = list(range(10000))
         self.workflow = self.Workflow(self.scheduler, '[[], {}]', 'token',
                                       running, timedout, results, errors,
-                                      None, None)
+                                      order, None, None)
         self.workflow()
 
     def assert_scheduled(self, *state):

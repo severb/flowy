@@ -55,28 +55,31 @@ class TaskProxy(object):
         # there is no error handling for argument/result transport
         # we want those to bubble up in the workflow and stop it
         input = self._serialize_arguments(*args, **kwargs)
-        state, value = self._schedule(task, input)
+        state, value, order = self._schedule(task, input)
         if state == task._FOUND:
-            return self.Result(self._deserialize_result(value))
+            return self.Result(self._deserialize_result(value), order)
         elif state == task._RUNNING:
             return self.Placeholder()
         elif state == task._ERROR:
             if self._error_handling:
-                return self.Error(value)
+                return self.Error(value, order)
             task.fail(value)
             return self.Placeholder()
         elif state == task._TIMEDOUT:
             if self._error_handling:
-                return self.Timeout(self.timeout_message)
+                return self.Timeout(self.timeout_message, order)
             task.fail(self.timeout_message)
             return self.Placeholder()
 
     def _args_based_result(self, task, args, kwargs):
         args = tuple(args) + tuple(kwargs.values())
-        error_message = self._errs_in_args(args)
-        if error_message:
+        errs = [e for e in args if isinstance(e, (Error, Timeout))]
+        if errs:
+            first_e = min(errs)
+            error_message = self._err_message(errs)
             if self._error_handling:
-                return self.Error(error_message)
+                # Same order as the first error in the arguments
+                return self.Error(error_message, first_e._order)
             else:
                 task.fail(error_message)
                 return self.Placeholder()
@@ -86,15 +89,14 @@ class TaskProxy(object):
     def _deps_in_args(self, args):
         return any(isinstance(r, Placeholder) for r in args)
 
-    def _errs_in_args(self, args):
-        errors = []
-        for arg in args:
-            if isinstance(arg, (Error, Timeout)):
-                try:
-                    arg.result()
-                except TaskError as e:
-                    errors.append(str(e))
-        return '\n'.join(errors)
+    def _err_message(self, errs):
+        msg = []
+        for e in errs:
+            try:
+                e.result()
+            except TaskError as te:
+                msg.append(str(te))
+        return '\n'.join(msg)
 
     def _extract_results(self, args, kwargs):
         a = [arg.result() if isinstance(arg, Result)
