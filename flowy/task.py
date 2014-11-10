@@ -148,7 +148,7 @@ class _SWFWorkflow(Task):
         self._timedout = set(map(int, timedout))
         self._results = dict((int(k), v) for k, v in results.items())
         self._errors = dict((int(k), v) for k, v in errors.items())
-        self._order = map(int, order)
+        self._order = list(map(int, order))
         self._spec = spec
         self._tags = tags
         self._scheduled = False
