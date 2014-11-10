@@ -5,7 +5,6 @@ class _Sortable(object):
     _order = None
 
     def __lt__(self, other):
-        print '__lt__'
         if not isinstance(other, _Sortable):
             return NotImplemented
         if self._order is None:
