@@ -487,7 +487,7 @@ class TestFristOfMany(TestWorkflowBase):
                 a = self.x()
                 b = self.x()
                 c = self.x()
-                return self.first_result(a, b, c)
+                return self.first(a, b, c)
 
         return MyWorkflow
 
@@ -534,11 +534,11 @@ class TestFristNOfMany(TestWorkflowBase):
                 a = self.x()
                 b = self.x()
                 c = self.x()
-                return self.first_results(2, a, b, c)
+                return [x.result() for x in self.first_n(2, a, b, c)]
 
         return MyWorkflow
 
-    def test_first_result_returns_a(self):
+    def test_first_n(self):
         self.set_state(results={0: '1', 1: '2', 2: '3'}, order=[2, 1, 0])
         self.assert_scheduled(
             ('COMPLETE', '[3, 2]')
@@ -558,14 +558,14 @@ class TestGroupResults(TestWorkflowBase):
                 r = []
                 for _ in range(7):
                     r.append(self.x())
-                return list(self.group_results(2, *r))
+                return [[x.result() for x in y] for y in self.group_n(2, r)]
 
         return MyWorkflow
 
-    def test_first_result_returns_a(self):
+    def test_group_n(self):
         results = dict((x, str(x+1)) for x in range(7))
         order = list(reversed(range(7)))
         self.set_state(results=results, order=order)
         self.assert_scheduled(
-            ('COMPLETE', '[[7, 6], [5, 4], [3, 2], [1]]')
+            ('COMPLETE', '[[7, 6], [5, 4], [3, 2]]')
         )

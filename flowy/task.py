@@ -2,11 +2,19 @@ import json
 import logging
 import uuid
 from contextlib import contextmanager
+try:
+    from itertools import izip
+except ImportError:
+    izip = zip
 
 from boto.swf.exceptions import SWFResponseError
 from boto.swf.layer1_decisions import Layer1Decisions
-from flowy.exception import SuspendTask, TaskError
-from flowy.result import Error, Result, Timeout
+
+from flowy.exception import SuspendTask
+from flowy.exception import TaskError
+from flowy.result import Error
+from flowy.result import Result
+from flowy.result import Timeout
 from flowy.spec import _sentinel
 
 
@@ -166,30 +174,19 @@ class _SWFWorkflow(Task):
             yield
         self._tags = old_tags
 
-    def first_result(self, *results):
-            return min(results).result()
+    def first(self, result, *results):
+        return min(_i_or_args(result, results))
 
-    def first_results(self, n, *results):
-        n = int(n)
-        if not len(results) > 1:
-            raise ValueError("No results to wait for.")
+    def first_n(self, n, result, *results):
+        i = _i_or_args(result, results)
         if n == 1:
-            return self.first_result(*results)
-        elif n < len(results):
-            return [r.result() for r in sorted(results)[:n]]
-        else:
-            # We still sort the results because of group_results
-            return self.all_results(*sorted(results))
+            return self.first(i)
+        return sorted(i)[:n]
 
-    def all_results(self, *results):
-        return [r.result() for r in results]
-
-    def group_results(self, size, *results):
-        l = len(results)
-        for i in range(l // size + min(1, l % size)):
-            start = i * size
-            r = self.first_results(start + size, *results)
-            yield r[start:start + size]
+    def group_n(self, n, result, *results):
+        i = _i_or_args(result, results)
+        ii = iter(sorted(i))
+        return izip(*[ii] * n)
 
     def restart(self, *args, **kwargs):
         try:
@@ -351,3 +348,9 @@ class SWFWorkflow(_SWFWorkflow):
         s = SWFScheduler(swf_client, token, rate_limit=64 - len(running))
         super(SWFWorkflow, self).__init__(s, input, token, running, timedout,
                                           results, errors, order, spec, tags)
+
+
+def _i_or_args(result, results):
+    if len(results) == 0:
+        return iter(result)
+    return (result,) + results
