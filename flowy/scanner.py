@@ -3,8 +3,8 @@ import sys
 
 import venusian
 
-from .spec import SWFActivitySpec
-from .spec import SWFWorkflowSpec
+from flowy.spec import SWFActivitySpec
+from flowy.spec import SWFWorkflowSpec
 
 logger = logging.getLogger(__name__)
 
