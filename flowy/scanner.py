@@ -1,9 +1,10 @@
-import sys
 import logging
+import sys
 
 import venusian
-from .spec import SWFActivitySpec, SWFWorkflowSpec
 
+from .spec import SWFActivitySpec
+from .spec import SWFWorkflowSpec
 
 logger = logging.getLogger(__name__)
 

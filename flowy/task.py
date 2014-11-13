@@ -2,10 +2,6 @@ import json
 import logging
 import uuid
 from contextlib import contextmanager
-try:
-    from itertools import izip
-except ImportError:
-    izip = zip
 
 from boto.swf.exceptions import SWFResponseError
 from boto.swf.layer1_decisions import Layer1Decisions
@@ -16,6 +12,11 @@ from flowy.result import Error
 from flowy.result import Result
 from flowy.result import Timeout
 from flowy.spec import _sentinel
+
+try:
+    from itertools import izip
+except ImportError:
+    izip = zip
 
 
 logger = logging.getLogger(__name__)

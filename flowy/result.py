@@ -1,4 +1,6 @@
-from flowy.exception import SuspendTask, TaskError, TaskTimedout
+from flowy.exception import SuspendTask
+from flowy.exception import TaskError
+from flowy.exception import TaskTimedout
 
 
 class _Sortable(object):

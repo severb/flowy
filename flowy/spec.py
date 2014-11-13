@@ -3,8 +3,8 @@ from collections import namedtuple
 from contextlib import contextmanager
 from functools import total_ordering
 
-from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
-
+from boto.swf.exceptions import SWFResponseError
+from boto.swf.exceptions import SWFTypeAlreadyExistsError
 
 logger = logging.getLogger(__name__)
 

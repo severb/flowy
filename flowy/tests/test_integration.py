@@ -14,7 +14,6 @@ from boto.swf.layer1 import Layer1
 from flowy.boilerplate import start_activity_worker
 from flowy.boilerplate import start_workflow_worker
 
-
 os.environ['TESTING'] = '1'
 
 

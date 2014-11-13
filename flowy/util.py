@@ -65,7 +65,6 @@
 """
 import sys
 
-
 _PY2 = sys.version_info[0] == 2
 _PY3 = sys.version_info[0] == 3
 

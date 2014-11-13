@@ -18,7 +18,6 @@ from flowy.task import AsyncSWFActivity
 from flowy.util import MagicBind
 from flowy.worker import SingleThreadedWorker
 
-
 logger = logging.getLogger(__name__)
 
 
