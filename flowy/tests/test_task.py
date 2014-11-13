@@ -545,7 +545,7 @@ class TestFristNOfMany(TestWorkflowBase):
         )
 
 
-class TestGroupResults(TestWorkflowBase):
+class TestAllResults(TestWorkflowBase):
     def make_workflow(self):
         from flowy.task import _SWFWorkflow
         from flowy.proxy import SWFActivityProxy
@@ -558,7 +558,7 @@ class TestGroupResults(TestWorkflowBase):
                 r = []
                 for _ in range(7):
                     r.append(self.x())
-                return [[x.result() for x in y] for y in self.group_n(2, r)]
+                return [x.result() for x in self.all(r)]
 
         return MyWorkflow
 
@@ -567,5 +567,5 @@ class TestGroupResults(TestWorkflowBase):
         order = list(reversed(range(7)))
         self.set_state(results=results, order=order)
         self.assert_scheduled(
-            ('COMPLETE', '[[7, 6], [5, 4], [3, 2]]')
+            ('COMPLETE', '[7, 6, 5, 4, 3, 2, 1]')
         )

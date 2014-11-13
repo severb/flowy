@@ -181,12 +181,11 @@ class _SWFWorkflow(Task):
         i = _i_or_args(result, results)
         if n == 1:
             return self.first(i)
-        return sorted(i)[:n]
+        return self.all(i)[:n]
 
-    def group_n(self, n, result, *results):
+    def all(self, result, *results):
         i = _i_or_args(result, results)
-        ii = iter(sorted(i))
-        return izip(*[ii] * n)
+        return sorted(i)
 
     def restart(self, *args, **kwargs):
         try:
