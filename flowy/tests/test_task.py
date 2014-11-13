@@ -519,6 +519,7 @@ class TestFristOfMany(TestWorkflowBase):
             ('FAIL', msg),
         )
 
+
 class TestFristNOfMany(TestWorkflowBase):
     def make_workflow(self):
         from flowy.task import _SWFWorkflow
@@ -541,4 +542,30 @@ class TestFristNOfMany(TestWorkflowBase):
         self.set_state(results={0: '1', 1: '2', 2: '3'}, order=[2, 1, 0])
         self.assert_scheduled(
             ('COMPLETE', '[3, 2]')
+        )
+
+
+class TestGroupResults(TestWorkflowBase):
+    def make_workflow(self):
+        from flowy.task import _SWFWorkflow
+        from flowy.proxy import SWFActivityProxy
+
+        class MyWorkflow(_SWFWorkflow):
+
+            x = SWFActivityProxy(name='a', version=1, retry=0)
+
+            def run(self):
+                r = []
+                for _ in range(7):
+                    r.append(self.x())
+                return list(self.group_results(2, *r))
+
+        return MyWorkflow
+
+    def test_first_result_returns_a(self):
+        results = dict((x, str(x+1)) for x in range(7))
+        order = list(reversed(range(7)))
+        self.set_state(results=results, order=order)
+        self.assert_scheduled(
+            ('COMPLETE', '[[7, 6], [5, 4], [3, 2], [1]]')
         )

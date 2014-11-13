@@ -178,10 +178,18 @@ class _SWFWorkflow(Task):
         elif n < len(results):
             return [r.result() for r in sorted(results)[:n]]
         else:
-            return all_results(*results)
+            # We still sort the results because of group_results
+            return self.all_results(*sorted(results))
 
     def all_results(self, *results):
         return [r.result() for r in results]
+
+    def group_results(self, size, *results):
+        l = len(results)
+        for i in range(l / size + min(1, l % size)):
+            start = i * size
+            r = self.first_results(start + size, *results)
+            yield r[start:start + size]
 
     def restart(self, *args, **kwargs):
         try:
