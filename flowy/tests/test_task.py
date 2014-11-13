@@ -299,7 +299,8 @@ class TestWorkflowBase(TestCase):
                   order=None):
         self.scheduler = DummyScheduler()
         self.Workflow = self.make_workflow()
-        order = list(range(10000))
+        if order is None:
+            order = list(range(100000))
         self.workflow = self.Workflow(self.scheduler, '[[], {}]', 'token',
                                       running, timedout, results, errors,
                                       order, None, None)
@@ -468,4 +469,76 @@ class TestResultBlocksWorkflow(TestWorkflowBase):
         self.assert_scheduled(
             ('ACTIVITY', self.Workflow.b._spec, 4, '[["b_input"], {}]'),
             'FLUSH'
+        )
+
+
+class TestFristOfMany(TestWorkflowBase):
+
+    def make_workflow(self):
+        from flowy.task import _SWFWorkflow
+        from flowy.proxy import SWFActivityProxy
+
+        class MyWorkflow(_SWFWorkflow):
+
+            x = SWFActivityProxy(name='a', version=1, retry=0,
+                                 error_handling=True)
+
+            def run(self):
+                a = self.x()
+                b = self.x()
+                c = self.x()
+                return self.first_result(a, b, c)
+
+        return MyWorkflow
+
+    def test_first_result_returns_a(self):
+        self.set_state(results={0: '1', 1: '2', 2: '3'}, order=[0, 1, 2])
+        self.assert_scheduled(
+            ('COMPLETE', '1')
+        )
+
+    def test_first_result_returns_b(self):
+        self.set_state(errors={0: "err"}, results={1: '2'}, timedout=[2],
+                       order=[1, 0, 2])
+        self.assert_scheduled(
+            ('COMPLETE', '2')
+        )
+
+    def test_first_error(self):
+        self.set_state(errors={2: '3'}, running=[0, 1], order=[2])
+        self.assert_scheduled(
+            ('FAIL', '3'),
+        )
+
+    def test_first_to(self):
+        self.set_state(timedout=[2], running=[0, 1], order=[2])
+        msg = ("Activity SWFActivitySpec(name='a', version=1, task_list=None,"
+               " heartbeat=None, schedule_to_close=None,"
+               " schedule_to_start=None, start_to_close=None) has timed-out")
+        self.assert_scheduled(
+            ('FAIL', msg),
+        )
+
+class TestFristNOfMany(TestWorkflowBase):
+    def make_workflow(self):
+        from flowy.task import _SWFWorkflow
+        from flowy.proxy import SWFActivityProxy
+
+        class MyWorkflow(_SWFWorkflow):
+
+            x = SWFActivityProxy(name='a', version=1, retry=0,
+                                 error_handling=True)
+
+            def run(self):
+                a = self.x()
+                b = self.x()
+                c = self.x()
+                return self.first_results(2, a, b, c)
+
+        return MyWorkflow
+
+    def test_first_result_returns_a(self):
+        self.set_state(results={0: '1', 1: '2', 2: '3'}, order=[2, 1, 0])
+        self.assert_scheduled(
+            ('COMPLETE', '[3, 2]')
         )
