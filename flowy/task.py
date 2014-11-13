@@ -186,7 +186,7 @@ class _SWFWorkflow(Task):
 
     def group_results(self, size, *results):
         l = len(results)
-        for i in range(l / size + min(1, l % size)):
+        for i in range(l // size + min(1, l % size)):
             start = i * size
             r = self.first_results(start + size, *results)
             yield r[start:start + size]
