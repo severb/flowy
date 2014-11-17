@@ -175,6 +175,14 @@ class _SWFWorkflow(Task):
             yield
         self._tags = old_tags
 
+    def wait_for(self, task):
+        try:
+            # Let it interrupt if it's a Placeholder, do nothing otherwise
+            task.result()
+        except TaskError:
+            pass
+        return task
+
     def first(self, result, *results):
         return min(_i_or_args(result, results))
 
