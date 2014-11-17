@@ -314,7 +314,7 @@ class TestSimpleWorkflow(TestWorkflowBase):
 
     def make_workflow(self):
         from flowy.task import _SWFWorkflow
-        from flowy.proxy import SWFActivityProxy
+        from flowy import SWFActivityProxy
 
         class MyWorkflow(_SWFWorkflow):
 
@@ -381,8 +381,8 @@ class TestErrorBubblingWorkflow(TestWorkflowBase):
 
     def make_workflow(self):
         from flowy.task import _SWFWorkflow
-        from flowy.proxy import SWFActivityProxy
-        from flowy.exception import TaskError
+        from flowy import SWFActivityProxy
+        from flowy import TaskError
 
         class MyWorkflow(_SWFWorkflow):
 
@@ -437,7 +437,7 @@ class TestResultBlocksWorkflow(TestWorkflowBase):
 
     def make_workflow(self):
         from flowy.task import _SWFWorkflow
-        from flowy.proxy import SWFActivityProxy
+        from flowy import SWFActivityProxy
 
         class MyWorkflow(_SWFWorkflow):
 
@@ -476,7 +476,7 @@ class TestFristOfMany(TestWorkflowBase):
 
     def make_workflow(self):
         from flowy.task import _SWFWorkflow
-        from flowy.proxy import SWFActivityProxy
+        from flowy import SWFActivityProxy
 
         class MyWorkflow(_SWFWorkflow):
 
@@ -523,7 +523,7 @@ class TestFristOfMany(TestWorkflowBase):
 class TestFristNOfMany(TestWorkflowBase):
     def make_workflow(self):
         from flowy.task import _SWFWorkflow
-        from flowy.proxy import SWFActivityProxy
+        from flowy import SWFActivityProxy
 
         class MyWorkflow(_SWFWorkflow):
 
@@ -548,7 +548,7 @@ class TestFristNOfMany(TestWorkflowBase):
 class TestAllResults(TestWorkflowBase):
     def make_workflow(self):
         from flowy.task import _SWFWorkflow
-        from flowy.proxy import SWFActivityProxy
+        from flowy import SWFActivityProxy
 
         class MyWorkflow(_SWFWorkflow):
 

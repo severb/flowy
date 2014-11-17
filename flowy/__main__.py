@@ -1,7 +1,7 @@
 import argparse
 import sys
 
-from flowy.boilerplate import workflow_starter
+from flowy import workflow_starter
 
 
 def main():

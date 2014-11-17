@@ -1,8 +1,8 @@
-from flowy.proxy import SWFActivityProxy as ActivityProxy
-from flowy.proxy import SWFWorkflowProxy as WorkflowProxy
-from flowy.scanner import swf_activity as activity
-from flowy.scanner import swf_workflow as workflow
-from flowy.task import SWFWorkflow as Workflow
+from flowy import swf_activity as activity
+from flowy import swf_workflow as workflow
+from flowy import SWFActivityProxy as ActivityProxy
+from flowy import SWFWorkflow as Workflow
+from flowy import SWFWorkflowProxy as WorkflowProxy
 from flowy.tests.integration.dependency import Identity
 
 # make Identity available for the scanner
