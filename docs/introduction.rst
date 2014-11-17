@@ -21,7 +21,8 @@ Polling Tasks
 -------------
 
 One of the things that we usually do with queues is to pop values out. In SWF
-we do this with long polling. Here's a diagram of this process:
+we do this with HTTP long polling *(since it's a websevice)*. Here's a diagram
+of this process:
 
 .. figure:: imgs/swf_overview.png
    :align: center
@@ -33,7 +34,7 @@ Here we can see the two different types of task lists in action:
 * The activities task list is like your regular job queue, each activity
   represents a specific task, part of a workflow. The activity workers consume
   this task list, polling and executing activities in a never ending loop. You
-  can have many workers of this type working in parallel.
+  can have many activity workers working in parallel.
 
 * The decisions task list is  similar with the activities task list. You have
   some workers polling decisions and executing them in a never ending loop. The
@@ -57,7 +58,7 @@ workflow?
 
    Polling and running activities
 
-This is the entire lifecycle of an activity. Lets go over it step by step:
+Lets go over the entire lifecycle of an activity step by step:
 
 #. The activity workers start by long polling the SWF web service.
 #. As soon as there is an activity waiting in the activities task list it will
@@ -100,7 +101,7 @@ one:
    their status and results. The worker identifies the corresponding workflow
    logic using the identity and figures out what other activities can be
    scheduled if any.
-#. It then sends back the list of new activities that have been scheduled,
+#. It then sends back the list of new activities that should be scheduled,
    together with their input data.
 #. The activities that have been scheduled will appear on the activities task
    list to be consumed by the activity workers which in turn create more
@@ -110,9 +111,8 @@ one:
 The decision task list has some additional guarantees:
 
 * No two workers can process decisions for the same workflow at the same time,
-  making each workflow decision sequential.
-* The worker always gets the most recent history of a workflow when a decision
-  is polled.
+  making the decisions belonging to the same workflow sequential.
+* A decision always contains the most recent history of a workflow execution.
 
 
 Execution Timeout
@@ -122,3 +122,51 @@ Execution Timeout
    :align: center
 
    Different types of execution timeouts
+
+When dealing with distributed systems, software and hardware failure is
+inevitable. Amazon SWF deals with failures using timeout timers. An activity
+execution should define 4 different timers:
+
+* **schedule to start** - The maximum time an activity can spend in the
+  activities task list waiting to be polled.
+* **start to close** - The maximum duration an activity can spend running.
+* **schedule to close** - The maximum duration the previous two steps combined
+  can take. *(If this value is larger or equal to the sum of the previous two
+  values it has no practical effect.)*
+* **heartbeat** - The maximum interval in which an activity must report progress
+  back.
+
+If any of those timers expire a new decision is automatically scheduled and the
+failure will be recorder in the execution history. In case an activity tries to
+send a result back to SWF after it timed-out, the result is discarded.
+Activities can use the heartbeat mechanism to detect timeouts and abort
+execution early.
+
+There are 2 additional timers that can be defined at the workflow execution
+level:
+
+* **workflow duration** - The maximum time the entire workflow (with its
+  activities and decisions) can run for. When this timer is exceeded the entire
+  workflow execution is considered timed-out. There is no way to recover from
+  such an error other than starting a new execution.
+* **decision duration** - This one represents how much time can be spent by a
+  decision task to download and analyze the execution history and coordinate
+  other tasks. When this time-out is recorded, a new decisions is added
+  automatically in the decision task list. Late instructions received after
+  this timer expired are ignored.
+
+
+Additional Reading
+------------------
+
+There is a lot more to learn about Amazon SWF. If you want to find out more
+about it the `Developer Guide`_ is a good place to start, especially the
+`Introduction`_ and `Basic Concepts`_.
+
+We're now ready to start the :doc:`tutorial` and get our hands dirty on some
+code.
+
+
+.. _Developer Guide: http://docs.aws.amazon.com/amazonswf/latest/developerguide/
+.. _Introduction: http://docs.aws.amazon.com/amazonswf/latest/developerguide/swf-dg-intro-to-swf.html
+.. _Basic Concepts: http://docs.aws.amazon.com/amazonswf/latest/developerguide/swf-dg-basic.html
