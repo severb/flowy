@@ -491,13 +491,13 @@ class TestFristOfMany(TestWorkflowBase):
 
         return MyWorkflow
 
-    def test_first_result_returns_a(self):
+    def test_first_returns_a(self):
         self.set_state(results={0: '1', 1: '2', 2: '3'}, order=[0, 1, 2])
         self.assert_scheduled(
             ('COMPLETE', '1')
         )
 
-    def test_first_result_returns_b(self):
+    def test_first_returns_b(self):
         self.set_state(errors={0: "err"}, results={1: '2'}, timedout=[2],
                        order=[1, 0, 2])
         self.assert_scheduled(
@@ -545,7 +545,7 @@ class TestFristNOfMany(TestWorkflowBase):
         )
 
 
-class TestAllResults(TestWorkflowBase):
+class TestAll(TestWorkflowBase):
     def make_workflow(self):
         from flowy.task import _SWFWorkflow
         from flowy import SWFActivityProxy
@@ -562,10 +562,36 @@ class TestAllResults(TestWorkflowBase):
 
         return MyWorkflow
 
-    def test_group_n(self):
+    def test_all(self):
         results = dict((x, str(x+1)) for x in range(7))
         order = list(reversed(range(7)))
         self.set_state(results=results, order=order)
         self.assert_scheduled(
             ('COMPLETE', '[7, 6, 5, 4, 3, 2, 1]')
+        )
+
+
+class TestAllSuspend(TestWorkflowBase):
+    def make_workflow(self):
+        from flowy.task import _SWFWorkflow
+        from flowy import SWFActivityProxy
+
+        class MyWorkflow(_SWFWorkflow):
+
+            x = SWFActivityProxy(name='a', version=1, retry=0)
+
+            def run(self):
+                r = []
+                for _ in range(7):
+                    r.append(self.x())
+                list(self.all(r))
+                return 1
+
+        return MyWorkflow
+
+    def test_all_suspend(self):
+        results = dict((x, str(x+1)) for x in range(6))
+        self.set_state(results=results, running=[6])
+        self.assert_scheduled(
+            ('FLUSH')
         )

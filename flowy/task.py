@@ -184,17 +184,21 @@ class _SWFWorkflow(Task):
         return task
 
     def first(self, result, *results):
-        return min(_i_or_args(result, results))
+        return self.wait_for(min(_i_or_args(result, results)))
 
     def first_n(self, n, result, *results):
         i = _i_or_args(result, results)
         if n == 1:
-            return self.first(i)
-        return self.all(i)[:n]
+            yield self.first(i)
+            return
+        s = sorted(i)
+        for r in s[:n]:
+            yield self.wait_for(r)
 
     def all(self, result, *results):
-        i = _i_or_args(result, results)
-        return sorted(i)
+        i = list(_i_or_args(result, results))
+        for r in self.first_n(len(i), i):
+            yield r
 
     def restart(self, *args, **kwargs):
         try:
