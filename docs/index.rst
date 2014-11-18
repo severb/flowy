@@ -44,6 +44,7 @@ Flowy is available on the Python Package Index. To install it use `pip`_::
     introduction
 
     tutorial
+    cookbook
 
     errors
     transport
