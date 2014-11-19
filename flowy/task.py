@@ -53,7 +53,8 @@ class Task(object):
         except Exception as e:
             logger.exception("Error while running the task:")
             return self._fail(e)
-        return self._finish(result)
+        else:
+            return self._finish(result)
 
     def run(self, *args, **kwargs):
         raise NotImplementedError
