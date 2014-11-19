@@ -12,3 +12,4 @@ Next Release
 * Changed ``first_n`` and ``all`` to return an iterator that can be used to
   iterate over the finished tasks in order. When the iterator is exhausted and
   more tasks are needed, the workflow is suspended.
+* Removed ``fail()`` from the public API of tasks.
