@@ -22,13 +22,23 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-serialize_result = staticmethod(json.dumps)
 deserialize_args = staticmethod(json.loads)
 
 
 @staticmethod
+def serialize_result(result):
+    r = json.dumps(result)
+    if len(r) > 32000:
+        raise ValueError("Serialized result > 32000 characters.")
+    return r
+
+
+@staticmethod
 def serialize_args(*args, **kwargs):
-    return json.dumps([args, kwargs])
+    r = json.dumps([args, kwargs])
+    if len(r) > 32000:
+        raise ValueError("Serialized arguments > 32000 characters.")
+    return r
 
 
 class Task(object):
@@ -192,9 +202,9 @@ class _SWFWorkflow(Task):
         self._scheduled = True
         try:
             input = self._serialize_restart_arguments(*args, **kwargs)
-        except TypeError:
+        except Exception as e:
             logger.exception('Error while serializing restart arguments:')
-            return False
+            return self._scheduler.fail(e)
         return self._scheduler.restart(self._spec, input, self._tags)
 
     def _fail(self, reason):
