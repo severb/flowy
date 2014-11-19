@@ -46,11 +46,11 @@ class TestWorkflowScheduling(TestCase):
         self.state = []
 
     def schedule_activity(self, spec, input='i', retry=0, delay=0):
-        r = self.workflow.schedule_activity(spec, input, retry, delay)
+        r = self.workflow._schedule_activity(spec, input, retry, delay)
         self.state.append(r)
 
     def schedule_workflow(self, spec, input='i', retry=0, delay=0):
-        r = self.workflow.schedule_workflow(spec, input, retry, delay)
+        r = self.workflow._schedule_workflow(spec, input, retry, delay)
         self.state.append(r)
 
     def assert_state(self, *state):

@@ -220,11 +220,11 @@ class _SWFWorkflow(Task):
             return self._scheduler.complete(r)
         return self._scheduler.flush()
 
-    def schedule_activity(self, spec, input, retry, delay):
+    def _schedule_activity(self, spec, input, retry, delay):
         sched = self._scheduler.schedule_activity
         return self._schedule(spec, input, retry, delay, sched)
 
-    def schedule_workflow(self, spec, input, retry, delay):
+    def _schedule_workflow(self, spec, input, retry, delay):
         sched = self._scheduler.schedule_workflow
         return self._schedule(spec, input, retry, delay, sched)
 

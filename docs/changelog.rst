@@ -13,3 +13,5 @@ Next Release
   iterate over the finished tasks in order. When the iterator is exhausted and
   more tasks are needed, the workflow is suspended.
 * Removed ``fail()`` from the public API of tasks.
+* Removed ``schedule_activity()`` and ``schedule_workflow()`` from the public
+  API of the workflows.

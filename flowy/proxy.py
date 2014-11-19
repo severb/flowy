@@ -135,8 +135,8 @@ class SWFActivityProxy(TaskProxy):
                 yield
 
     def _schedule(self, workflow, input):
-        return workflow.schedule_activity(self._spec, input, self._retry,
-                                      self._delay)
+        return workflow._schedule_activity(self._spec, input, self._retry,
+                                           self._delay)
 
 
 class SWFWorkflowProxy(TaskProxy):
@@ -159,5 +159,5 @@ class SWFWorkflowProxy(TaskProxy):
                 yield
 
     def _schedule(self, workflow, input):
-        return workflow.schedule_workflow(self._spec, input, self._retry,
-                                      self._delay)
+        return workflow._schedule_workflow(self._spec, input, self._retry,
+                                           self._delay)
