@@ -15,3 +15,5 @@ Next Release
 * Removed ``fail()`` from the public API of tasks.
 * Removed ``schedule_activity()`` and ``schedule_workflow()`` from the public
   API of the workflows.
+* Fail the execution on arguments/results serialization/deserialization errors.
+* Lazily serialize the proxy arguments, only once, at schedule time.

@@ -43,9 +43,9 @@ class Task(object):
     def __call__(self):
         try:
             args, kwargs = self._deserialize_arguments(self._input)
-        except ValueError:
+        except Exception as e:
             logger.exception("Error while deserializing the arguments:")
-            return False
+            return self._fail(e)
         try:
             result = self.run(*args, **kwargs)
         except SuspendTask:
@@ -85,9 +85,9 @@ def activity_fail(self, reason):
 def activity_finish(self, result):
     try:
         result = self._serialize_result(result)
-    except TypeError:
+    except Exception as e:
         logger.exception('Error while serializing the result:')
-        return False
+        return activity_fail(self, e)
     try:
         self._swf_client.respond_activity_task_completed(
             result=str(result), task_token=str(self._token))
@@ -188,15 +188,18 @@ class _SWFWorkflow(Task):
             yield r
 
     def restart(self, *args, **kwargs):
+        # Optimization for self._finish() to skip result serialization
+        self._scheduled = True
         try:
             input = self._serialize_restart_arguments(*args, **kwargs)
         except TypeError:
             logger.exception('Error while serializing restart arguments:')
             return False
-        self._scheduled = True
         return self._scheduler.restart(self._spec, input, self._tags)
 
     def _fail(self, reason):
+        # An optimization for self._finish() when this method is called from a
+        # proxy to skip the result serialization
         self._scheduled = True
         return self._scheduler.fail(reason)
 
@@ -204,6 +207,8 @@ class _SWFWorkflow(Task):
         return self._scheduler.flush()
 
     def _finish(self, result):
+        if self._scheduled or self._running:
+            return self._scheduler.flush()
         r = result
         if isinstance(result, Result):
             r = result.result()
@@ -212,24 +217,22 @@ class _SWFWorkflow(Task):
                 result.result()
             except TaskError as e:
                 return self._scheduler.fail(e)
-        if not self._scheduled and not self._running:
-            try:
-                r = self._serialize_result(r)
-            except TypeError:
-                logger.exception("Error while serializing the result:")
-                return False
-            return self._scheduler.complete(r)
-        return self._scheduler.flush()
+        try:
+            r = self._serialize_result(r)
+        except Exception as e:
+            logger.exception("Error while serializing the result:")
+            return self._scheduler.fail(e)
+        return self._scheduler.complete(r)
 
-    def _schedule_activity(self, spec, input, retry, delay):
+    def _schedule_activity(self, spec, lazy_input, retry, delay):
         sched = self._scheduler.schedule_activity
-        return self._schedule(spec, input, retry, delay, sched)
+        return self._schedule(spec, lazy_input, retry, delay, sched)
 
-    def _schedule_workflow(self, spec, input, retry, delay):
+    def _schedule_workflow(self, spec, lazy_input, retry, delay):
         sched = self._scheduler.schedule_workflow
-        return self._schedule(spec, input, retry, delay, sched)
+        return self._schedule(spec, lazy_input, retry, delay, sched)
 
-    def _schedule(self, spec, input, retry, delay, sched):
+    def _schedule(self, spec, lazy_input, retry, delay, sched):
         initial_call_id = self._call_id
         try:
             if delay:
@@ -242,8 +245,14 @@ class _SWFWorkflow(Task):
                     return state, None, None
             state, value, order = self._search_result(retry)
             if state == self._NOTFOUND:
-                self._scheduled = True
-                sched(spec, self._call_id, input)
+                try:
+                    input = lazy_input()
+                except Exception as e:
+                    logger.exception("Error while serializing the arguments:")
+                    return self._ERROR, str(e), -1
+                else:
+                    self._scheduled = True
+                    sched(spec, self._call_id, lazy_input())
                 return self._RUNNING, None, None
             return state, value, order
         finally:

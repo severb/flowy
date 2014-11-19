@@ -55,13 +55,17 @@ class TaskProxy(object):
         result = self._args_based_result(workflow, args, kwargs)
         if result is not None:
             return result
-        args, kwargs = self._extract_results(args, kwargs)
-        # there is no error handling for argument/result transport
-        # we want those to bubble up in the workflow and stop it
-        input = self._serialize_arguments(*args, **kwargs)
-        state, value, order = self._schedule(workflow, input)
+        def lazy_input():
+            args_, kwargs_ = self._extract_results(args, kwargs)
+            return self._serialize_arguments(*args_, **kwargs_)
+        state, value, order = self._schedule(workflow, lazy_input)
         if state == workflow._FOUND:
-            return self.Result(self._deserialize_result(value), order)
+            try:
+                d_result = self._deserialize_result(value)
+            except Exception as e:
+                workflow._fail(e)
+                return Placeholder()
+            return self.Result(d_result, order)
         elif state == workflow._RUNNING:
             return self.Placeholder()
         elif state == workflow._ERROR:
@@ -134,8 +138,8 @@ class SWFActivityProxy(TaskProxy):
                                                        error_handling):
                 yield
 
-    def _schedule(self, workflow, input):
-        return workflow._schedule_activity(self._spec, input, self._retry,
+    def _schedule(self, workflow, lazy_input):
+        return workflow._schedule_activity(self._spec, lazy_input, self._retry,
                                            self._delay)
 
 
@@ -158,6 +162,6 @@ class SWFWorkflowProxy(TaskProxy):
                                                        error_handling):
                 yield
 
-    def _schedule(self, workflow, input):
-        return workflow._schedule_workflow(self._spec, input, self._retry,
+    def _schedule(self, workflow, lazy_input):
+        return workflow._schedule_workflow(self._spec, lazy_input, self._retry,
                                            self._delay)

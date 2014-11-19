@@ -46,11 +46,11 @@ class TestWorkflowScheduling(TestCase):
         self.state = []
 
     def schedule_activity(self, spec, input='i', retry=0, delay=0):
-        r = self.workflow._schedule_activity(spec, input, retry, delay)
+        r = self.workflow._schedule_activity(spec, lambda: input, retry, delay)
         self.state.append(r)
 
     def schedule_workflow(self, spec, input='i', retry=0, delay=0):
-        r = self.workflow._schedule_workflow(spec, input, retry, delay)
+        r = self.workflow._schedule_workflow(spec, lambda: input, retry, delay)
         self.state.append(r)
 
     def assert_state(self, *state):
@@ -505,13 +505,14 @@ class TestFristOfMany(TestWorkflowBase):
         )
 
     def test_first_error(self):
-        self.set_state(errors={2: '3'}, running=[0, 1], order=[2])
+        self.set_state(errors={2: '3'}, results={0: '1', 1: '2'},
+                       order=[2, 0, 1])
         self.assert_scheduled(
             ('FAIL', '3'),
         )
 
     def test_first_to(self):
-        self.set_state(timedout=[2], running=[0, 1], order=[2])
+        self.set_state(timedout=[2], results={0: '1', 1: '2'}, order=[2, 1, 0])
         msg = ("Activity SWFActivitySpec(name='a', version=1, task_list=None,"
                " heartbeat=None, schedule_to_close=None,"
                " schedule_to_start=None, start_to_close=None) has timed-out")
