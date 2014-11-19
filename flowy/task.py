@@ -52,9 +52,8 @@ class Task(object):
             return self._suspend()
         except Exception as e:
             logger.exception("Error while running the task:")
-            return self.fail(e)
-        else:
-            return self._finish(result)
+            return self._fail(e)
+        return self._finish(result)
 
     def run(self, *args, **kwargs):
         raise NotImplementedError
@@ -62,7 +61,7 @@ class Task(object):
     def _suspend(self):
         raise NotImplementedError
 
-    def fail(self, reason):
+    def _fail(self, reason):
         raise NotImplementedError
 
     def _finish(self, result):
@@ -72,56 +71,65 @@ class Task(object):
     _deserialize_arguments = deserialize_args
 
 
+def activity_fail(self, reason):
+    try:
+        self._swf_client.respond_activity_task_failed(
+            reason=str(reason)[:256], task_token=str(self.token))
+    except SWFResponseError:
+        logger.exception('Error while failing the activity:')
+        return False
+    return True
+
+
+def activity_finish(self, result):
+    try:
+        result = self._serialize_result(result)
+    except TypeError:
+        logger.exception('Error while serializing the result:')
+        return False
+    try:
+        self._swf_client.respond_activity_task_completed(
+            result=str(result), task_token=str(self._token))
+    except SWFResponseError:
+        logger.exception('Error while finishing the activity:')
+        return False
+    return True
+
+
+def activity_heartbeat(self):
+    try:
+        t = str(self.token)
+        self._swf_client.record_activity_task_heartbeat(task_token=t)
+    except SWFResponseError:
+        logger.exception('Error while sending the heartbeat:')
+        return False
+    return True
+
+
 class AsyncSWFActivity(object):
+
+    heartbeat = activity_heartbeat
+    fail = activity_fail
+    finish = activity_finish
+    _serialize_result = serialize_result
+
     def __init__(self, swf_client, token):
         self._swf_client = swf_client
         self.token = token
 
-    def heartbeat(self):
-        try:
-            t = str(self.token)
-            self._swf_client.record_activity_task_heartbeat(task_token=t)
-        except SWFResponseError:
-            logger.exception('Error while sending the heartbeat:')
-            return False
-        return True
 
-    def fail(self, reason):
-        try:
-            self._swf_client.respond_activity_task_failed(
-                reason=str(reason)[:256], task_token=str(self.token))
-        except SWFResponseError:
-            logger.exception('Error while failing the activity:')
-            return False
-        return True
+class SWFActivity(Task):
 
-    def finish(self, result):
-        try:
-            result = self._serialize_result(result)
-        except TypeError:
-            logger.exception('Error while serializing the result:')
-            return False
-        try:
-            self._swf_client.respond_activity_task_completed(
-                result=str(result), task_token=str(self._token))
-        except SWFResponseError:
-            logger.exception('Error while finishing the activity:')
-            return False
-        return True
+    heartbeat = activity_heartbeat
+    _fail = activity_fail
+    _finish = activity_finish
 
-    _serialize_result = serialize_result
-
-
-class SWFActivity(AsyncSWFActivity, Task):
     def __init__(self, swf_client, input, token):
         self._swf_client = swf_client
-        Task.__init__(self, input, token)
+        super(SWFActivity, self).__init__(input, token)
 
     def _suspend(self):
         return True
-
-    def _finish(self, result):
-        return AsyncSWFActivity.finish(self, result)
 
 
 class _SWFWorkflow(Task):
@@ -187,7 +195,7 @@ class _SWFWorkflow(Task):
         self._scheduled = True
         return self._scheduler.restart(self._spec, input, self._tags)
 
-    def fail(self, reason):
+    def _fail(self, reason):
         self._scheduled = True
         return self._scheduler.fail(reason)
 
@@ -213,12 +221,14 @@ class _SWFWorkflow(Task):
         return self._scheduler.flush()
 
     def schedule_activity(self, spec, input, retry, delay):
-        return self._schedule(spec, input, retry, delay, True)
+        sched = self._scheduler.schedule_activity
+        return self._schedule(spec, input, retry, delay, sched)
 
     def schedule_workflow(self, spec, input, retry, delay):
-        return self._schedule(spec, input, retry, delay, False)
+        sched = self._scheduler.schedule_workflow
+        return self._schedule(spec, input, retry, delay, sched)
 
-    def _schedule(self, spec, input, retry, delay, is_act=True):
+    def _schedule(self, spec, input, retry, delay, sched):
         initial_call_id = self._call_id
         try:
             if delay:
@@ -232,9 +242,6 @@ class _SWFWorkflow(Task):
             state, value, order = self._search_result(retry)
             if state == self._NOTFOUND:
                 self._scheduled = True
-                sched = self._scheduler.schedule_activity
-                if not is_act:
-                    sched = self._scheduler.schedule_workflow
                 sched(spec, self._call_id, input)
                 return self._RUNNING, None, None
             return state, value, order

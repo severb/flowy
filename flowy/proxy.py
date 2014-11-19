@@ -32,7 +32,7 @@ class TaskProxy(object):
     def __get__(self, obj, objtype):
         if obj is None:
             return self
-        return MagicBind(self, task=obj)
+        return MagicBind(self, workflow=obj)
 
     @contextmanager
     def options(self, retry=_sentinel, delay=_sentinel,
@@ -51,31 +51,31 @@ class TaskProxy(object):
         self._delay = old_delay
         self._error_handling = old_error_handling
 
-    def __call__(self, task, *args, **kwargs):
-        result = self._args_based_result(task, args, kwargs)
+    def __call__(self, workflow, *args, **kwargs):
+        result = self._args_based_result(workflow, args, kwargs)
         if result is not None:
             return result
         args, kwargs = self._extract_results(args, kwargs)
         # there is no error handling for argument/result transport
         # we want those to bubble up in the workflow and stop it
         input = self._serialize_arguments(*args, **kwargs)
-        state, value, order = self._schedule(task, input)
-        if state == task._FOUND:
+        state, value, order = self._schedule(workflow, input)
+        if state == workflow._FOUND:
             return self.Result(self._deserialize_result(value), order)
-        elif state == task._RUNNING:
+        elif state == workflow._RUNNING:
             return self.Placeholder()
-        elif state == task._ERROR:
+        elif state == workflow._ERROR:
             if self._error_handling:
                 return self.Error(value, order)
-            task.fail(value)
+            workflow._fail(value)
             return self.Placeholder()
-        elif state == task._TIMEDOUT:
+        elif state == workflow._TIMEDOUT:
             if self._error_handling:
                 return self.Timeout(self.timeout_message, order)
-            task.fail(self.timeout_message)
+            workflow._fail(self.timeout_message)
             return self.Placeholder()
 
-    def _args_based_result(self, task, args, kwargs):
+    def _args_based_result(self, workflow, args, kwargs):
         args = tuple(args) + tuple(kwargs.values())
         errs = [e for e in args if isinstance(e, (Error, Timeout))]
         if errs:
@@ -85,7 +85,7 @@ class TaskProxy(object):
                 # Same order as the first error in the arguments
                 return self.Error(error_message, first_e._order)
             else:
-                task.fail(error_message)
+                workflow._fail(error_message)
                 return self.Placeholder()
         if self._deps_in_args(args):
             return self.Placeholder()
@@ -134,8 +134,8 @@ class SWFActivityProxy(TaskProxy):
                                                        error_handling):
                 yield
 
-    def _schedule(self, task, input):
-        return task.schedule_activity(self._spec, input, self._retry,
+    def _schedule(self, workflow, input):
+        return workflow.schedule_activity(self._spec, input, self._retry,
                                       self._delay)
 
 
@@ -158,6 +158,6 @@ class SWFWorkflowProxy(TaskProxy):
                                                        error_handling):
                 yield
 
-    def _schedule(self, task, input):
-        return task.schedule_workflow(self._spec, input, self._retry,
+    def _schedule(self, workflow, input):
+        return workflow.schedule_workflow(self._spec, input, self._retry,
                                       self._delay)
