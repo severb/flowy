@@ -216,7 +216,7 @@ class Workflow(Task):
         return self._schedule(proxy, a, kw, retry, d_result, Error,
                               LinkedError, s, Timeout)
 
-    def _sched(self, spec, a, kw, retry, d_result, fail_task,
+    def _sched(self, proxy, a, kw, retry, d_result, fail_task,
                   fail_on_result, schedule, timeout):
         r = Placeholder()
         for call_number, delay in enumerate(retry):
@@ -239,9 +239,6 @@ class Workflow(Task):
                 args = a + tuple(kw.values())
                 # Optimization not to schedule or load results on errors
                 errs = [x for x in args if isinstance(x, Error)]
-                print '-'*80
-                print errs, args
-                print '-'*80
                 if errs:
                     r = fail_on_result(min(errs))
                     break
@@ -253,7 +250,7 @@ class Workflow(Task):
                 if any(isinstance(x, Placeholder) for x in args):
                     break
                 try:
-                    schedule(spec, call_key, aa, kwkw, delay)
+                    schedule(proxy, call_key, aa, kwkw, delay)
                 except Exception as e:
                     logger.exception("Error while scheduling task:")
                     r = fail_task(e, -1)
