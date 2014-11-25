@@ -42,11 +42,11 @@ class TaskProxy(object):
         self._error_handling = old_error_handling
 
     def __call__(self, workflow, *args, **kwargs):
-        schedule = workflow._schedule
+        lookup = workflow._lookup
         if self._error_handling:
-            schedule = workflow._schedule_with_errors
-        return schedule(self, args, kwargs, self._retry,
-                        self._deserialize_result)
+            lookup = workflow._lookup_with_errors
+        return lookup(self, args, kwargs, self._retry,
+                      self._deserialize_result)
 
 
 class SWFActivityProxy(TaskProxy):

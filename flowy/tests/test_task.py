@@ -273,7 +273,7 @@ class TestFirstN(TestWorkflow):
 class TestErrorHandling(TestWorkflow):
 
     class WF(Workflow):
-        a = TaskProxy()
+        a = TaskProxy(error_handling=True)
         def run(self):
             return self.a(self.a(), self.a())
 

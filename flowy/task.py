@@ -134,16 +134,18 @@ class SWFActivity(Task):
 
 class Workflow(Task):
 
+    rate_limit = 64
+
     def __init__(self, scheduler, input, running, timedout, results, errors,
-                 order, spec):
+                 order):
         self._scheduler = scheduler
         self._running = set(running)
         self._timedout = set(timedout)
         self._results = dict(results)
         self._errors = dict(errors)
         self._order = list(order)
-        self._spec = spec
         self._call_id = 0
+        self._scheduled = []
         super(Workflow, self).__init__(input)
 
     def wait_for(self, task):
@@ -169,24 +171,38 @@ class Workflow(Task):
             yield r
 
     def restart(self, *args, **kwargs):
+        self._scheduled = []
         try:
             input = self._serialize_restart_arguments(*args, **kwargs)
         except Exception as e:
             logger.exception('Error while serializing restart arguments:')
             self._fail(e)
         else:
-            self._scheduler.reset()
-            self._scheduler.restart(self._spec, input)
+            self._restart(input)
         raise SuspendTask
 
+    def _restart(self):
+        raise NotImplementedError
+
+    def _complete(self, r):
+        raise NotImplementedError
+
     def _fail(self, reason):
-        self._scheduler.reset()
-        self._scheduler.fail(reason)
+        self._scheduled = []
+
+    def _flush(self):
+        raise NotImplementedError
+
+    def _schedule(self, proxy, call_key, a, kw, delay):
+        if len(self._scheduled) > self._rate_limit - len(self._running):
+            return
+        self._scheduled.append((proxy, call_key, a, kw, delay))
 
     def _finish(self, result):
         if isinstance(result, Placeholder):
             return
         r = result
+        self._reset()
         if isinstance(result, Result):
             try:
                 r = result.result()
@@ -199,24 +215,17 @@ class Workflow(Task):
             logger.exception("Error while serializing the result:")
             self._fail(e)
             return
-        self._scheduler.reset()
-        self._scheduler.complete(r)
+        self._complete(r)
 
-    def _flush(self):
-        self._scheduler.flush()
+    def _lookup(self, proxy, a, kw, retry, d_result):
+        return self._l(proxy, a, kw, retry, d_result, self._fail_execution,
+                       self._fail_on_result, self._fail_execution)
 
-    def _schedule(self, proxy, a, kw, retry, d_result):
-        s = self._scheduler.schedule
-        return self._sched(proxy, a, kw, retry, d_result,
-                           self._fail_execution, self._fail_on_result, s,
-                           self._fail_execution)
+    def _lookup_with_errors(self, proxy, a, kw, retry, d_result):
+        return self._l(proxy, a, kw, retry, d_result, Error, LinkedError,
+                       Timeout)
 
-    def _schedule_with_err(self, proxy, a, kw, retry, d_result):
-        s = self._scheduler.schedule
-        return self._schedule(proxy, a, kw, retry, d_result, Error,
-                              LinkedError, s, Timeout)
-
-    def _sched(self, proxy, a, kw, retry, d_result, fail_task,
+    def _l(self, proxy, a, kw, retry, d_result, fail_task,
                   fail_on_result, schedule, timeout):
         r = Placeholder()
         for call_number, delay in enumerate(retry):
@@ -250,7 +259,7 @@ class Workflow(Task):
                 if any(isinstance(x, Placeholder) for x in args):
                     break
                 try:
-                    schedule(proxy, call_key, aa, kwkw, delay)
+                    self._schedule(proxy, call_key, aa, kwkw, delay)
                 except Exception as e:
                     logger.exception("Error while scheduling task:")
                     r = fail_task(e, -1)
