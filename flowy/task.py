@@ -205,29 +205,18 @@ class Workflow(Task):
     def _flush(self):
         self._scheduler.flush()
 
-    def _schedule_activity_with_err(self, spec, a, kw, retry, d_result):
-        s = self._scheduler.schedule_activity
-        return self._schedule(spec, a, kw, retry, d_result, Error,
+    def _schedule(self, proxy, a, kw, retry, d_result):
+        s = self._scheduler.schedule
+        return self._sched(proxy, a, kw, retry, d_result,
+                           self._fail_execution, self._fail_on_result, s,
+                           self._fail_execution)
+
+    def _schedule_with_err(self, proxy, a, kw, retry, d_result):
+        s = self._scheduler.schedule
+        return self._schedule(proxy, a, kw, retry, d_result, Error,
                               LinkedError, s, Timeout)
 
-    def _schedule_activity(self, spec, a, kw, retry, d_result):
-        s = self._scheduler.schedule_activity
-        return self._schedule(spec, a, kw, retry, d_result,
-                              self._fail_execution, self._fail_on_result, s,
-                              self._fail_execution)
-
-    def _schedule_workflow_with_err(self, spec, a, kw, retry, d_result):
-        s = self._scheduler.schedule_workflow
-        return self._schedule(spec, a, kw, retry, d_result, Error,
-                              LinkedError, s, Timeout)
-
-    def _schedule_workflow(self, spec, a, kw, retry, d_result):
-        s = self._scheduler.schedule_workflow
-        return self._schedule(spec, a, kw, retry, d_result,
-                              self._fail_execution, self._fail_on_result, s,
-                              self._fail_execution)
-
-    def _schedule(self, spec, a, kw, retry, d_result, fail_task,
+    def _sched(self, spec, a, kw, retry, d_result, fail_task,
                   fail_on_result, schedule, timeout):
         r = Placeholder()
         for call_number, delay in enumerate(retry):
@@ -342,7 +331,7 @@ class SWFScheduler(object):
     def complete(self, result):
         self._decisions.complete_workflow_execution(str(result))
 
-    def schedule_activity(self, spec, call_key, a, kw, delay):
+    def schedule(self, proxy, call_key, a, kw, delay):
         if len(self._decisions._data) > self._rate_limit:
             return
         delay = int(delay)
@@ -352,12 +341,7 @@ class SWFScheduler(object):
                 timer_id=str('%s:timer' % call_ke)
             )
         else:
-            spec.schedule(self._decisions, call_key, a, kw)
-
-    def schedule_workflow(self, spec, call_key, a, kw, delay):
-        if len(self._decisions._data) < self._rate_limit:
-            call_key = '%s-%s' % (uuid.uuid4(), call_key)
-            spec.schedule(self._decisions, call_key, a, kw)
+            proxy.schedule(self._decisions, call_key, a, kw)
 
 
 class SWFWorkflow(Workflow):

@@ -42,23 +42,11 @@ class TaskProxy(object):
         self._error_handling = old_error_handling
 
     def __call__(self, workflow, *args, **kwargs):
-        raise NotImplementedError
-
-
-class ActivityProxy(TaskProxy):
-    def __call__(self, workflow, *args, **kwargs):
-        sched = workflow._schedule_activity
+        schedule = workflow._schedule
         if self._error_handling:
-            sched = workflow._schedule_activity_with_err
-        return sched(self, args, kwargs, self._retry, self._deserialize_result)
-
-
-class WorkflowProxy(TaskProxy):
-    def __call__(self, workflow, *args, **kwargs):
-        sched = workflow._schedule_workflow
-        if self._error_handling:
-            sched = workflow._schedule_workflow_with_err
-        return sched(self, args, kwargs, self._retry, self._deserialize_result)
+            schedule = workflow._schedule_with_errors
+        return schedule(self, args, kwargs, self._retry,
+                        self._deserialize_result)
 
 
 class SWFActivityProxy(TaskProxy):
@@ -98,9 +86,6 @@ class SWFWorkflowProxy(TaskProxy):
         super(SWFWorkflowProxy, self).__init__(retry, error_handling,
                                                deserialize_result)
 
-    def schedule(self, *args, **kwargs):
-        return self._spec.schedule(*args, **kwargs)
-
     @contextmanager
     def options(self, task_list=_sentinel, decision_duration=_sentinel,
                 workflow_duration=_sentinel, retry=_sentinel,
@@ -111,4 +96,5 @@ class SWFWorkflowProxy(TaskProxy):
                 yield
 
     def schedule(self, swf_decisions, call_key, a, kw):
+        call_key = '%s-%s' % (uuid.uuid4(), call_key)
         return self._spec.schedule(swf_decisions, call_key, a, kw)
