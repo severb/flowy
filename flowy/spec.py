@@ -17,11 +17,18 @@ def SWFSpecKey(name, version):
     return _SWFKeyTuple(str(name), str(version))
 
 
+def serialize_arguments(*args, **kwargs):
+    r = json.dumps([args, kwargs])
+    if len(r) > 32000:
+        raise ValueError("Serialized arguments > 32000 characters.")
+    return r
+
+
 @total_ordering  # make the registration deterministic
 class SWFActivitySpec(object):
     def __init__(self, name, version, task_list=None, heartbeat=None,
                  schedule_to_close=None, schedule_to_start=None,
-                 start_to_close=None):
+                 start_to_close=None, serialize_arguments=serialize_arguments):
         self._name = name
         self._version = version
         self._task_list = task_list
@@ -29,18 +36,20 @@ class SWFActivitySpec(object):
         self._schedule_to_close = schedule_to_close
         self._schedule_to_start = schedule_to_start
         self._start_to_close = start_to_close
+        self._serialize_arguments = serialize_arguments
 
-    def schedule(self, swf_decisions, call_id, input):
+    def schedule(self, swf_decisions, call_key, a, kw):
+        input = str(self._serialize_arguments(a, kw))
         heartbeat, schedule_to_close, schedule_to_start, start_to_close = (
             self._timers_encode())
         swf_decisions.schedule_activity_task(
-            str(call_id), str(self._name), str(self._version),
+            str(call_key), str(self._name), str(self._version),
             heartbeat_timeout=heartbeat,
             schedule_to_close_timeout=schedule_to_close,
             schedule_to_start_timeout=schedule_to_start,
             start_to_close_timeout=start_to_close,
             task_list=_str_or_none(self._task_list),
-            input=str(input))
+            input=input)
 
     @contextmanager
     def options(self, task_list=_sentinel, heartbeat=_sentinel,
@@ -149,12 +158,14 @@ class SWFActivitySpec(object):
 @total_ordering
 class SWFWorkflowSpec(object):
     def __init__(self, name, version, task_list=None, decision_duration=None,
-                 workflow_duration=None):
+                 workflow_duration=None,
+                 serialize_arguments=serialize_arguments):
         self._name = name
         self._version = version
         self._task_list = task_list
         self._decision_duration = decision_duration
         self._workflow_duration = workflow_duration
+        self._serialize_arguments = serialize_arguments
 
     def start(self, swf_client, call_id, input, tags=None):
         decision_duration, workflow_duration = self._timers_encode()
@@ -186,10 +197,11 @@ class SWFWorkflowSpec(object):
         if STCT in last_decision_attrs:
             last_decision_attrs[TSTCT] = last_decision_attrs.pop(STCT)
 
-    def schedule(self, swf_decisions, call_id, input):
+    def schedule(self, swf_decisions, call_key, a, kw):
+        input = str(self._serialize_arguments(a, kw))
         decision_duration, workflow_duration = self._timers_encode()
         swf_decisions.start_child_workflow_execution(
-            str(self._name), str(self._version), str(call_id),
+            str(self._name), str(self._version), str(call_key),
             task_start_to_close_timeout=decision_duration,
             execution_start_to_close_timeout=workflow_duration,
             task_list=_str_or_none(self._task_list),

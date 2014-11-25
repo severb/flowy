@@ -18,10 +18,27 @@ class _Sortable(object):
 
 class Placeholder(_Sortable):
     def result(self):
-        raise SuspendTask()
+        raise SuspendTask
 
 
-class Error(_Sortable):
+class Result(_Sortable):
+    def __init__(self, result, d_result, order):
+        self._result = result
+        self._d_result = d_result
+        self._order = order
+
+    def result(self):
+        if not hasattr(self, '_result_cache'):
+            try:
+                self._result_cache = self._d_result(self._result)
+            except Exception as e:
+                self._result_cache = TaskError(e)
+        if isinstance(self._result_cache, Exception):
+            raise self._result_cache
+        return self._result_cache
+
+
+class Error(Result):
     def __init__(self, reason, order):
         self._reason = reason
         self._order = order
@@ -30,19 +47,21 @@ class Error(_Sortable):
         raise TaskError(self._reason)
 
 
-class Timeout(_Sortable):
+class LinkedError(Error):
+    def __init__(self, error):
+        self._error = error
+
+    def result(self):
+        return self._error.result()
+
+    def __lt__(self, other):
+        return self._error < other
+
+
+class Timeout(Error):
     def __init__(self, reason, order):
         self._reason = reason
         self._order = order
 
     def result(self):
         raise TaskTimedout(self._reason)
-
-
-class Result(_Sortable):
-    def __init__(self, result, order):
-        self._result = result
-        self._order = order
-
-    def result(self):
-        return self._result
