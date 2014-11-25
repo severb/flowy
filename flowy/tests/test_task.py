@@ -54,17 +54,29 @@ class TestWorkflow(TestCase):
         self.assertEquals(self.scheduler.state, list(state))
 
 
-class TestSimpleWorkflow(TestWorkflow):
+class TestWorkflowActivity(TestWorkflow):
+    task_type = 'ACTIVITY'
+    proxy_type = ActivityProxy
+
+    def setUp(self):
+        self.WF.a = self.proxy_type()
+
+
+class WorkflowMixin(object):
+    task_type = 'WORKFLOW'
+    proxy_type = WorkflowProxy
+
+
+class TestSimpleWorkflow(TestWorkflowActivity):
 
     class WF(Workflow):
-        a = ActivityProxy()
         def run(self):
             return self.a()
 
     def test_initial_schedule(self):
         self.run_workflow()
         self.assert_state(
-            ('ACTIVITY', self.WF.a, '0-0', [], {}, 0)
+            (self.task_type, self.WF.a, '0-0', [], {}, 0)
         )
 
     def test_return_result(self):
@@ -86,7 +98,7 @@ class TestSimpleWorkflow(TestWorkflow):
     def test_default_timeout_retry(self):
         self.run_workflow(timedout=['0-0'])
         self.assert_state(
-            ('ACTIVITY', self.WF.a, '0-1', (), {}, 0)
+            (self.task_type, self.WF.a, '0-1', (), {}, 0)
         )
 
     def test_default_timeout_retry(self):
@@ -96,10 +108,13 @@ class TestSimpleWorkflow(TestWorkflow):
         )
 
 
-class TestReturnEarly(TestWorkflow):
+class TestSimpleWorkflowW(WorkflowMixin, TestSimpleWorkflow):
+    pass
+
+
+class TestReturnEarly(TestWorkflowActivity):
 
     class WF(Workflow):
-        a = ActivityProxy()
         def run(self):
             self.a()
             self.a()
@@ -111,24 +126,26 @@ class TestReturnEarly(TestWorkflow):
         )
 
 
-class TestDependency(TestWorkflow):
+class TestReturnEarlyW(WorkflowMixin, TestReturnEarly):
+    pass
+
+
+class TestDependency(TestWorkflowActivity):
 
     class WF(Workflow):
-        a = ActivityProxy()
-        b = WorkflowProxy()
         def run(self):
-            return self.a(self.b(self.a()))
+            return self.a(self.a(self.a()))
 
     def test_schedule_second(self):
         self.run_workflow(results={'0-0': '123'})
         self.assert_state(
-            ('WORKFLOW', self.WF.b, '1-0', [123], {}, 0)
+            (self.task_type, self.WF.a, '1-0', [123], {}, 0)
         )
 
     def test_schedule_third(self):
         self.run_workflow(results={'0-0': '123', '1-0': '234'})
         self.assert_state(
-            ('ACTIVITY', self.WF.a, '2-0', [234], {}, 0)
+            (self.task_type, self.WF.a, '2-0', [234], {}, 0)
         )
 
     def test_fast_lookup(self):
@@ -143,10 +160,13 @@ class TestDependency(TestWorkflow):
         )
 
 
-class TestParallel(TestWorkflow):
+class TestDependencyW(WorkflowMixin, TestDependency):
+    pass
+
+
+class TestParallel(TestWorkflowActivity):
 
     class WF(Workflow):
-        a = ActivityProxy()
         def run(self):
             a1 = self.a(1)
             a2 = self.a(2)
@@ -156,18 +176,18 @@ class TestParallel(TestWorkflow):
     def test_initial_schedule(self):
         self.run_workflow()
         self.assert_state(
-            ('ACTIVITY', self.WF.a, '0-0', [1], {}, 0),
-            ('ACTIVITY', self.WF.a, '1-0', [2], {}, 0),
-            ('ACTIVITY', self.WF.a, '2-0', [3], {}, 0)
+            (self.task_type, self.WF.a, '0-0', [1], {}, 0),
+            (self.task_type, self.WF.a, '1-0', [2], {}, 0),
+            (self.task_type, self.WF.a, '2-0', [3], {}, 0)
         )
 
     def test_dependency(self):
         self.run_workflow(results={'0-0': '10', '1-0': '20', '2-0': '30'})
         self.assert_state(
-            ('ACTIVITY', self.WF.a, '3-0', [10, 20, 30], {}, 0)
+            (self.task_type, self.WF.a, '3-0', [10, 20, 30], {}, 0)
         )
 
-    def test_dependency(self):
+    def test_dependency_complete(self):
         self.run_workflow(results={
             '0-0': '10',
             '1-0': '20',
@@ -179,29 +199,34 @@ class TestParallel(TestWorkflow):
         )
 
 
-class TestRetry(TestWorkflow):
+class TestParallelW(WorkflowMixin, TestParallel):
+    pass
+
+
+class TestRetry(TestWorkflowActivity):
+
+    proxy_type = lambda _: ActivityProxy(retry=[10, 20, 30])
 
     class WF(Workflow):
-        a = ActivityProxy(retry=[10, 20, 30])
         def run(self):
             return self.a()
 
     def test_custom_retry_10(self):
         self.run_workflow()
         self.assert_state(
-            ('ACTIVITY', self.WF.a, '0-0', [], {}, 10),
+            (self.task_type, self.WF.a, '0-0', [], {}, 10),
         )
 
     def test_custom_retry_20(self):
         self.run_workflow(timedout=['0-0'])
         self.assert_state(
-            ('ACTIVITY', self.WF.a, '0-1', [], {}, 20),
+            (self.task_type, self.WF.a, '0-1', [], {}, 20),
         )
 
     def test_custom_retry_30(self):
         self.run_workflow(timedout=['0-0', '0-1'])
         self.assert_state(
-            ('ACTIVITY', self.WF.a, '0-2', [], {}, 30),
+            (self.task_type, self.WF.a, '0-2', [], {}, 30),
         )
 
     def test_custom_retry_timeout(self):
@@ -211,10 +236,13 @@ class TestRetry(TestWorkflow):
         )
 
 
-class TestFirst(TestWorkflow):
+class TestRetryW(WorkflowMixin, TestRetry):
+    proxy_type = lambda _: WorkflowProxy(retry=[10, 20, 30])
+
+
+class TestFirst(TestWorkflowActivity):
 
     class WF(Workflow):
-        a = ActivityProxy()
         def run(self):
             return self.first(self.a(), self.a(), self.a())
 
@@ -246,10 +274,14 @@ class TestFirst(TestWorkflow):
             ('COMPLETE', '10')
         )
 
-class TestFirstN(TestWorkflow):
+
+class TestFirstW(WorkflowMixin, TestFirst):
+    pass
+
+
+class TestFirstN(TestWorkflowActivity):
 
     class WF(Workflow):
-        a = ActivityProxy()
         def run(self):
             first_2 = self.first_n(2, self.a(), self.a(), self.a())
             return self.a(*first_2)
@@ -258,14 +290,14 @@ class TestFirstN(TestWorkflow):
         self.run_workflow(results={'0-0': '10', '1-0': '20', '2-0': '30'},
                           order=['2-0', '1-0', '0-0'])
         self.assert_state(
-            ('ACTIVITY', self.WF.a, '3-0', [30, 20], {}, 0),
+            (self.task_type, self.WF.a, '3-0', [30, 20], {}, 0),
         )
 
     def test_first_2_last_running(self):
         self.run_workflow(results={'1-0': '20', '2-0': '30'}, running=['0-0'],
                           order=['2-0', '1-0'])
         self.assert_state(
-            ('ACTIVITY', self.WF.a, '3-0', [30, 20], {}, 0),
+            (self.task_type, self.WF.a, '3-0', [30, 20], {}, 0),
         )
 
     def test_first_2_running(self):
@@ -274,10 +306,13 @@ class TestFirstN(TestWorkflow):
         self.assert_state()
 
 
-class TestErrorHandling(TestWorkflow):
+class TestFirstNW(WorkflowMixin, TestFirstN):
+    pass
+
+
+class TestErrorHandling(TestWorkflowActivity):
 
     class WF(Workflow):
-        a = ActivityProxy(error_handling=True)
         def run(self):
             return self.a(self.a(), self.a())
 
@@ -305,3 +340,7 @@ class TestErrorHandling(TestWorkflow):
         self.assert_state(
             ('FAIL', 'A task has timedout.')
         )
+
+
+class TestErrorHandlingW(WorkflowMixin, TestErrorHandling):
+    pass

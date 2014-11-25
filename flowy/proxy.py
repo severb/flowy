@@ -57,7 +57,7 @@ class WorkflowProxy(TaskProxy):
     def __call__(self, workflow, *args, **kwargs):
         sched = workflow._schedule_workflow
         if self._error_handling:
-            sched = workflow._schedule_wokrkflow_with_err
+            sched = workflow._schedule_workflow_with_err
         return sched(self, args, kwargs, self._retry, self._deserialize_result)
 
 
