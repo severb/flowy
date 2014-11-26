@@ -46,13 +46,12 @@ class Task(object):
             try:
                 result = self.run(*args, **kwargs)
             except SuspendTask:
-                pass
+                self._flush()
             except Exception as e:
                 logger.exception("Error while running the task:")
                 self._fail(e)
             else:
                 self._finish(result)
-        self._flush()
 
     def run(self, *args, **kwargs):
         raise NotImplementedError
@@ -136,9 +135,7 @@ class Workflow(Task):
 
     rate_limit = 64
 
-    def __init__(self, scheduler, input, running, timedout, results, errors,
-                 order):
-        self._scheduler = scheduler
+    def __init__(self, input, running, timedout, results, errors, order):
         self._running = set(running)
         self._timedout = set(timedout)
         self._results = dict(results)
@@ -149,6 +146,7 @@ class Workflow(Task):
         super(Workflow, self).__init__(input)
 
     def wait_for(self, task):
+        # Don't force result deserialization
         if isinstance(task, Placeholder):
             raise SuspendTask
         return task
@@ -171,7 +169,6 @@ class Workflow(Task):
             yield r
 
     def restart(self, *args, **kwargs):
-        self._scheduled = []
         try:
             input = self._serialize_restart_arguments(*args, **kwargs)
         except Exception as e:
@@ -179,42 +176,40 @@ class Workflow(Task):
             self._fail(e)
         else:
             self._restart(input)
+        self._scheduled = []
         raise SuspendTask
 
-    def _restart(self):
+    def _restart(self, input):
         raise NotImplementedError
 
-    def _complete(self, r):
+    def _complete(self, result):
         raise NotImplementedError
 
     def _fail(self, reason):
-        self._scheduled = []
+        raise NotImplementedError
 
     def _flush(self):
         raise NotImplementedError
 
     def _schedule(self, proxy, call_key, a, kw, delay):
-        if len(self._scheduled) > self._rate_limit - len(self._running):
+        if len(self._scheduled) >= self.rate_limit - len(self._running):
             return
         self._scheduled.append((proxy, call_key, a, kw, delay))
 
     def _finish(self, result):
         if isinstance(result, Placeholder):
-            return
+            return self._flush()
         r = result
-        self._reset()
         if isinstance(result, Result):
             try:
                 r = result.result()
             except TaskError as e:
-                self._fail(e)
-                return
+                return self._fail(e)
         try:
             r = self._serialize_result(r)
         except Exception as e:
             logger.exception("Error while serializing the result:")
-            self._fail(e)
-            return
+            return self._fail(e)
         self._complete(r)
 
     def _lookup(self, proxy, a, kw, retry, d_result):
@@ -226,7 +221,7 @@ class Workflow(Task):
                        Timeout)
 
     def _l(self, proxy, a, kw, retry, d_result, fail_task,
-                  fail_on_result, schedule, timeout):
+                  fail_on_result, timeout):
         r = Placeholder()
         for call_number, delay in enumerate(retry):
             call_key = "%s-%s" % (self._call_id, call_number)
@@ -273,6 +268,7 @@ class Workflow(Task):
 
     def _fail_execution(self, reason, order=None):
         self._fail(reason)
+        self._scheduled = []
         raise SuspendTask
 
     def _fail_on_result(self, err, suspend=True):
@@ -378,6 +374,7 @@ class SWFWorkflow(Workflow):
         else:
             self._scheduler.reset()
             self._scheduler.restart(self._spec, input, self._tags)
+        self._scheduled = []
         raise SuspendTask
 
 
