@@ -1,15 +1,11 @@
 import json
 import logging
-import uuid
 from contextlib import contextmanager
-
-from boto.swf.exceptions import SWFResponseError
-from boto.swf.layer1_decisions import Layer1Decisions
 
 from flowy.exception import SuspendTask
 from flowy.exception import SuspendTaskNoFlush
 from flowy.exception import TaskError
-from flowy.proxy import serialize_arguments
+from flowy.proxy import TaskProxy
 from flowy.result import Error
 from flowy.result import LinkedError
 from flowy.result import Placeholder
@@ -26,20 +22,13 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def serialize_result(result):
-    r = json.dumps(result)
-    if len(r) > 32000:
-        raise ValueError("Serialized result > 32000 characters.")
-    return r
-
-
 class Task(object):
     def __init__(self, input):
         self._input = input
 
     def __call__(self):
         try:
-            args, kwargs = self._deserialize_arguments(self._input)
+            args, kwargs = self.deserialize_arguments(self._input)
         except Exception as e:
             logger.exception("Error while deserializing the arguments:")
             self._fail(e)
@@ -68,71 +57,14 @@ class Task(object):
     def _finish(self, result):
         raise NotImplementedError
 
-    _serialize_result = staticmethod(serialize_result)
-    _deserialize_arguments = staticmethod(json.loads)
+    deserialize_arguments = staticmethod(json.loads)
 
-
-def activity_fail(self, reason):
-    try:
-        self._swf_client.respond_activity_task_failed(
-            reason=str(reason)[:256], task_token=str(self._token))
-    except SWFResponseError:
-        logger.exception('Error while failing the activity:')
-        return False
-    return True
-
-
-def activity_finish(self, result):
-    try:
-        result = self._serialize_result(result)
-    except Exception as e:
-        logger.exception('Error while serializing the result:')
-        return activity_fail(self, e)
-    try:
-        self._swf_client.respond_activity_task_completed(
-            result=str(result), task_token=str(self._token))
-    except SWFResponseError:
-        logger.exception('Error while finishing the activity:')
-        return False
-    return True
-
-
-def activity_heartbeat(self):
-    try:
-        t = str(self._token)
-        self._swf_client.record_activity_task_heartbeat(task_token=t)
-    except SWFResponseError:
-        logger.exception('Error while sending the heartbeat:')
-        return False
-    return True
-
-
-class AsyncSWFActivity(object):
-
-    heartbeat = activity_heartbeat
-    fail = activity_fail
-    finish = activity_finish
-    _serialize_result = staticmethod(serialize_result)
-
-    def __init__(self, swf_client, token):
-        self._swf_client = swf_client
-        self._token = token
-
-
-class SWFActivity(Task):
-
-    heartbeat = activity_heartbeat
-    _fail = activity_fail
-    _finish = activity_finish
-
-    def __init__(self, swf_client, input, token):
-        self._swf_client = swf_client
-        self._token = token
-        super(SWFActivity, self).__init__(input, token)
-
-    def _flush(self):
-        pass
-
+    @staticmethod
+    def serialize_result(result):
+        r = json.dumps(result)
+        if len(r) > 32000:
+            raise ValueError("Serialized result > 32000 characters.")
+        return r
 
 
 class restart(object):
@@ -211,24 +143,22 @@ class Workflow(Task):
             except TaskError as e:
                 return self._fail(e)
         try:
-            r = self._serialize_result(r)
+            r = self.serialize_result(r)
         except Exception as e:
             logger.exception("Error while serializing the result:")
             return self._fail(e)
         self._complete(r)
 
-    def _lookup(self, proxy, a, kw, retry, d_result):
-        return self._l(proxy, a, kw, retry, d_result, self._fail_execution,
+    def _lookup(self, proxy, a, kw):
+        return self._l(proxy, a, kw, self._fail_execution,
                        self._fail_on_result, self._fail_execution)
 
-    def _lookup_with_errors(self, proxy, a, kw, retry, d_result):
-        return self._l(proxy, a, kw, retry, d_result, Error, LinkedError,
-                       Timeout)
+    def _lookup_with_errors(self, proxy, a, kw):
+        return self._l(proxy, a, kw, Error, LinkedError, Timeout)
 
-    def _l(self, proxy, a, kw, retry, d_result, fail_task,
-                  fail_on_result, timeout):
+    def _l(self, proxy, a, kw, fail_task, fail_on_result, timeout):
         r = Placeholder()
-        for call_number, delay in enumerate(retry):
+        for call_number, delay in enumerate(proxy):
             call_key = "%s-%s" % (self._call_id, call_number)
             if call_key in self._timedout:
                 continue
@@ -237,7 +167,7 @@ class Workflow(Task):
             elif call_key in self._results:
                 raw_result = self._results[call_key]
                 order = self._order.index(call_key)
-                r = Result(raw_result, d_result, order)
+                r = Result(raw_result, proxy.deserialize_result, order)
                 break
             elif call_key in self._errors:
                 raw_error = self._errors[call_key]
@@ -303,83 +233,7 @@ class Workflow(Task):
                 kwkw[k] = v
         return errs, aa, kwkw
 
-    _serialize_restart_arguments = staticmethod(serialize_arguments)
-
-
-class SWFScheduler(object):
-    def __init__(self, swf_client, token, rate_limit=64):
-        self._swf_client = swf_client
-        self._token = token
-        self._rate_limit = rate_limit
-        self._decisions = Layer1Decisions()
-        self._closed = False
-
-    def flush(self):
-        if self._closed:
-            raise RuntimeError('The scheduler is already flushed.')
-        self._closed = True
-        try:
-            self._swf_client.respond_decision_task_completed(
-                task_token=self._token, decisions=self._decisions._data
-            )
-        except SWFResponseError:
-            logger.exception('Error while sending the decisions:')
-
-    def reset(self):
-        self._decisions = Layer1Decisions()
-
-    def restart(self, spec, input, tags):
-        spec.restart(self._decisions, input, tags)
-
-    def fail(self, reason):
-        decisions.fail_workflow_execution(reason=str(reason)[:256])
-
-    def complete(self, result):
-        self._decisions.complete_workflow_execution(str(result))
-
-    def schedule(self, proxy, call_key, a, kw, delay):
-        if len(self._decisions._data) > self._rate_limit:
-            return
-        delay = int(delay)
-        if max(delay, 0):
-            self._decisions.start_timer(
-                start_to_fire_timeout=str(delay),
-                timer_id=str('%s:timer' % call_ke)
-            )
-        else:
-            proxy.schedule(self._decisions, call_key, a, kw)
-
-
-class SWFWorkflow(Workflow):
-    def __init__(self, swf_client, input, token, running, timedout, results,
-                 errors, order, spec, tags):
-        s = SWFScheduler(swf_client, token, rate_limit=64 - len(running))
-        self._tags = tags
-        super(SWFWorkflow, self).__init__(s, input, running, timedout,
-                                          results, errors, order, spec)
-
-    @contextmanager
-    def options(self, task_list=_sentinel, decision_duration=_sentinel,
-                workflow_duration=_sentinel, tags=_sentinel):
-        old_tags = self._tags
-        if tags is not _sentinel:
-            self._tags = tags
-        with self._spec.options(task_list, decision_duration,
-                                workflow_duration):
-            yield
-        self._tags = old_tags
-
-    def restart(self, *args, **kwargs):
-        try:
-            input = self._serialize_restart_arguments(*args, **kwargs)
-        except Exception as e:
-            logger.exception('Error while serializing restart arguments:')
-            self._fail(e)
-        else:
-            self._scheduler.reset()
-            self._scheduler.restart(self._spec, input, self._tags)
-        self._scheduled = []
-        raise SuspendTask
+    _serialize_restart_arguments = staticmethod(TaskProxy.serialize_arguments)
 
 
 def _i_or_args(result, results):
