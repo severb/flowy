@@ -11,12 +11,7 @@ from flowy.result import LinkedError
 from flowy.result import Placeholder
 from flowy.result import Result
 from flowy.result import Timeout
-from flowy.spec import _sentinel
-
-try:
-    from itertools import izip
-except ImportError:
-    izip = zip
+from flowy.proxy import _sentinel
 
 
 logger = logging.getLogger(__name__)

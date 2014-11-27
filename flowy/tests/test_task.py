@@ -306,24 +306,27 @@ class TestOptions(TestWorkflow):
     class WF(DummyWorkflow):
         a = TaskProxy()
         def run(self):
-            from flowy.exception import TaskError
-            with self.a.options(retry=[0, 1], error_handling=True):
-                a = self.a()
-                try:
-                    return a.result()
-                except TaskError:
-                    return 0
+            with self.a.options(error_handling=True, retry=[1, 1, 1]):
+                self.a()
+            return self.a(self.a())
 
-    def test_change_retry(self):
-        self.run_workflow(timedout=['0-0'])
-        self.assert_state(
-            (self.WF.a, '0-1', [], {}, 1),
-        )
-
-    def test_change_error_handling(self):
+    def test_error_handling(self):
         self.run_workflow(errors={'0-0': 'err!'})
         self.assert_state(
-            ('COMPLETE', '0')
+            (self.WF.a, '1-0', [], {}, 0),
+        )
+
+    def test_retry(self):
+        self.run_workflow()
+        self.assert_state(
+            (self.WF.a, '0-0', [], {}, 1),
+            (self.WF.a, '1-0', [], {}, 0),
+        )
+
+    def test_revert_error_handling(self):
+        self.run_workflow(errors={'1-0': 'err!'}, running=['0-0'])
+        self.assert_state(
+            ('FAIL', 'err!')
         )
 
 
