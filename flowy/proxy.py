@@ -7,13 +7,19 @@ from flowy.result import Placeholder
 from flowy.result import Result
 from flowy.result import Timeout
 from flowy.spec import _sentinel
-from flowy.spec import serialize_arguments
 from flowy.spec import SWFActivitySpec
 from flowy.spec import SWFWorkflowSpec
 from flowy.util import MagicBind
 
 
 deserialize_result = json.loads
+
+
+def serialize_arguments(*args, **kwargs):
+    r = json.dumps([args, kwargs])
+    if len(r) > 32000:
+        raise ValueError("Serialized arguments > 32000 characters.")
+    return r
 
 
 class TaskProxy(object):
@@ -31,6 +37,9 @@ class TaskProxy(object):
 
     @contextmanager
     def options(self, retry=_sentinel, error_handling=_sentinel):
+        print '-' * 80
+        print retry
+        print '-' * 80
         old_retry = self._retry
         old_error_handling = self._error_handling
         if retry is not _sentinel:

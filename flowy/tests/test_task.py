@@ -9,21 +9,22 @@ class DummyWorkflow(Workflow):
 
     def __init__(self, *args, **kwargs):
         super(DummyWorkflow, self).__init__(*args, **kwargs)
-        self.state = []
+        self.state = None
 
     def _flush(self):
-        if self.state and self._scheduled:
-            raise AssertionError("Flushing tasks after completion.")
-        if self._scheduled:
-            self.state = self._scheduled
+        assert self.state is None, "Extra flush call."
+        self.state = self._scheduled
 
     def _restart(self, input):
+        assert self.state is None, "Extra restart call."
         self.state = [('RESTART', input)]
 
     def _complete(self, result):
+        assert self.state is None, "Extra complete call."
         self.state = [('COMPLETE', result)]
 
     def _fail(self, reason):
+        assert self.state is None, "Extra fail call."
         self.state = [('FAIL', str(reason))]
 
 default_order = ['%s-%s' % (x, y) for x in range(100) for y in range(100)]
@@ -129,7 +130,7 @@ class TestDependency(TestWorkflow):
 
     def test_fast_error_interrupt(self):
         # Make sure .result() is not called if not needed
-        self.run_workflow(errors={'1-0': 'err!'})
+        self.run_workflow(results={'0-0': '0'}, errors={'1-0': 'err!'})
         self.assert_state(
             ('FAIL', 'err!')
         )
@@ -297,4 +298,53 @@ class TestErrorHandling(TestWorkflow):
         self.run_workflow(timedout=['0-0', '0-1', '0-2'])
         self.assert_state(
             ('FAIL', 'A task has timedout.')
+        )
+
+
+class TestOptions(TestWorkflow):
+
+    class WF(DummyWorkflow):
+        a = TaskProxy()
+        def run(self):
+            from flowy.exception import TaskError
+            with self.a.options(retry=[0, 1], error_handling=True):
+                a = self.a()
+                try:
+                    return a.result()
+                except TaskError:
+                    return 0
+
+    def test_change_retry(self):
+        self.run_workflow(timedout=['0-0'])
+        self.assert_state(
+            (self.WF.a, '0-1', [], {}, 1),
+        )
+
+    def test_change_error_handling(self):
+        self.run_workflow(errors={'0-0': 'err!'})
+        self.assert_state(
+            ('COMPLETE', '0')
+        )
+
+
+class TestRestart(TestWorkflow):
+
+    class WF(DummyWorkflow):
+        a = TaskProxy()
+        def run(self):
+            from flowy.task import restart
+            if self.a().result() > 10:
+                return restart(1, 2)
+            return 123
+
+    def test_no_restart(self):
+        self.run_workflow(results={"0-0": "1"})
+        self.assert_state(
+            ('COMPLETE', '123')
+        )
+
+    def test_restart(self):
+        self.run_workflow(results={"0-0": "100"})
+        self.assert_state(
+            ('RESTART', '[[1, 2], {}]')
         )

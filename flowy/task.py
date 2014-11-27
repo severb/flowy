@@ -7,6 +7,7 @@ from boto.swf.exceptions import SWFResponseError
 from boto.swf.layer1_decisions import Layer1Decisions
 
 from flowy.exception import SuspendTask
+from flowy.exception import SuspendTaskNoFlush
 from flowy.exception import TaskError
 from flowy.proxy import serialize_arguments
 from flowy.result import Error
@@ -47,6 +48,8 @@ class Task(object):
                 result = self.run(*args, **kwargs)
             except SuspendTask:
                 self._flush()
+            except SuspendTaskNoFlush:
+                pass
             except Exception as e:
                 logger.exception("Error while running the task:")
                 self._fail(e)
@@ -131,6 +134,12 @@ class SWFActivity(Task):
         pass
 
 
+
+class restart(object):
+    def __init__(self, *args, **kwargs):
+        self.a, self.kw = args, kwargs
+
+
 class Workflow(Task):
 
     rate_limit = 64
@@ -168,17 +177,6 @@ class Workflow(Task):
         for r in self.first_n(len(i), i):
             yield r
 
-    def restart(self, *args, **kwargs):
-        try:
-            input = self._serialize_restart_arguments(*args, **kwargs)
-        except Exception as e:
-            logger.exception('Error while serializing restart arguments:')
-            self._fail(e)
-        else:
-            self._restart(input)
-        self._scheduled = []
-        raise SuspendTask
-
     def _restart(self, input):
         raise NotImplementedError
 
@@ -196,13 +194,20 @@ class Workflow(Task):
             return
         self._scheduled.append((proxy, call_key, a, kw, delay))
 
-    def _finish(self, result):
-        if isinstance(result, Placeholder):
-            return self._flush()
-        r = result
-        if isinstance(result, Result):
+    def _finish(self, r):
+        if isinstance(r, restart):
             try:
-                r = result.result()
+                input = self._serialize_restart_arguments(*r.a, **r.kw)
+            except Exception as e:
+                logger.exception('Error while serializing restart arguments:')
+                return self._fail(e)
+            else:
+                return self._restart(input)
+        if isinstance(r, Placeholder):
+            return self._flush()
+        if isinstance(r, Result):
+            try:
+                r = r.result()
             except TaskError as e:
                 return self._fail(e)
         try:
@@ -268,8 +273,7 @@ class Workflow(Task):
 
     def _fail_execution(self, reason, order=None):
         self._fail(reason)
-        self._scheduled = []
-        raise SuspendTask
+        raise SuspendTaskNoFlush
 
     def _fail_on_result(self, err, suspend=True):
         try:

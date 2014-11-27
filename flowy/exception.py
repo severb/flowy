@@ -6,6 +6,13 @@ class SuspendTask(Exception):
     """
 
 
+class SuspendTaskNoFlush(Exception):
+    """ Raised to suspend the task run.
+
+    This happens when a the workflow shoud stop because of a failure.
+    """
+
+
 class TaskError(Exception):
     """ Raised from an activity or subworkflow task if error handling is
     enabled and the task fails.
