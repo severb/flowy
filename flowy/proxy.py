@@ -37,9 +37,6 @@ class TaskProxy(object):
 
     @contextmanager
     def options(self, retry=_sentinel, error_handling=_sentinel):
-        print '-' * 80
-        print retry
-        print '-' * 80
         old_retry = self._retry
         old_error_handling = self._error_handling
         if retry is not _sentinel:
