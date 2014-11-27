@@ -7,13 +7,9 @@ from flowy.util import MagicBind
 _sentinel = object()
 
 
-deserialize_result = json.loads
-
-
 class TaskProxy(object):
 
-    def __init__(self, retry=[0, 0, 0], error_handling=False,
-                 deserialize_result=deserialize_result):
+    def __init__(self, retry=[0, 0, 0], error_handling=False):
         self._retry = retry
         self._error_handling = error_handling
 
