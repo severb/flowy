@@ -1,10 +1,9 @@
 SWF Introduction
 ================
 
-Before we start using Flowy lets get familiar with Amazon SWF. If you already
-know how SWF works you can head straight to the :doc:`tutorial`. If you never
-used SWF before then you should continue reading because this will help you
-better understand how the library works.
+This is a high-level overview of Amazon Simple Workflow. If you already
+know how SWF works you can head straight to the :doc:`tutorial`. If you
+never used it before then you should continue reading this introduction.
 
 SWF is a web service offered by Amazon as part of their Cloud Computing
 Services. It's advertised as something that helps you build, run, and scale
