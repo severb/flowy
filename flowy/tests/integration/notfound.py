@@ -1,7 +1,7 @@
-from flowy.proxy import SWFActivityProxy as ActivityProxy
-from flowy.proxy import SWFWorkflowProxy as WorkflowProxy
-from flowy.scanner import swf_workflow as workflow
-from flowy.task import SWFWorkflow as Workflow
+from flowy import swf_workflow as workflow
+from flowy import SWFActivityProxy as ActivityProxy
+from flowy import SWFWorkflow as Workflow
+from flowy import SWFWorkflowProxy as WorkflowProxy
 
 
 @workflow(1)

@@ -18,7 +18,7 @@ A toy map-reduce workflow with Flowy looks like this::
 
             def run(self, n=5):
                     squares = map(self.square, range(n))
-                    return self.sum(*squares)
+                    return reduce(self.sum, self.all(squares))
 
 Before you start you should read the :doc:`introduction`. It explains important
 concepts about the execution model of the workflows. Next, you should follow
@@ -44,6 +44,7 @@ Flowy is available on the Python Package Index. To install it use `pip`_::
     introduction
 
     tutorial
+    cookbook
 
     errors
     transport
@@ -59,6 +60,6 @@ Flowy is available on the Python Package Index. To install it use `pip`_::
     reference
 
 
-.. _Flowy: http://github.com/pbs/flowy/
+.. _Flowy: http://github.com/severb/flowy/
 .. _Amazon SWF: http://aws.amazon.com/swf/
 .. _pip: http://www.pip-installer.org/

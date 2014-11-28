@@ -1,323 +1,237 @@
 import json
 import logging
-import uuid
 from contextlib import contextmanager
 
-from boto.swf.exceptions import SWFResponseError
-from boto.swf.layer1_decisions import Layer1Decisions
-from flowy.exception import SuspendTask, TaskError
-from flowy.result import Error, Result, Timeout
-from flowy.spec import _sentinel
+from flowy.exception import SuspendTask
+from flowy.exception import SuspendTaskNoFlush
+from flowy.exception import TaskError
+from flowy.proxy import TaskProxy
+from flowy.result import Error
+from flowy.result import LinkedError
+from flowy.result import Placeholder
+from flowy.result import Result
+from flowy.result import Timeout
+from flowy.proxy import _sentinel
 
 
 logger = logging.getLogger(__name__)
 
 
-serialize_result = staticmethod(json.dumps)
-deserialize_args = staticmethod(json.loads)
-
-
-@staticmethod
-def serialize_args(*args, **kwargs):
-    return json.dumps([args, kwargs])
-
-
 class Task(object):
-    def __init__(self, input, token):
+    def __init__(self, input):
         self._input = input
-        self._token = token
-
-    @property
-    def token(self):
-        return str(self._token)
 
     def __call__(self):
         try:
-            args, kwargs = self._deserialize_arguments(self._input)
-        except ValueError:
-            logger.exception("Error while deserializing the arguments:")
-            return False
-        try:
-            result = self.run(*args, **kwargs)
-        except SuspendTask:
-            return self._suspend()
+            args, kwargs = self.deserialize_arguments(self._input)
         except Exception as e:
-            logger.exception("Error while running the task:")
-            return self.fail(e)
+            logger.exception("Error while deserializing the arguments:")
+            self._fail(e)
         else:
-            return self._finish(result)
+            try:
+                result = self.run(*args, **kwargs)
+            except SuspendTask:
+                self._flush()
+            except SuspendTaskNoFlush:
+                pass
+            except Exception as e:
+                logger.exception("Error while running the task:")
+                self._fail(e)
+            else:
+                self._finish(result)
 
     def run(self, *args, **kwargs):
         raise NotImplementedError
 
-    def _suspend(self):
+    def _flush(self):
         raise NotImplementedError
 
-    def fail(self, reason):
+    def _fail(self, reason):
         raise NotImplementedError
 
     def _finish(self, result):
         raise NotImplementedError
 
-    _serialize_result = serialize_result
-    _deserialize_arguments = deserialize_args
+    deserialize_arguments = staticmethod(json.loads)
+
+    @staticmethod
+    def serialize_result(result):
+        r = json.dumps(result)
+        if len(r) > 32000:
+            raise ValueError("Serialized result > 32000 characters.")
+        return r
 
 
-class SWFActivity(Task):
-    def __init__(self, swf_client, input, token):
-        self._swf_client = swf_client
-        super(SWFActivity, self).__init__(input, token)
-
-    def _suspend(self):
-        return True
-
-    def fail(self, reason):
-        return _activity_fail(self._swf_client, self.token, reason)
-
-    def _finish(self, result):
-        try:
-            result = self._serialize_result(result)
-        except TypeError:
-            logger.exception('Error while serializing the result:')
-            return False
-        return _activity_finish(self._swf_client, self.token, result)
-
-    def heartbeat(self):
-        return _activity_heartbeat(self._swf_client, self.token)
+class restart(object):
+    def __init__(self, *args, **kwargs):
+        self.a, self.kw = args, kwargs
 
 
-class AsyncSWFActivity(object):
-    def __init__(self, swf_client, token):
-        self._swf_client = swf_client
-        self._token = token
+class Workflow(Task):
 
-    def heartbeat(self):
-        return _activity_heartbeat(self._swf_client, self._token)
+    rate_limit = 64
 
-    def fail(self, reason):
-        return _activity_fail(self._swf_client, self._token, reason)
-
-    def finish(self, result):
-        try:
-            result = self._serialize_result(result)
-        except TypeError:
-            logger.exception('Error while serializing the result:')
-            return False
-        return _activity_finish(self._swf_client, self._token, result)
-
-    _serialize_result = serialize_result
-
-
-def _activity_heartbeat(swf_client, token):
-    try:
-        swf_client.record_activity_task_heartbeat(task_token=str(token))
-    except SWFResponseError:
-        logger.exception('Error while sending the heartbeat:')
-        return False
-    return True
-
-
-def _activity_fail(swf_client, token, reason):
-    try:
-        swf_client.respond_activity_task_failed(
-            reason=str(reason)[:256], task_token=str(token))
-    except SWFResponseError:
-        logger.exception('Error while failing the activity:')
-        return False
-    return True
-
-
-def _activity_finish(swf_client, token, result):
-    try:
-        swf_client.respond_activity_task_completed(
-            result=str(result), task_token=str(token))
-    except SWFResponseError:
-        logger.exception('Error while finishing the activity:')
-        return False
-    return True
-
-
-class _SWFWorkflow(Task):
-
-    _TIMEDOUT, _RUNNING, _ERROR, _FOUND, _NOTFOUND = range(5)
-
-    def __init__(self, scheduler, input, token, running, timedout, results,
-                 errors, spec, tags):
-        self._scheduler = scheduler
-        self._running = set(map(int, running))
-        self._timedout = set(map(int, timedout))
-        self._results = dict((int(k), v) for k, v in results.items())
-        self._errors = dict((int(k), v) for k, v in errors.items())
-        self._spec = spec
-        self._tags = tags
-        self._scheduled = False
+    def __init__(self, input, running, timedout, results, errors, order):
+        self._running = set(running)
+        self._timedout = set(timedout)
+        self._results = dict(results)
+        self._errors = dict(errors)
+        self._order = list(order)
         self._call_id = 0
-        super(_SWFWorkflow, self).__init__(input, token)
+        self._scheduled = []
+        super(Workflow, self).__init__(input)
 
-    @contextmanager
-    def options(self, task_list=_sentinel, decision_duration=_sentinel,
-                workflow_duration=_sentinel, tags=_sentinel):
-        old_tags = self._tags
-        if tags is not _sentinel:
-            self._tags = tags
-        with self._spec.options(task_list, decision_duration,
-                                workflow_duration):
-            yield
-        self._tags = old_tags
+    def wait_for(self, task):
+        # Don't force result deserialization
+        if isinstance(task, Placeholder):
+            raise SuspendTask
+        return task
 
-    def restart(self, *args, **kwargs):
-        try:
-            input = self._serialize_restart_arguments(*args, **kwargs)
-        except TypeError:
-            logger.exception('Error while serializing restart arguments:')
-            return False
-        self._scheduled = True
-        return self._scheduler.restart(self._spec, input, self._tags)
+    def first(self, result, *results):
+        return self.wait_for(min(_i_or_args(result, results)))
 
-    def fail(self, reason):
-        self._scheduled = True
-        return self._scheduler.fail(reason)
+    def first_n(self, n, result, *results):
+        i = _i_or_args(result, results)
+        if n == 1:
+            yield self.first(i)
+            return
+        s = sorted(i)
+        for r in s[:n]:
+            yield self.wait_for(r)
 
-    def _suspend(self):
-        return self._scheduler.flush()
+    def all(self, result, *results):
+        i = list(_i_or_args(result, results))
+        for r in self.first_n(len(i), i):
+            yield r
 
-    def _finish(self, result):
-        r = result
-        if isinstance(result, Result):
-            r = result.result()
-        elif isinstance(result, (Error, Timeout)):
+    def _restart(self, input):
+        raise NotImplementedError
+
+    def _complete(self, result):
+        raise NotImplementedError
+
+    def _fail(self, reason):
+        raise NotImplementedError
+
+    def _flush(self):
+        raise NotImplementedError
+
+    def _schedule(self, proxy, call_key, a, kw, delay):
+        if len(self._scheduled) >= self.rate_limit - len(self._running):
+            return
+        self._scheduled.append((proxy, call_key, a, kw, delay))
+
+    def _finish(self, r):
+        if isinstance(r, restart):
             try:
-                result.result()
+                input = self._serialize_restart_arguments(*r.a, **r.kw)
+            except Exception as e:
+                logger.exception('Error while serializing restart arguments:')
+                return self._fail(e)
+            else:
+                return self._restart(input)
+        if isinstance(r, Placeholder):
+            return self._flush()
+        if isinstance(r, Result):
+            try:
+                r = r.result()
             except TaskError as e:
-                return self._scheduler.fail(e)
-        if not self._scheduled and not self._running:
-            try:
-                r = self._serialize_result(r)
-            except TypeError:
-                logger.exception("Error while serializing the result:")
-                return False
-            return self._scheduler.complete(r)
-        return self._scheduler.flush()
-
-    def schedule_activity(self, spec, input, retry, delay):
-        return self._schedule(spec, input, retry, delay, True)
-
-    def schedule_workflow(self, spec, input, retry, delay):
-        return self._schedule(spec, input, retry, delay, False)
-
-    def _schedule(self, spec, input, retry, delay, is_act=True):
-        initial_call_id = self._call_id
+                return self._fail(e)
         try:
-            if delay:
-                state, _ = self._search_timer()
-                if state == self._NOTFOUND:
-                    self._scheduled = True
-                    self._scheduler.schedule_timer(delay, self._call_id)
-                    state = self._RUNNING
-                if not(state == self._FOUND):
-                    return state, None
-            state, value = self._search_result(retry)
-            if state == self._NOTFOUND:
-                self._scheduled = True
-                sched = self._scheduler.schedule_activity
-                if not is_act:
-                    sched = self._scheduler.schedule_workflow
-                sched(spec, self._call_id, input)
-                return self._RUNNING, None
-            return state, value
-        finally:
-            self._reserve_call_ids(initial_call_id, delay, retry)
+            r = self.serialize_result(r)
+        except Exception as e:
+            logger.exception("Error while serializing the result:")
+            return self._fail(e)
+        self._complete(r)
 
-    def _search_timer(self):
-        if self._call_id in self._results:
-            self._call_id += 1
-            return self._FOUND, None
-        if self._call_id in self._running:
-            return self._RUNNING, None
-        return self._NOTFOUND, None
+    def _lookup(self, proxy, a, kw):
+        return self._l(proxy, a, kw, self._fail_execution,
+                       self._fail_on_result, self._fail_execution)
 
-    def _search_result(self, retry):
-        # update self._call_id automatically
-        for self._call_id in range(self._call_id, self._call_id + retry + 1):
-            if self._call_id in self._timedout:
+    def _lookup_with_errors(self, proxy, a, kw):
+        return self._l(proxy, a, kw, Error, LinkedError, Timeout)
+
+    def _l(self, proxy, a, kw, fail_task, fail_on_result, timeout):
+        r = Placeholder()
+        for call_number, delay in enumerate(proxy):
+            call_key = "%s-%s" % (self._call_id, call_number)
+            if call_key in self._timedout:
                 continue
-            if self._call_id in self._running:
-                return self._RUNNING, None
-            if self._call_id in self._errors:
-                return self._ERROR, self._errors[self._call_id]
-            if self._call_id in self._results:
-                return self._FOUND, self._results[self._call_id]
-            return self._NOTFOUND, None
-        return self._TIMEDOUT, None
+            elif call_key in self._running:
+                break
+            elif call_key in self._results:
+                raw_result = self._results[call_key]
+                order = self._order.index(call_key)
+                r = Result(raw_result, proxy.deserialize_result, order)
+                break
+            elif call_key in self._errors:
+                raw_error = self._errors[call_key]
+                order = self._order.index(call_key)
+                r = fail_task(raw_error, order)
+                break
+            else:
+                args = a + tuple(kw.values())
+                # Optimization not to schedule or load results on errors
+                errs = [x for x in args if isinstance(x, Error)]
+                if errs:
+                    r = fail_on_result(min(errs))
+                    break
+                # Favor result loading vs activity schedule
+                errs, aa, kwkw = self._solve_args(a, kw)
+                if errs:
+                    r = fail_on_result(min(errs))
+                    break
+                if any(isinstance(x, Placeholder) for x in args):
+                    break
+                try:
+                    self._schedule(proxy, call_key, aa, kwkw, delay)
+                except Exception as e:
+                    logger.exception("Error while scheduling task:")
+                    r = fail_task(e, -1)
+                break
+        else:
+            order = self._order.index(call_key)
+            # XXX: Improve this error message.
+            r = timeout("A task has timedout.", order)
+        self._call_id += 1
+        return r
 
-    def _reserve_call_ids(self, call_id, delay, retry):
-        self._call_id = (
-            1 + call_id         # one for the first call
-            + int(delay > 0)    # one for the timer if needed
-            + retry             # one for each possible retry
-        )
+    def _fail_execution(self, reason, order=None):
+        self._fail(reason)
+        raise SuspendTaskNoFlush
 
-    _serialize_restart_arguments = serialize_args
-
-
-# It's important for the scheduler to ignore anything after the first flush
-# since the task doesn't promise calling it only once
-class SWFScheduler(object):
-    def __init__(self, swf_client, token, rate_limit=64):
-        self._swf_client = swf_client
-        self._token = token
-        self._rate_limit = rate_limit
-        self._decisions = Layer1Decisions()
-        self._closed = False
-
-    def flush(self):
-        if self._closed:
-            return False
-        self._closed = True
+    def _fail_on_result(self, err, suspend=True):
         try:
-            self._swf_client.respond_decision_task_completed(
-                task_token=self._token, decisions=self._decisions._data
-            )
-        except SWFResponseError:
-            logger.exception('Error while sending the decisions:')
-            return False
-        return True
+            err.result()
+        except TaskError as e:
+            return self._fail_execution(e)
 
-    def restart(self, spec, input, tags):
-        decisions = self._decisions = Layer1Decisions()
-        spec.restart(decisions, input, tags)
-        return self.flush()
+    def _solve_args(self, a, kw):
+        errs = []
+        aa = []
+        for x in a:
+            if isinstance(x, Result):
+                try:
+                    aa.append(x.result())
+                except TaskError:
+                    errs.append(x)
+            else:
+                aa.append(x)
+        kwkw = {}
+        for k, v in kw:
+            if isinstance(v, Result):
+                try:
+                    kwkw[k] = v.result()
+                except TaskError:
+                    errs.append(v)
+            else:
+                kwkw[k] = v
+        return errs, aa, kwkw
 
-    def fail(self, reason):
-        decisions = self._decisions = Layer1Decisions()
-        decisions.fail_workflow_execution(reason=str(reason)[:256])
-        return self.flush()
-
-    def complete(self, result):
-        decisions = self._decisions = Layer1Decisions()
-        decisions.complete_workflow_execution(result)
-        return self.flush()
-
-    def schedule_timer(self, delay, call_id):
-        if len(self._decisions._data) < self._rate_limit:
-            self._decisions.start_timer(
-                start_to_fire_timeout=str(delay),
-                timer_id=str(call_id)
-            )
-
-    def schedule_activity(self, spec, call_id, input):
-        if len(self._decisions._data) < self._rate_limit:
-            spec.schedule(self._decisions, call_id, input)
-
-    def schedule_workflow(self, spec, call_id, input):
-        if len(self._decisions._data) < self._rate_limit:
-            call_id = '%s-%s' % (uuid.uuid4(), call_id)
-            spec.schedule(self._decisions, call_id, input)
+    _serialize_restart_arguments = staticmethod(TaskProxy.serialize_arguments)
 
 
-class SWFWorkflow(_SWFWorkflow):
-    def __init__(self, swf_client, input, token, running, timedout, results,
-                 errors, spec, tags):
-        s = SWFScheduler(swf_client, token, rate_limit=64 - len(running))
-        super(SWFWorkflow, self).__init__(s, input, token, running, timedout,
-                                          results, errors, spec, tags)
+def _i_or_args(result, results):
+    if len(results) == 0:
+        return iter(result)
+    return (result,) + results

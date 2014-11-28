@@ -1,8 +1,9 @@
 import logging
 
 from boto.swf.exceptions import SWFResponseError
-from flowy.spec import SWFSpecKey, SWFWorkflowSpec
 
+from flowy.spec import SWFSpecKey
+from flowy.spec import SWFWorkflowSpec
 
 logger = logging.getLogger(__name__)
 
@@ -66,12 +67,13 @@ class SWFWorkflowPoller(object):
         spec = _parse_spec(first_event, self._spec_factory)
         tags = _parse_tags(first_event)
         try:
-            running, timedout, results, errors = self._parse_events(all_events)
+            p = self._parse_events
+            running, timedout, results, errors, order = p(all_events)
         except _PaginationError:
             return self.poll_next_task()
         return self._task_factory(spec, self._swf_client, input, token,
-                                  running, timedout, results, errors, spec,
-                                  tags)
+                                  running, timedout, results, errors, order,
+                                  spec, tags)
 
     def _events(self, first_page):
         page = first_page
@@ -97,7 +99,7 @@ class SWFWorkflowPoller(object):
             page = next_p
 
     def _parse_events(self, events):
-        running, timedout, results, errors = set(), set(), {}, {}
+        running, timedout, results, errors, order = set(), set(), {}, {}, []
         event2call = {}
         for e in events:
             e_type = e.get('eventType')
@@ -111,23 +113,27 @@ class SWFWorkflowPoller(object):
                 result = e[ATCEA]['result']
                 running.remove(id)
                 results[id] = result
+                order.append(id)
             elif e_type == 'ActivityTaskFailed':
                 ATFEA = 'activityTaskFailedEventAttributes'
                 id = event2call[e[ATFEA]['scheduledEventId']]
                 reason = e[ATFEA]['reason']
                 running.remove(id)
                 errors[id] = reason
+                order.append(id)
             elif e_type == 'ActivityTaskTimedOut':
                 ATTOEA = 'activityTaskTimedOutEventAttributes'
                 id = event2call[e[ATTOEA]['scheduledEventId']]
                 running.remove(id)
                 timedout.add(id)
+                order.append(id)
             elif e_type == 'ScheduleActivityTaskFailed':
                 SATFEA = 'scheduleActivityTaskFailedEventAttributes'
                 id = e[SATFEA]['activityId']
                 reason = e[SATFEA]['cause']
                 # when a job is not found it's not even started
                 errors[id] = reason
+                order.append(id)
             elif e_type == 'StartChildWorkflowExecutionInitiated':
                 SCWEIEA = 'startChildWorkflowExecutionInitiatedEventAttributes'
                 id = _subworkflow_id(e[SCWEIEA]['workflowId'])
@@ -140,6 +146,7 @@ class SWFWorkflowPoller(object):
                 result = e[CWECEA]['result']
                 running.remove(id)
                 results[id] = result
+                order.append(id)
             elif e_type == 'ChildWorkflowExecutionFailed':
                 CWEFEA = 'childWorkflowExecutionFailedEventAttributes'
                 id = _subworkflow_id(
@@ -148,6 +155,7 @@ class SWFWorkflowPoller(object):
                 reason = e[CWEFEA]['reason']
                 running.remove(id)
                 errors[id] = reason
+                order.append(id)
             elif e_type == 'ChildWorkflowExecutionTimedOut':
                 CWETOEA = 'childWorkflowExecutionTimedOutEventAttributes'
                 id = _subworkflow_id(
@@ -155,11 +163,13 @@ class SWFWorkflowPoller(object):
                 )
                 running.remove(id)
                 timedout.add(id)
+                order.append(id)
             elif e_type == 'StartChildWorkflowExecutionFailed':
                 SCWEFEA = 'startChildWorkflowExecutionFailedEventAttributes'
                 id = _subworkflow_id(e[SCWEFEA]['workflowId'])
                 reason = e[SCWEFEA]['cause']
                 errors[id] = reason
+                order.append(id)
             elif e_type == 'TimerStarted':
                 id = e['timerStartedEventAttributes']['timerId']
                 running.add(id)
@@ -167,7 +177,7 @@ class SWFWorkflowPoller(object):
                 id = e['timerFiredEventAttributes']['timerId']
                 running.remove(id)
                 results[id] = None
-        return running, timedout, results, errors
+        return running, timedout, results, errors, order
 
     def _poll_response_first_page(self):
         swf_response = {}

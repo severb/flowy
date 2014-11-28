@@ -3,8 +3,8 @@ from collections import namedtuple
 from contextlib import contextmanager
 from functools import total_ordering
 
-from boto.swf.exceptions import SWFResponseError, SWFTypeAlreadyExistsError
-
+from boto.swf.exceptions import SWFResponseError
+from boto.swf.exceptions import SWFTypeAlreadyExistsError
 
 logger = logging.getLogger(__name__)
 
@@ -30,17 +30,18 @@ class SWFActivitySpec(object):
         self._schedule_to_start = schedule_to_start
         self._start_to_close = start_to_close
 
-    def schedule(self, swf_decisions, call_id, input):
+    def schedule(self, swf_decisions, call_key, a, kw):
+        input = str(self._serialize_arguments(a, kw))
         heartbeat, schedule_to_close, schedule_to_start, start_to_close = (
             self._timers_encode())
         swf_decisions.schedule_activity_task(
-            str(call_id), str(self._name), str(self._version),
+            str(call_key), str(self._name), str(self._version),
             heartbeat_timeout=heartbeat,
             schedule_to_close_timeout=schedule_to_close,
             schedule_to_start_timeout=schedule_to_start,
             start_to_close_timeout=start_to_close,
             task_list=_str_or_none(self._task_list),
-            input=str(input))
+            input=input)
 
     @contextmanager
     def options(self, task_list=_sentinel, heartbeat=_sentinel,
@@ -186,10 +187,11 @@ class SWFWorkflowSpec(object):
         if STCT in last_decision_attrs:
             last_decision_attrs[TSTCT] = last_decision_attrs.pop(STCT)
 
-    def schedule(self, swf_decisions, call_id, input):
+    def schedule(self, swf_decisions, call_key, a, kw):
+        input = str(self._serialize_arguments(a, kw))
         decision_duration, workflow_duration = self._timers_encode()
         swf_decisions.start_child_workflow_execution(
-            str(self._name), str(self._version), str(call_id),
+            str(self._name), str(self._version), str(call_key),
             task_start_to_close_timeout=decision_duration,
             execution_start_to_close_timeout=workflow_duration,
             task_list=_str_or_none(self._task_list),

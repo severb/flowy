@@ -12,9 +12,9 @@ import time
 
 from boto.swf.layer1 import Layer1
 
-from flowy.boilerplate import start_activity_worker
-from flowy.boilerplate import start_workflow_worker
-from flowy.boilerplate import workflow_starter
+from flowy import start_activity_worker
+from flowy import start_workflow_worker
+from flowy import workflow_starter
 
 
 class Layer1Recorder(Layer1):
