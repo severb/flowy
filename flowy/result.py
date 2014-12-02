@@ -3,11 +3,14 @@ from flowy.exception import TaskError
 from flowy.exception import TaskTimedout
 
 
-class _Sortable(object):
+__all__ ['Placeholder', 'Result', 'Error', 'LinkedError', 'Timeout']
+
+
+class TaskResult(object):
     _order = None
 
     def __lt__(self, other):
-        if not isinstance(other, _Sortable):
+        if not isinstance(other, TaskResult):
             return NotImplemented
         if self._order is None:
             return False
@@ -16,26 +19,26 @@ class _Sortable(object):
         return self._order < other._order
 
 
-class Placeholder(_Sortable):
+class Placeholder(TaskResult):
     def result(self):
         raise SuspendTask
+    wait = result
+    is_error = result
 
 
-class Result(_Sortable):
+class Result(TaskResult):
     def __init__(self, result, d_result, order):
         self._result = result
-        self._d_result = d_result
         self._order = order
 
     def result(self):
-        if not hasattr(self, '_result_cache'):
-            try:
-                self._result_cache = self._d_result(self._result)
-            except Exception as e:
-                self._result_cache = TaskError(e)
-        if isinstance(self._result_cache, Exception):
-            raise self._result_cache
-        return self._result_cache
+        return self._result
+
+    def wait(self):
+        return self
+
+    def is_error(self):
+        return False
 
 
 class Error(Result):
@@ -45,6 +48,12 @@ class Error(Result):
 
     def result(self):
         raise TaskError(self._reason)
+
+    def is_error(self):
+        return True
+
+    def __str__(self):
+        return self._reason
 
 
 class LinkedError(Error):
@@ -57,11 +66,10 @@ class LinkedError(Error):
     def __lt__(self, other):
         return self._error < other
 
+    def __str__(self):
+        return str(self._error)
+
 
 class Timeout(Error):
-    def __init__(self, reason, order):
-        self._reason = reason
-        self._order = order
-
     def result(self):
         raise TaskTimedout(self._reason)

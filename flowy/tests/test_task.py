@@ -5,27 +5,29 @@ from flowy.task import Workflow
 
 
 
-class DummyWorkflow(Workflow):
+class DummyBackend(Workflow):
 
-    def __init__(self, *args, **kwargs):
-        super(DummyWorkflow, self).__init__(*args, **kwargs)
+    def __init__(self):
         self.state = None
+        self.scheduled = []
 
-    def _flush(self):
+    def flush(self):
         assert self.state is None, "Extra flush call."
-        self.state = self._scheduled
+        self.state = self.scheduled
 
-    def _restart(self, input):
+    def schedule(self, proxy,
+
+    def restart(self, a, kw):
         assert self.state is None, "Extra restart call."
-        self.state = [('RESTART', input)]
+        self.state = [('RESTART', a, kw)]
 
-    def _complete(self, result):
+    def complete(self, result):
         assert self.state is None, "Extra complete call."
         self.state = [('COMPLETE', result)]
 
-    def _fail(self, reason):
+    def fail(self, reason):
         assert self.state is None, "Extra fail call."
-        self.state = [('FAIL', str(reason))]
+        self.state = [('FAIL', reason)]
 
 default_order = ['%s-%s' % (x, y) for x in range(100) for y in range(100)]
 
