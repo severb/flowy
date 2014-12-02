@@ -50,43 +50,41 @@ class Workflow(Task):
         self._errors = dict(errs)
         self._order = list(ordr)
         self._call_id = 0
-        self._scheduled = 0
+        self._scheduled = []
+        self._flush = 1
 
-    def wait_for(self, result, *results):
-        i = _i_or_args(result, results)
-        for r in i:
-            r.wait()
-
-    def first(self, result, *results):
-        return min(_i_or_args(result, results)).wait()
-
-    def first_n(self, n, result, *results):
-        i = _i_or_args(result, results)
-        if n == 1:
-            yield self.first(i)
-            return
-        s = sorted(i)
-        for r in s[:n]:
-            yield r.wait()
-
-    def all(self, result, *results):
-        i = list(_i_or_args(result, results))
-        for r in self.first_n(len(i), i):
-            yield r
+    def abort(self, reason):
+        self._flush = 0
+        self._fail(reason)
+        raise SuspendTask
 
     def _fail(self, reason):
         self._backend.fail(str(reason))
 
     def _flush(self):
+        if not self._flush:
+            return
+        for proxy, call_key, a, kw, delay in self._scheduled:
+            try:
+                aa, kwkw = _extract_results(a, kw)
+            except SuspendTask:
+                # One of the .result() call failed, the workflow already failed
+                return
+            else:
+                self._backend.schedule(proxy, call_key, aa, kwkw, delay)
         self._backend.flush()
 
     def _finish(self, r):
         if isinstance(r, restart):
-            errs, placeholders = self._short_circuit_on_args(r.a, r.kw)
+            errs, placeholders = _short_circuit_on_args(r.a, r.kw)
             if errs:
-                self._fail(self.first(errs))
+                self._fail(first(errs))
             elif not placeholders:
-                aa, kwkw = self._extract_results(a, kw)
+                try:
+                    aa, kwkw = _extract_results(a, kw)
+                except SuspendTask:
+                    # One of the .result() call failed the workflow already
+                    return
                 self._backend.restart(aa, kwkw)
         else:
             self._backend.complete(r)
@@ -102,7 +100,7 @@ class Workflow(Task):
             elif call_key in self._results:
                 result = self._results[call_key]
                 order = self._order.index(call_key)
-                r = proxy.Result(result, order)
+                r = ResultWrapper(proxy.Result(result, order), self)
                 break
             elif call_key in self._errors:
                 raw_error = self._errors[call_key]
@@ -110,9 +108,9 @@ class Workflow(Task):
                 r = proxy.Error(raw_error, order)
                 break
             else:
-                errs, placeholders = self._short_circuit_on_args(a, kw)
+                errs, placeholders = _short_circuit_on_args(a, kw)
                 if errs:
-                    r = proxy.LinkedError(self.first(errs))
+                    r = proxy.LinkedError(first(errs))
                 elif not placeholders:
                     self._schedule(proxy, call_key, a, kw, delay)
                 break
@@ -123,38 +121,85 @@ class Workflow(Task):
         return r
 
     def _schedule(self, proxy, call_key, a, kw, delay):
-        t = self._scheduled + len(self._running)
+        t = len(self._scheduled) + len(self._running)
         if t < self.rate_limit or max(self.rate_limit, 0) == 0:
-            proxy.schedule(self._backend, call_key, a, kw, delay)
-            self._scheduled += 1
+            self._scheduled.append(proxy, call_key, a, kw, delay)
 
-    def _extract_results(self, a, kw):
-        aa = (self._result_or_value(r) for r in a)
-        kwkw = dict((k, self._result_or_value(v)) for k, v in kw.iteritems())
-        return aa, kwkw
 
-    def _result_or_value(self, r):
+def _short_circuit_on_args(a, kw):
+    args = a + tuple(kw.values())
+    errs, placeholders = [], False
+    for r in args:
         if isinstance(r, TaskResult):
             try:
-                return r.result()
-            except Exception as e:
-                logger.exception("Error while reading result:")
-                raise e  # Let it bubble up and stop the workflow
-
-    def _short_circuit_on_args(self, a, kw):
-        args = a + tuple(kw.values())
-        errs, placeholders = [], False
-        for r in args:
-            if isinstance(r, TaskResult):
-                try:
-                    if r.is_error():
-                        errs.append(r)
-                except SuspendTask:
-                    placeholders = True
-        return errs, placeholders
+                if r.is_error():
+                    errs.append(r)
+            except SuspendTask:
+                placeholders = True
+    return errs, placeholders
 
 
 def _i_or_args(result, results):
     if len(results) == 0:
         return iter(result)
     return (result,) + results
+
+
+def _extract_results(a, kw):
+    aa = (_result_or_value(r) for r in a)
+    kwkw = dict((k, _result_or_value(v)) for k, v in kw.iteritems())
+    return aa, kwkw
+
+
+def _result_or_value(r):
+    if isinstance(r, TaskResult):
+        return r.result()
+    return r
+
+
+def wait_for(result, *results):
+    i = _i_or_args(result, results)
+    for r in i:
+        r.wait()
+
+
+def first(result, *results):
+    return min(_i_or_args(result, results)).wait()
+
+
+def first_n(n, result, *results):
+    i = _i_or_args(result, results)
+    if n == 1:
+        yield first(i)
+        return
+    s = sorted(i)
+    for r in s[:n]:
+        yield r.wait()
+
+
+def all(result, *results):
+    i = list(_i_or_args(result, results))
+    for r in first_n(len(i), i):
+        yield r
+
+
+class ResultWrapper(object):
+    def __init__(self, result, workflow):
+        self._r = result
+        self._workflow = workflow
+
+    def result(self):
+        try:
+            return self._r.result()
+        except Exception as e:
+            logger.exception("Error when loading result:")
+            self._workflow.abort(e)  # This will suspend the execution
+
+    def __lt__(self, other):
+        return self._r < other
+
+    def wait(self):
+        return self._r.wait()
+
+    def is_error(self):
+        return self._r.is_error()
