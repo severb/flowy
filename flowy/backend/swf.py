@@ -214,10 +214,6 @@ class SWFWorkflowConfig(object):
             d[dep_name] = proxy.bind(context)
         return lambda wf_factory: wf_factory(**d)
 
-    def instantiate(self, workflow_factory):
-        """Call the factory passing the dependencies."""
-        return workflow_factory(**self._task_registry)
-
     def __eq__(self, other):
         """Compare another config or a (name, version) tuple with self."""
         if isinstance(other, SWFWorkflowConfig):
