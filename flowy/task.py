@@ -89,6 +89,12 @@ class Workflow(Task):
         else:
             self._backend.complete(r)
 
+    def _lookup(self, wf_bound_proxy):
+        states = self._get_states()
+        r = wf_bound_proxy(states)
+        self._call_id += 1
+        return r
+
     def _lookup(self, proxy, a, kw):
         r = proxy.Placeholder()
         for call_number, delay in enumerate(proxy):
