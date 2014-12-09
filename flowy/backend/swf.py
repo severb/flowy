@@ -287,8 +287,10 @@ class SWFWorkflowRegistry(object):
         otherwise bind the config to the context and use it to instantiate the
         workflow.
         """
+        # Convert to str since that's what the config is expecting
+        key = (str(name), str(version))
         try:
-            config, workflow_factory = self.registry[(name, version)]
+            config, workflow_factory = self.registry[key]
         except KeyError:
             err = "No config with the name %r and version %r was found."
             raise ValueError(err % (name, version))
