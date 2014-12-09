@@ -1,17 +1,11 @@
-from contextlib import contextmanager
+import sys
 
-from flowy.proxy import _sentinel
-from flowy.proxy import TaskProxy
-from flowy.task import Task
-from flowy.task import Workflow
+import venusian
 
+__all__ = ['SWFWorkflowConfig', 'SWFWorkflowRegistry', 'RegistrationError']
 
 
 _CHILD_POLICY = ['TERMINATE', 'REQUEST_CANCEL', 'ABANDON', None]
-
-
-class RegistrationError(Exception):
-    pass
 
 
 class SWFWorkflowConfig(object):
@@ -21,7 +15,7 @@ class SWFWorkflowConfig(object):
     dependencies.
     """
 
-    def __init__(version, name=None, default_task_list=None,
+    def __init__(self, version, name=None, default_task_list=None,
                  default_workflow_duration=None,
                  default_decision_duration=120,
                  default_child_policy='TERMINATE'):
@@ -41,7 +35,7 @@ class SWFWorkflowConfig(object):
         # and should be treated as immutable
         self._name = name
         self._version = version
-        self.default_task_list = task_list
+        self.default_task_list = default_task_list
         self.default_workflow_duration = default_workflow_duration
         self.default_decision_duration = default_decision_duration
         self.default_child_policy = default_child_policy
@@ -60,11 +54,13 @@ class SWFWorkflowConfig(object):
         if self._name is not None:
             return self
         # Make a clone for each alternate name
-        return SWFWorkflowConfig(self._version, name=name,
+        c = SWFWorkflowConfig(self._version, name=name,
             default_task_list=self.default_task_list,
             default_workflow_duration=self.default_workflow_duration,
             default_decision_duration=self.default_decision_duration,
             default_child_policy=self.default_child_policy)
+        c._task_registry = self._task_registry
+        return c
 
     def register(self, swf_layer1):
         """Register the workflow config in Amazon SWF if it's missing.
@@ -81,23 +77,23 @@ class SWFWorkflowConfig(object):
         RegistrationError. ValueError is raised if any configuration values
         can't be converted to the required types.
         """
-        registered_as_new = self._register_remote(swf_layer1)
+        registered_as_new = self.register_remote(swf_layer1)
         if not registered_as_new:
-            success = self._check_compatible(swf_layer1)
+            success = self.check_compatible(swf_layer1)
 
     def _cvt_name_version(self):
         if self._name is None:
-            raise RuntimeError('Name is not set.' % self)
+            raise RuntimeError('Name is not set.')
         return str(self._name), str(self._version)
 
     def _cvt_values(self):
         """Convert values to their expected types or bailout."""
         name, version = self._cvt_name_version()
         t_list = _str_or_none(self.default_task_list),
-        workflow_dur = _timer_encode('default_workflow_duration',
-                                          self.default_workflow_duration)
-        decision_dur = _timer_encode('default_decision_duration',
-                                          self.default_decision_duration)
+        workflow_dur = _timer_encode(self.default_workflow_duration,
+                                     'default_workflow_duration')
+        decision_dur = _timer_encode(self.default_decision_duration,
+                                     'default_decision_duration')
         child_policy = _str_or_none(self.default_child_policy)
         if child_policy not in _CHILD_POLICY:
             raise ValueError("Invalid child policy value.")
@@ -212,7 +208,10 @@ class SWFWorkflowConfig(object):
         d = {}
         for dep_name, proxy in self._task_registry.iteritems():
             d[dep_name] = proxy.bind(context)
-        return lambda wf_factory: wf_factory(**d)
+        def x(wf_factory):
+            return wf_factory(**d)
+        # return lambda wf_factory: wf_factory(**d)
+        return x
 
     def __eq__(self, other):
         """Compare another config or a (name, version) tuple with self."""
@@ -258,23 +257,101 @@ class SWFWorkflowConfig(object):
 
 
 class SWFWorkflowRegistry(object):
-    def __init__(self):
-        self._registry = {}
+    """A factory for all registered workflows and their configs.
+
+    Register and/or detect workflows and their configuration. Later the
+    registered workflows can be identified by their name and version and
+    instantiated by the context bound config objects.
+    """
+    def __init__(self, layer1):
+        self.registry = {}
+        self.layer1 = layer1  # used to register the configs remotely
 
     def register(self, config, workflow_factory):
-        """Register a configuration and a workflow factory."""
+        """Register a configuration and a workflow factory.
+
+        It's an error to register equivalent configs twice. An equivalent
+        config is one that has the same hash and is equal to another.
+        For SWFWorkflowConfig this means the same name and version.
+        """
         config = config.set_alternate_name(workflow_factory.__name__)
-        config.register()  # Can raise, let it bubble up and stop this.
-        self._registry[config] = (config, workflow_factory)
+        if config in self.registry:
+            raise ValueError("%r is already configured." % config)
+        config.register(self.layer1)  # Can raise
+        self.registry[config] = (config, workflow_factory)
 
-    def __call__(self, config_identity, context):
-        """Bind the config to context and instantiate the workflow factory."""
-        config, workflow_factory = self._registry[config_identity]
-        factory_DI = config.bind(context)
-        return factory_DI.instantiate(workflow_factory)
+    def __call__(self, name, version, context):
+        """Bind the corresponding config to the context and init a workflow.
 
-    def scan(self):
-        pass
+        Raise value error if no config is found for this name and version,
+        otherwise bind the config to the context and use it to instantiate the
+        workflow.
+        """
+        try:
+            config, workflow_factory = self.registry[(name, version)]
+        except KeyError:
+            err = "No config with the name %r and version %r was found."
+            raise ValueError(err % (name, version))
+        return config.bind(context)(workflow_factory)
+
+    def scan(self, package=None, ignore=None, level=0):
+        """Scan for registered workflows and their configuration.
+
+        Use venusian to scan. By default it will scan the package of the scan
+        caller but this can be changed using the package and ignore arguments.
+        Their semantics is the same with the ones in venusian documentation.
+
+        The level represents the additional stack frames to add to the caller
+        package identification code. This is useful when this call is wrapped
+        in another place like so:
+
+            def scan():
+                scanner = SWFWorkflowRegistry()
+                scanner.scan(level=1)
+                return scanner
+
+            # ... and later, in another package
+            my_scanner = scan()
+        """
+        scanner = venusian.Scanner(register=self.register)
+        if package is None:
+            package = caller_package(level=2 + level)
+        scanner.scan(package, categories=['swf_workflow'], ignore=ignore)
+
+
+class SWFActivityProxy(object):
+    def __init__(self, identity, name, version, task_list=None, heartbeat=None,
+                 schedule_to_close=None, schedule_to_start=None,
+                 start_to_close=None):
+        self.identity = identity
+        self.name = name
+        self.version = version
+        self.task_list = task_list
+        self.heartbeat = heartbeat
+        self.schedule_to_close = schedule_to_close
+        self.schedule_to_start = schedule_to_start
+        self.start_to_close = start_to_close
+
+    def bind(self, context):
+        return self
+
+
+class SWFWorkflowProxy(object):
+    def __init__(self, identity, name, version, task_list=None,
+                 workflow_duration=None, decision_duration=None):
+        self.identity = identity
+        self.name = name
+        self.version = version
+        self.task_list = task_list
+        self.workflow_duation = workflow_duration
+        self.decision_duation = decision_duration
+
+    def bind(self, context):
+        return self
+
+
+class RegistrationError(Exception):
+    pass
 
 
 def _timer_encode(val, name):
@@ -291,3 +368,23 @@ def _str_or_none(val):
     if val is None:
         return None
     return str(val)
+
+
+# Stolen from Pyramid
+def caller_module(level=2, sys=sys):
+    module_globals = sys._getframe(level).f_globals
+    module_name = module_globals.get('__name__') or '__main__'
+    module = sys.modules[module_name]
+    return module
+
+
+def caller_package(level=2, caller_module=caller_module):
+    # caller_module in arglist for tests
+    module = caller_module(level+1)
+    f = getattr(module, '__file__', '')
+    if (('__init__.py' in f) or ('__init__$py' in f)):  # empty at >>>
+        # Module is a package
+        return module  # pragma: no cover
+    # Go up one level to get package
+    package_name = module.__name__.rsplit('.', 1)[0]
+    return sys.modules[package_name]
