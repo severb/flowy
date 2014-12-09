@@ -39,7 +39,7 @@ class SWFWorkflowConfig(object):
         self.default_workflow_duration = default_workflow_duration
         self.default_decision_duration = default_decision_duration
         self.default_child_policy = default_child_policy
-        self._task_registry = {}
+        self.proxy_factory_registry = {}
 
     def set_alternate_name(self, name):
         """Set the name of this workflow if one is not already set.
@@ -53,13 +53,15 @@ class SWFWorkflowConfig(object):
         """
         if self._name is not None:
             return self
-        # Make a clone for each alternate name
-        c = SWFWorkflowConfig(self._version, name=name,
+        klass = self.__class__
+        # Make a clone
+        c = klass(self._version, name=name,
             default_task_list=self.default_task_list,
             default_workflow_duration=self.default_workflow_duration,
             default_decision_duration=self.default_decision_duration,
             default_child_policy=self.default_child_policy)
-        c._task_registry = self._task_registry
+        for dep_name, proxy_factory in self.proxy_factory_registry.iteritems():
+            c.conf(dep_name, proxy_factory)
         return c
 
     def register(self, swf_layer1):
@@ -152,8 +154,13 @@ class SWFWorkflowConfig(object):
             and w.get('defaultChildPolicy') == child_pol)
 
     def _check_dep(self, dep_name):
-        if dep_name in self._task_registry:
+        if dep_name in self.proxy_factory_registry:
             raise ValueError("%r is already configured.")
+
+    def conf(self, dep_name, proxy_factory):
+        """Configure a proxy factory for a dependency."""
+        self._check_dep(dep_name)
+        self.proxy_factory_registry[dep_name] = proxy_factory
 
     def conf_activity(self, dep_name, version, name=None, task_list=None,
                       heartbeat=None, schedule_to_close=None,
@@ -177,7 +184,6 @@ class SWFWorkflowConfig(object):
         For convenience, if the activity name is missing, it will be the same
         as the dependency name.
         """
-        self._check_dep(dep_name)
         if name is None:
             name = dep_name
         proxy = SWFActivityProxy(identity=dep_name, name=name, version=version,
@@ -185,19 +191,18 @@ class SWFWorkflowConfig(object):
                                  schedule_to_close=schedule_to_close,
                                  schedule_to_start=schedule_to_start,
                                  start_to_close=start_to_close)
-        self._task_registry[dep_name] = proxy
+        self.conf(dep_name, proxy)
 
     def conf_workflow(self, dep_name, version, name=None, task_list=None,
                       workflow_duration=None, decision_duration=None):
         """Same as conf_activity but for sub-workflows."""
-        self._check_dep(dep_name)
         if name is None:
             name = dep_name
         proxy = SWFWorkflowProxy(identity=dep_name, name=name, version=version,
                                  task_list=task_list,
                                  workflow_duration=workflow_duration,
                                  decision_duration=decision_duration)
-        self._task_registry[dep_name] = proxy
+        self.conf(dep_name, proxy)
 
     def bind(self, context):
         """Bind the current configuration to an execution context.
@@ -206,12 +211,9 @@ class SWFWorkflowConfig(object):
         passing proxies bound to this execution context.
         """
         d = {}
-        for dep_name, proxy in self._task_registry.iteritems():
+        for dep_name, proxy in self.proxy_factory_registry.iteritems():
             d[dep_name] = proxy.bind(context)
-        def x(wf_factory):
-            return wf_factory(**d)
-        # return lambda wf_factory: wf_factory(**d)
-        return x
+        return lambda wf_factory: wf_factory(**d)
 
     def __eq__(self, other):
         """Compare another config or a (name, version) tuple with self."""
@@ -255,17 +257,27 @@ class SWFWorkflowConfig(object):
         venusian.attach(workflow_factory, callback, category='swf_workflow')
         return workflow_factory
 
+    def __repr__(self):
+        klass = self.__class__.__name__
+        name = self._name if self._name is not None else '__UNNAMED__'
+        v = self._version
+        MAX_DEPS = 7
+        deps = sorted(self.proxy_factory_registry.keys())
+        l_deps = len(deps)
+        if l_deps > MAX_DEPS:
+            deps = deps[:MAX_DEPS] + ['... and %s more' % (l_deps - MAX_DEPS)]
+        return '<%s %s v=%s deps=%s>' % (klass, name, v, ','.join(deps))
+
 
 class SWFWorkflowRegistry(object):
     """A factory for all registered workflows and their configs.
 
-    Register and/or detect workflows and their configuration. Later the
-    registered workflows can be identified by their name and version and
-    instantiated by the context bound config objects.
+    Register and/or detect workflows and their configuration. The registered
+    workflows can be identified by their name and version and instantiated by
+    the context bound config objects.
     """
-    def __init__(self, layer1):
+    def __init__(self):
         self.registry = {}
-        self.layer1 = layer1  # used to register the configs remotely
 
     def register(self, config, workflow_factory):
         """Register a configuration and a workflow factory.
@@ -277,8 +289,13 @@ class SWFWorkflowRegistry(object):
         config = config.set_alternate_name(workflow_factory.__name__)
         if config in self.registry:
             raise ValueError("%r is already configured." % config)
-        config.register(self.layer1)  # Can raise
+        # config.register(self.layer1)  # Can raise
         self.registry[config] = (config, workflow_factory)
+
+    def register_remote(self, layer1):
+        """Register or check compatibility of all configs in Amazon SWF."""
+        for config in self.registry.keys():
+            config.register(layer1)
 
     def __call__(self, name, version, context):
         """Bind the corresponding config to the context and init a workflow.
@@ -320,6 +337,19 @@ class SWFWorkflowRegistry(object):
             package = caller_package(level=2 + level)
         scanner.scan(package, categories=['swf_workflow'], ignore=ignore)
 
+    def __repr__(self):
+        klass = self.__class__.__name__
+        configs = self.registry.values()
+        MAX_ENTRIES = 4
+        entries = sorted(self.registry.values())
+        l_entries = len(entries)
+        r = '<%s %r>'
+        if l_entries > MAX_ENTRIES:
+            entries = entries[:MAX_ENTRIES]
+            extra_entries = l_entries - MAX_ENTRIES
+            return "<%s %r ... and %s more>" % (klass, entries, extra_entries)
+        return "<%s %r>" % (klass, entries)
+
 
 class SWFActivityProxy(object):
     def __init__(self, identity, name, version, task_list=None, heartbeat=None,
@@ -335,7 +365,7 @@ class SWFActivityProxy(object):
         self.start_to_close = start_to_close
 
     def bind(self, context):
-        return self
+        return SWFBoundProxy(self, context)
 
 
 class SWFWorkflowProxy(object):
@@ -349,7 +379,13 @@ class SWFWorkflowProxy(object):
         self.decision_duation = decision_duration
 
     def bind(self, context):
-        return self
+        return SWFBoundProxy(self, context)
+
+
+class SWFBoundProxy(object):
+    def __init__(self, proxy, context):
+        self.proxy = proxy
+        self.context = context
 
 
 class RegistrationError(Exception):
