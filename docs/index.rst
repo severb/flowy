@@ -59,6 +59,6 @@ Flowy is available on the Python Package Index. To install it use `pip`_::
     reference
 
 
-.. _Flowy: http://github.com/pbs/flowy/
+.. _Flowy: http://github.com/severb/flowy/
 .. _Amazon SWF: http://aws.amazon.com/swf/
 .. _pip: http://www.pip-installer.org/

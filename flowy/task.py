@@ -142,12 +142,13 @@ class _SWFWorkflow(Task):
     _TIMEDOUT, _RUNNING, _ERROR, _FOUND, _NOTFOUND = range(5)
 
     def __init__(self, scheduler, input, token, running, timedout, results,
-                 errors, spec, tags):
+                 errors, order, spec, tags):
         self._scheduler = scheduler
         self._running = set(map(int, running))
         self._timedout = set(map(int, timedout))
         self._results = dict((int(k), v) for k, v in results.items())
         self._errors = dict((int(k), v) for k, v in errors.items())
+        self._order = list(map(int, order))
         self._spec = spec
         self._tags = tags
         self._scheduled = False
@@ -164,6 +165,23 @@ class _SWFWorkflow(Task):
                                 workflow_duration):
             yield
         self._tags = old_tags
+
+    def first_result(self, *results):
+            return min(results).result()
+
+    def first_results(self, n, *results):
+        n = int(n)
+        if not len(results) > 1:
+            raise ValueError("No results to wait for.")
+        if n == 1:
+            return self.first_result(*results)
+        elif n < len(results):
+            return [r.result() for r in sorted(results)[:n]]
+        else:
+            return all_results(*results)
+
+    def all_results(self, *results):
+        return [r.result() for r in results]
 
     def restart(self, *args, **kwargs):
         try:
@@ -209,32 +227,32 @@ class _SWFWorkflow(Task):
         initial_call_id = self._call_id
         try:
             if delay:
-                state, _ = self._search_timer()
+                state = self._search_timer()
                 if state == self._NOTFOUND:
                     self._scheduled = True
                     self._scheduler.schedule_timer(delay, self._call_id)
                     state = self._RUNNING
                 if not(state == self._FOUND):
-                    return state, None
-            state, value = self._search_result(retry)
+                    return state, None, None
+            state, value, order = self._search_result(retry)
             if state == self._NOTFOUND:
                 self._scheduled = True
                 sched = self._scheduler.schedule_activity
                 if not is_act:
                     sched = self._scheduler.schedule_workflow
                 sched(spec, self._call_id, input)
-                return self._RUNNING, None
-            return state, value
+                return self._RUNNING, None, None
+            return state, value, order
         finally:
             self._reserve_call_ids(initial_call_id, delay, retry)
 
     def _search_timer(self):
         if self._call_id in self._results:
             self._call_id += 1
-            return self._FOUND, None
+            return self._FOUND
         if self._call_id in self._running:
-            return self._RUNNING, None
-        return self._NOTFOUND, None
+            return self._RUNNING
+        return self._NOTFOUND
 
     def _search_result(self, retry):
         # update self._call_id automatically
@@ -242,13 +260,17 @@ class _SWFWorkflow(Task):
             if self._call_id in self._timedout:
                 continue
             if self._call_id in self._running:
-                return self._RUNNING, None
+                return self._RUNNING, None, None
             if self._call_id in self._errors:
-                return self._ERROR, self._errors[self._call_id]
+                return (self._ERROR,
+                        self._errors[self._call_id],
+                        self._order.index(self._call_id))
             if self._call_id in self._results:
-                return self._FOUND, self._results[self._call_id]
-            return self._NOTFOUND, None
-        return self._TIMEDOUT, None
+                return (self._FOUND,
+                        self._results[self._call_id],
+                        self._order.index(self._call_id))
+            return self._NOTFOUND, None, None
+        return self._TIMEDOUT, None, self._order.index(self._call_id)
 
     def _reserve_call_ids(self, call_id, delay, retry):
         self._call_id = (
@@ -317,7 +339,7 @@ class SWFScheduler(object):
 
 class SWFWorkflow(_SWFWorkflow):
     def __init__(self, swf_client, input, token, running, timedout, results,
-                 errors, spec, tags):
+                 errors, order, spec, tags):
         s = SWFScheduler(swf_client, token, rate_limit=64 - len(running))
         super(SWFWorkflow, self).__init__(s, input, token, running, timedout,
-                                          results, errors, spec, tags)
+                                          results, errors, order, spec, tags)
