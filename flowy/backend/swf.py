@@ -54,7 +54,8 @@ class SWFWorkflowConfig(object):
         if self._name is not None:
             return self
         klass = self.__class__
-        # Make a clone
+        # Make a clone since this config can be used as a decorator on multiple
+        # workflow factories and each has a different name.
         c = klass(self._version, name=name,
             default_task_list=self.default_task_list,
             default_workflow_duration=self.default_workflow_duration,
@@ -289,7 +290,6 @@ class SWFWorkflowRegistry(object):
         config = config.set_alternate_name(workflow_factory.__name__)
         if config in self.registry:
             raise ValueError("%r is already configured." % config)
-        # config.register(self.layer1)  # Can raise
         self.registry[config] = (config, workflow_factory)
 
     def register_remote(self, layer1):
