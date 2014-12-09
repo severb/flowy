@@ -50,6 +50,7 @@ class TaskProxy(object):
     def __call__(self, task, *args, **kwargs):
         result = self._args_based_result(task, args, kwargs)
         if result is not None:
+            task._reserve_call_ids(task._call_id, self._delay, self._retry)
             return result
         args, kwargs = self._extract_results(args, kwargs)
         # there is no error handling for argument/result transport
