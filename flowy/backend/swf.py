@@ -16,8 +16,8 @@ class SWFWorkflowConfig(object):
     """
 
     def __init__(self, version, name=None, default_task_list=None,
-                 default_workflow_duration=None,
-                 default_decision_duration=120,
+                 default_workflow_duration=3600,
+                 default_decision_duration=600,
                  default_child_policy='TERMINATE'):
         """ Initialize the config object.
 
