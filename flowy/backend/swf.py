@@ -1,4 +1,5 @@
 import sys
+from keyword import iskeyword
 
 import venusian
 
@@ -19,7 +20,7 @@ class SWFWorkflowConfig(object):
                  default_workflow_duration=3600,
                  default_decision_duration=600,
                  default_child_policy='TERMINATE'):
-        """ Initialize the config object.
+        """Initialize the config object.
 
         The timer values are in seconds, and the child policy should be either
         TERMINATE, REQUEST_CANCEL, ABANDON or None.
@@ -35,10 +36,10 @@ class SWFWorkflowConfig(object):
         # and should be treated as immutable
         self._name = name
         self._version = version
-        self.default_task_list = default_task_list
-        self.default_workflow_duration = default_workflow_duration
-        self.default_decision_duration = default_decision_duration
-        self.default_child_policy = default_child_policy
+        self.d_t_l = default_task_list
+        self.d_w_d = default_workflow_duration
+        self.d_d_d = default_decision_duration
+        self.d_c_p = default_child_policy
         self.proxy_factory_registry = {}
 
     def set_alternate_name(self, name):
@@ -57,10 +58,10 @@ class SWFWorkflowConfig(object):
         # Make a clone since this config can be used as a decorator on multiple
         # workflow factories and each has a different name.
         c = klass(self._version, name=name,
-            default_task_list=self.default_task_list,
-            default_workflow_duration=self.default_workflow_duration,
-            default_decision_duration=self.default_decision_duration,
-            default_child_policy=self.default_child_policy)
+            default_task_list=self.d_t_l,
+            default_workflow_duration=self.d_w_d,
+            default_decision_duration=self.d_d_d,
+            default_child_policy=self.d_c_p)
         for dep_name, proxy_factory in self.proxy_factory_registry.iteritems():
             c.conf(dep_name, proxy_factory)
         return c
@@ -92,15 +93,13 @@ class SWFWorkflowConfig(object):
     def _cvt_values(self):
         """Convert values to their expected types or bailout."""
         name, version = self._cvt_name_version()
-        t_list = _str_or_none(self.default_task_list),
-        workflow_dur = _timer_encode(self.default_workflow_duration,
-                                     'default_workflow_duration')
-        decision_dur = _timer_encode(self.default_decision_duration,
-                                     'default_decision_duration')
-        child_policy = _str_or_none(self.default_child_policy)
+        d_t_l = _str_or_none(self.d_t_l),
+        d_w_d = _timer_encode(self.d_w_d, 'default_workflow_duration')
+        d_d_d = _timer_encode(self.d_d_d, 'default_decision_duration')
+        d_c_p = _str_or_none(self.d_c_p)
         if child_policy not in _CHILD_POLICY:
-            raise ValueError("Invalid child policy value.")
-        return name, version, t_list, workflow_dur, decision_dur, child_policy
+            raise ValueError('Invalid child policy value: %r' % d_c_p)
+        return name, version, d_t_l, d_w_d, d_d_d, d_c_p
 
     def register_remote(self, swf_layer1):
         """Register the workflow remotely.
@@ -115,13 +114,13 @@ class SWFWorkflowConfig(object):
         ValueError if any configuration values can't be converted to the
         required types.
         """
-        name, ver, t_list, wf_dur, d_dur, child_pol = self._cvt_values()
+        name, version, d_t_l, d_w_d, d_d_d, d_c_p = self._cvt_values()
         try:
             swf_layer1.register_workflow_type(
-                name=name, version=ver, task_list=t_list,
-                default_task_start_to_close_timeout=d_dur,
-                default_execution_start_to_close_timeout=wf_dur,
-                default_child_policy=child_pol)
+                name=name, version=version, task_list=d_t_l,
+                default_task_start_to_close_timeout=d_d_d,
+                default_execution_start_to_close_timeout=d_w_d,
+                default_child_policy=d_c_p)
         except SWFTypeAlreadyExistsError:
             return False
         except SWFResponseError as e:
@@ -141,22 +140,29 @@ class SWFWorkflowConfig(object):
         ValueError if any configuration values can't be converted to the
         required types.
         """
-        name, ver, t_list, wf_dur, d_dur, child_pol = self._cvt_values()
+        name, version, d_t_l, d_w_d, d_d_d, d_c_p = self._cvt_values()
         try:
             w = swf_layer1.describe_workflow_type(
-                workflow_name=name, workflow_version=ver)['configuration']
+                workflow_name=name, workflow_version=version)['configuration']
         except SWFResponseError as e:
             logger.exception('Error while checking workflow compatibility:')
             raise RegistrationError(e)
         return (
-            w.get('defaultTaskList', {}).get('name') == t_list
-            and w.get('defaultTaskStartToCloseTimeout') == d_dur
-            and w.get('defaultExecutionStartToCloseTimeout') == wf_dur
-            and w.get('defaultChildPolicy') == child_pol)
+            w.get('defaultTaskList', {}).get('name') == d_t_l
+            and w.get('defaultTaskStartToCloseTimeout') == d_d_d
+            and w.get('defaultExecutionStartToCloseTimeout') == d_w_d
+            and w.get('defaultChildPolicy') == d_c_p)
 
     def _check_dep(self, dep_name):
+        # stolen from namedtuple
+        if not all(c.isalnum() or c=='_' for c in dep_name):
+            raise ValueError('Dependency names can only contain alphanumeric characters and underscores: %r' % name)
+        if iskeyword(name):
+            raise ValueError('Dependency names cannot be a keyword: %r' % name)
+        if dep_name[0].isdigit():
+            raise ValueError('Dependency names cannot start with a number: %r' % dep_name)
         if dep_name in self.proxy_factory_registry:
-            raise ValueError("%r is already configured.")
+            raise ValueError('Dependency name is already registered: %r' % dep_name)
 
     def conf(self, dep_name, proxy_factory):
         """Configure a proxy factory for a dependency."""
@@ -289,7 +295,7 @@ class SWFWorkflowRegistry(object):
         """
         config = config.set_alternate_name(workflow_factory.__name__)
         if config in self.registry:
-            raise ValueError("%r is already configured." % config)
+            raise ValueError('Config is already registered: %r' % config)
         self.registry[config] = (config, workflow_factory)
 
     def register_remote(self, layer1):
@@ -309,8 +315,7 @@ class SWFWorkflowRegistry(object):
         try:
             config, workflow_factory = self.registry[key]
         except KeyError:
-            err = "No config with the name %r and version %r was found."
-            raise ValueError(err % (name, version))
+            raise ValueError('No config with the name %r and version %r was found.' % (name, version))
         return config.bind(context)(workflow_factory)
 
     def scan(self, package=None, ignore=None, level=0):
@@ -347,8 +352,8 @@ class SWFWorkflowRegistry(object):
         if l_entries > MAX_ENTRIES:
             entries = entries[:MAX_ENTRIES]
             extra_entries = l_entries - MAX_ENTRIES
-            return "<%s %r ... and %s more>" % (klass, entries, extra_entries)
-        return "<%s %r>" % (klass, entries)
+            return '<%s %r ... and %s more>' % (klass, entries, extra_entries)
+        return '<%s %r>' % (klass, entries)
 
 
 class SWFActivityProxy(object):
@@ -397,8 +402,7 @@ def _timer_encode(val, name):
         return None
     val = max(int(val), 0)
     if val == 0:
-        raise ValueError("The value of %r must be a strictly"
-                         " positive integer." % name)
+        raise ValueError('The value of %r must be a strictly positive integer: %r' % (name, val))
     return str(val)
 
 
