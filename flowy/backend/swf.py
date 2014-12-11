@@ -1,6 +1,10 @@
 import json
+import logging
 import sys
+from collections import namedtuple
 from functools import partial
+from itertools import chain
+from itertools import repeat
 from keyword import iskeyword
 
 import venusian
@@ -8,7 +12,19 @@ import venusian
 __all__ = ['SWFWorkflowConfig', 'SWFWorkflowRegistry', 'RegistrationError']
 
 
+logger = logging.getLogger(__package__)
+logging.basicConfig()
+
+
 _CHILD_POLICY = ['TERMINATE', 'REQUEST_CANCEL', 'ABANDON', None]
+
+
+def _s_i(*args, **kwargs):
+    return json.dumps((args, kwargs))
+_d_i = json.loads
+_s_r = json.dumps
+_d_r = json.loads
+_i = lambda x: x
 
 
 class SWFWorkflowConfig(object):
@@ -166,7 +182,7 @@ class SWFWorkflowConfig(object):
         # stolen from namedtuple
         if not all(c.isalnum() or c=='_' for c in dep_name):
             raise ValueError('Dependency names can only contain alphanumeric characters and underscores: %r' % name)
-        if iskeyword(name):
+        if iskeyword(dep_name):
             raise ValueError('Dependency names cannot be a keyword: %r' % name)
         if dep_name[0].isdigit():
             raise ValueError('Dependency names cannot start with a number: %r' % dep_name)
@@ -302,10 +318,11 @@ class SWFWorkflow(object):
         Bind the config to the context and use it to instantiate and run a new
         workflow instance.
         """
-        workflow_DI = config.bind(context)
+        c = self.config
+        workflow_DI = c.bind(context)
         wf = workflow_DI(self.workflow_factory)
         try:
-            deserialize_input = getattr(config, 'deserialize_input', _i)
+            deserialize_input = getattr(c, 'deserialize_input', _i)
             args, kwargs = deserialize_input(input)
         except Exception as e:
             logger.exception('Error while deserializing workflow input:')
@@ -323,7 +340,7 @@ class SWFWorkflow(object):
                 context.restart(*r.args, **r.kwargs)
             else:
                 try:
-                    serialize_result = getattr(config, 'serialize_input', _i)
+                    serialize_result = getattr(c, 'serialize_input', _i)
                     r = serialize_result(r)
                 except Exception as e:
                     logger.exception('Error while serializing workflow result:')
@@ -365,7 +382,7 @@ class SWFWorkflowRegistry(object):
         for workflow in self.registry.keys():
             workflow.register(layer1)
 
-    def __call__(self, name, version, context, *args, **kwargs):
+    def __call__(self, name, version, context, input):
         """Bind the corresponding config to the context and init a workflow.
 
         Raise value error if no config is found for this name and version,
@@ -377,7 +394,7 @@ class SWFWorkflowRegistry(object):
             workflow = self.registry[key]
         except KeyError:
             raise ValueError('No workflow implementation found: %r' % key)
-        workflow.run(context, *args, **kwargs)
+        workflow.run(context, input)
 
     def scan(self, package=None, ignore=None, level=0):
         """Scan for registered workflows and their configuration.
@@ -415,6 +432,17 @@ class SWFWorkflowRegistry(object):
             extra_entries = l_entries - MAX_ENTRIES
             return '<%s %r ... and %s more>' % (klass, entries, extra_entries)
         return '<%s %r>' % (klass, entries)
+
+
+class _DescCounter(object):
+    def __init__(self, to=None):
+        if to is None:
+            self.r = repeat(True)
+        else:
+            self.r = chain(repeat(True, to), repeat(False))
+
+    def consume(self):
+        return next(self.r)
 
 
 class SWFActivityProxy(object):
@@ -546,20 +574,20 @@ class ContextBoundProxy(object):
         retry = getattr(self.proxy, 'retry', [0])
         for call_number, delay in enumerate(retry):
             call_key = self._call_key(call_number)
-            if c.timeout(call_key):
+            if c.has_timeout(call_key):
                 continue
             if c.running(call_key):
                 break
             if c.has_result(call_key):
-                order, value = c.result(call_key)
+                value, order = c.result(call_key)
                 # make the result deserialization lazy; in case of
                 # deserialization errors the result will fail the workflow
                 d_r = getattr(self.proxy, 'deserialize_result', _i)
                 d_r = partial(d_r, value)
-                r = Result(context, d_r, order)
+                r = Result(c, d_r, order)
                 break
             if c.has_error(call_key):
-                order, err = c.error(call_key)
+                err, order = c.error(call_key)
                 r = Error(err, order)
                 break
             errors, placeholders = _short_circuit_on_args(args, kwargs)
@@ -569,17 +597,16 @@ class ContextBoundProxy(object):
                 if self.rate_limit.consume():
                     try:
                         # This can fail if a result can't deserialize.
-                        args, kwargs = _extrac_results(args, kwargs)
+                        args, kwargs = _extract_results(args, kwargs)
                     except SuspendTask:
                         # In this case the resut will fail the workflow and
                         # pretend the task running by returning a placehoder
                         break
                     # really schedule
-                    self.proxy.schedule(context, call_key, delay, args, kwargs)
+                    self.proxy.schedule(c, call_key, delay, args, kwargs)
             break
         else:
             # no retries left, it must be a timeout
-            assert c.has_timeout(call_key), 'No timeout for: %r' % call_key
             order = c.timeout(call_key)
             r = Timeout(order)
         return r
@@ -620,7 +647,7 @@ class Result(TaskResult):
     def result(self):
         if not hasattr(self, '_result_cache'):
             try:
-                self._result_cache = lazy_result()
+                self._result_cache = self._lazy_result()
             except Exception as e:
                 logger.exception('Error while deserializing result:')
                 self._result_cache = e
@@ -694,6 +721,18 @@ def _short_circuit_on_args(a, kw):
     return errs, placeholders
 
 
+def _extract_results(a, kw):
+    aa = (_result_or_value(r) for r in a)
+    kwkw = dict((k, _result_or_value(v)) for k, v in kw.iteritems())
+    return aa, kwkw
+
+
+def _result_or_value(r):
+    if isinstance(r, TaskResult):
+        return r.result()
+    return r
+
+
 class RegistrationError(Exception):
     pass
 
@@ -713,30 +752,9 @@ def _str_or_none(val):
     return str(val)
 
 
-class _DescCounter(object):
-    def __init__(self, to=None):
-        if to is None:
-            self.r = repeat(True)
-        else:
-            self.r = chain(repeat(True, to), repeat(False))
-
-    def consume(self):
-        return next(self.r)
-
-
-def _s_i(*args, **kwargs):
-    return json.dumps((args, kwargs))
-
-
 _restart = namedtuple('restart', 'args kwargs')
 def restart(*args, **kwargs):
     return _restart(args, kwargs)
-
-
-_d_i = json.loads
-_s_r = json.dumps
-_d_r = json.loads
-_i = lambda x: x
 
 
 # Stolen from Pyramid
