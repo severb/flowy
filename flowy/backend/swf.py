@@ -352,8 +352,217 @@ class SWFWorkflowProxy(object):
                 self.workflow_duration, self.decision_duration)
 
 
+class SWFPoller(object):
+    def __init__(self, layer1, task_list, domain):
+        self.layer1 = layer1
+        self.task_list = task_list
+        self.domain = domain
+
+    def poll_next(self):
+        first_page = self._poll_first_page()
+        token = first_page['taskToken']
+        all_events = self._events(first_page)
+        # Sometimes the first event in on the second page,
+        # and the first page is empty
+        first_event = next(all_events)
+        assert first_event['eventType'] == 'WorkflowExecutionStarted'
+        WESEA = 'workflowExecutionStartedEventAttributes'
+        task_list = first_event[WESEA]['taskList']['name']
+        decision_duration = first_event[WESEA]['taskStartToCloseTimeout']
+        workflow_duration = first_event[WESEA]['executionStartToCloseTimeout']
+        tags = first_event[WESEA].get('tagList', None)
+        name = first_event[WESEA]['workflowType']['name']
+        version = first_event[WESEA]['workflowType']['version']
+        input = first_event[WESEA]['input']
+        try:
+            running, timedout, results, errors, order = (
+                self._parse_events(events))
+        except _PaginationError:
+            # There's nothing better to do than to retry
+            return self.poll_next()
+        return name, version, input, SWFContext(layer1,
+                task_list, decision_duration, workflow_duration, tags, #restart
+                running, timedout, results, errors, order)
+
+    def _poll_first_page(self):
+        swf_response = {}
+        while 'taskToken' not in swf_response or not swf_response['taskToken']:
+            try:
+                swf_response = self.layer1.poll_for_decision_task(
+                    task_list=self.task_list, domain=domain
+                )
+            except SWFResponseError:
+                logger.exception('Error while polling for decisions:')
+        return swf_response
+
+    def _poll_response_page(self, token):
+        swf_response = None
+        for _ in range(7):  # give up after a limited number of retries
+            try:
+                swf_response = self.layer1.poll_for_decision_task(
+                    task_list=self.task_list,
+                    next_page_token=page_token,
+                    domain=self.domain)
+                break
+            except SWFResponseError:
+                logger.exception('Error while polling for decision page:')
+        else:
+            raise _PaginationError()
+        return swf_response
+
+    def _events(self, first_page):
+        page = first_page
+        while 1:
+            for event in page['events']:
+                yield event
+            if not page.get('nextPageToken'):
+                break
+            page = self._poll_response_page(token=page['nextPageToken'])
+
+    def _parse_events(self, events):
+        running, timedout = set(), set()
+        results, errors = {}, {}
+        order = []
+        event2call = {}
+        for e in events:
+            e_type = e.get('eventType')
+            if e_type == 'ActivityTaskScheduled':
+                id = e['activityTaskScheduledEventAttributes']['activityId']
+                event2call[e['eventId']] = id
+                running.add(id)
+            elif e_type == 'ActivityTaskCompleted':
+                ATCEA = 'activityTaskCompletedEventAttributes'
+                id = event2call[e[ATCEA]['scheduledEventId']]
+                result = e[ATCEA]['result']
+                running.remove(id)
+                results[id] = result
+                order.append(id)
+            elif e_type == 'ActivityTaskFailed':
+                ATFEA = 'activityTaskFailedEventAttributes'
+                id = event2call[e[ATFEA]['scheduledEventId']]
+                reason = e[ATFEA]['reason']
+                running.remove(id)
+                errors[id] = reason
+                order.append(id)
+            elif e_type == 'ActivityTaskTimedOut':
+                ATTOEA = 'activityTaskTimedOutEventAttributes'
+                id = event2call[e[ATTOEA]['scheduledEventId']]
+                running.remove(id)
+                timedout.add(id)
+                order.append(id)
+            elif e_type == 'ScheduleActivityTaskFailed':
+                SATFEA = 'scheduleActivityTaskFailedEventAttributes'
+                id = e[SATFEA]['activityId']
+                reason = e[SATFEA]['cause']
+                # when a job is not found it's not even started
+                errors[id] = reason
+                order.append(id)
+            elif e_type == 'StartChildWorkflowExecutionInitiated':
+                SCWEIEA = 'startChildWorkflowExecutionInitiatedEventAttributes'
+                id = _subworkflow_id(e[SCWEIEA]['workflowId'])
+                running.add(id)
+            elif e_type == 'ChildWorkflowExecutionCompleted':
+                CWECEA = 'childWorkflowExecutionCompletedEventAttributes'
+                id = _subworkflow_id(
+                    e[CWECEA]['workflowExecution']['workflowId'])
+                result = e[CWECEA]['result']
+                running.remove(id)
+                results[id] = result
+                order.append(id)
+            elif e_type == 'ChildWorkflowExecutionFailed':
+                CWEFEA = 'childWorkflowExecutionFailedEventAttributes'
+                id = _subworkflow_id(
+                    e[CWEFEA]['workflowExecution']['workflowId'])
+                reason = e[CWEFEA]['reason']
+                running.remove(id)
+                errors[id] = reason
+                order.append(id)
+            elif e_type == 'ChildWorkflowExecutionTimedOut':
+                CWETOEA = 'childWorkflowExecutionTimedOutEventAttributes'
+                id = _subworkflow_id(
+                    e[CWETOEA]['workflowExecution']['workflowId'])
+                running.remove(id)
+                timedout.add(id)
+                order.append(id)
+            elif e_type == 'StartChildWorkflowExecutionFailed':
+                SCWEFEA = 'startChildWorkflowExecutionFailedEventAttributes'
+                id = _subworkflow_id(e[SCWEFEA]['workflowId'])
+                reason = e[SCWEFEA]['cause']
+                errors[id] = reason
+                order.append(id)
+            elif e_type == 'TimerStarted':
+                id = e['timerStartedEventAttributes']['timerId']
+                running.add(id)
+                # while the timer is running, act as if the task itself is
+                # running
+                running.add(_timed_task_id(id))
+            elif e_type == 'TimerFired':
+                id = e['timerFiredEventAttributes']['timerId']
+                running.remove(id)
+                running.remove(_timed_task_id(id))
+                results[id] = None
+        return running, timedout, results, errors, order
+
+
+class SWFContext(object):
+    def __init__(self):
+        pass
+
+    def is_running(self, call_key):
+        return call_key in self.running
+
+    def is_result(self, call_key):
+        return call_key in self.results
+
+    def result(self, call_key):
+        return self.results[call_key], self.order.index(call_key)
+
+    def is_error(self, call_key):
+        return call_key in self.errors
+
+    def error(self, call_key):
+        return self.errors[call_key], self.order.index(call_key)
+
+    def is_timeout(self, call_key):
+        return call_key in self.timedout
+
+    def timeout(self, call_key):
+        return self.order.index(call_key)
+
+    def schedule_timer(self):
+        pass
+
+    def schedule_activity(self):
+        pass
+
+    def schedule_workflow(self):
+        pass
+
+    def fail(self, reason):
+        pass
+
+    def flush(self):
+        pass
+
+    def restart(self):
+        pass
+
+
+class _PaginationError(Exception):
+    pass
+
+
 class RegistrationError(Exception):
     pass
+
+
+def _subworkflow_id(workflow_id):
+    return workflow_id.rsplit('-', 1)[-1]
+
+
+def _timed_task_id(timer_id):
+    assert timer_id.endswith(':t')
+    return timer_id[:-2]
 
 
 def _timer_encode(val, name):

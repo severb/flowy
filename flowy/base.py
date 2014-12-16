@@ -278,11 +278,11 @@ class ContextBoundProxy(object):
         retry = getattr(self.proxy, 'retry', [0])
         for call_number, delay in enumerate(retry):
             call_key = self._call_key(call_number)
-            if c.has_timeout(call_key):
+            if c.is_timeout(call_key):
                 continue
-            if c.running(call_key):
+            if c.is_running(call_key):
                 break
-            if c.has_result(call_key):
+            if c.is_result(call_key):
                 value, order = c.result(call_key)
                 # make the result deserialization lazy; in case of
                 # deserialization errors the result will fail the workflow
@@ -290,7 +290,7 @@ class ContextBoundProxy(object):
                 d_r = partial(d_r, value)
                 r = Result(c, d_r, order)
                 break
-            if c.has_error(call_key):
+            if c.is_error(call_key):
                 err, order = c.error(call_key)
                 r = Error(err, order)
                 break
