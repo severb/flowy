@@ -27,7 +27,7 @@ class WorkflowConfig(object):
     category = None
 
     def __init__(self, rate_limit=64, deserialize_input=_i,
-                 serialize_result=_i):
+                 serialize_result=_i, serialize_restart_input=_i):
         """Initialize the config object.
 
         The rate_limit is used to limit the number of concurrent tasks. A value
@@ -42,6 +42,7 @@ class WorkflowConfig(object):
         self.rate_limit = rate_limit
         self.deserialize_input = deserialize_input
         self.serialize_result = serialize_result
+        self.serialize_restart_input = serialize_restart_input
         self.proxy_factory_registry = {}
 
     def _check_dep(self, dep_name):
@@ -137,7 +138,14 @@ class Workflow(object):
             context.fail(e)
         else:
             if isinstance(r, _restart):
-                context.restart(*r.args, **r.kwargs)
+                sri = getattr(c, 'serialize_restart_input', _i)
+                try:
+                    input = sri(*r.args, **r.kwargs)
+                except Exception as e:
+                    logger.exception('Error while serializing restart arguments:')
+                    context.fail(e)
+                else:
+                    context.restart(input)
             else:
                 try:
                     serialize_result = getattr(c, 'serialize_input', _i)
