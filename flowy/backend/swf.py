@@ -3,6 +3,7 @@ from __future__ import print_function
 import json
 import logging
 import sys
+import uuid
 
 import venusian
 
@@ -21,6 +22,8 @@ logging.basicConfig()
 
 
 _CHILD_POLICY = ['TERMINATE', 'REQUEST_CANCEL', 'ABANDON', None]
+_INPUT_SIZE = _RESULT_SIZE = 32768
+_IDENTITY_SIZE = _REASON_SIZE = 256
 
 
 _s_i = lambda *args, **kwargs: json.dumps((args, kwargs))
@@ -40,9 +43,9 @@ class SWFWorkflowConfig(WorkflowConfig):
     category = 'swf_workflow'  # venusian category used for this type of confs
 
     def __init__(self, version, name=None, default_task_list=None,
-                 default_workflow_duration=3600,
-                 default_decision_duration=600,
-                 default_child_policy='TERMINATE', rate_limit=64,
+                 default_workflow_duration=None,
+                 default_decision_duration=None,
+                 default_child_policy=None, rate_limit=64,
                  deserialize_input=_d_i, serialize_result=_s_r,
                  serialize_restart_input=_s_i):
         """Initialize the config object.
@@ -125,7 +128,9 @@ class SWFWorkflowConfig(WorkflowConfig):
         d_w_d = _timer_encode(self.d_w_d, 'default_workflow_duration')
         d_d_d = _timer_encode(self.d_d_d, 'default_decision_duration')
         d_c_p = _str_or_none(self.d_c_p)
-        if child_policy not in _CHILD_POLICY:
+        if d_c_p is not None:
+            d_c_p = d_c_p.upper()
+        if d_c_p not in _CHILD_POLICY:
             raise ValueError('Invalid child policy value: %r' % d_c_p)
         return name, self.version, d_t_l, d_w_d, d_d_d, d_c_p
 
@@ -384,7 +389,7 @@ def poll_first_page(layer1, domain, task_list, identity=None):
     while 'taskToken' not in swf_response or not swf_response['taskToken']:
         try:
             swf_response = layer1.poll_for_decision_task(
-                domain, task_list, identity)
+                str(domain), str(task_list), _str_or_none(identity))
         except SWFResponseError:
             logger.exception('Error while polling for decisions:')
     return swf_response
@@ -394,7 +399,8 @@ def poll_response_page(domain, task_list, token, identity=None):
     for _ in range(7):  # give up after a limited number of retries
         try:
             swf_response = layer1.poll_for_decision_task(
-                domain, task_list, identity, next_page_token=token)
+                str(domain), str(task_list), _str_or_none(identity),
+                next_page_token=str(token))
             break
         except SWFResponseError:
             logger.exception('Error while polling for decision page:')
@@ -541,7 +547,7 @@ class SWFContext(object):
 
     def fail(self, reason):
         self.decisions = Layer1Decisions()
-        decisions.fail_workflow_execution(reason=str(reason)[:256])
+        decisions.fail_workflow_execution(reason=str(reason)[:_REASON_SIZE])
         self.flush()
 
     def flush(self, layer1):
@@ -550,7 +556,7 @@ class SWFContext(object):
         self.closed = True
         try:
             self.layer1.respond_decision_task_completed(
-                task_token=self.token, decisions=self.decisions._data
+                task_token=str(self.token), decisions=self.decisions._data
             )
         except SWFResponseError:
             logger.exception('Error while sending the decisions:')
@@ -558,19 +564,22 @@ class SWFContext(object):
 
     def restart(self, input):
         self.decisions = Layer1Decisions()
+        child_policy = _str_or_none(self.child_policy)
+        if child_policy not in _CHILD_POLICY:
+            raise ValueError('Invalid child policy value: %r' % child_policy)
         self.decisions.continue_as_new_workflow_execution(
-            start_to_close_timeout=self.decision_duration,
-            execution_start_to_close=self.workflow_duration,
-            task_list=self.task_list,
-            input=str(input),
-            tag_list=self.tags,
-            child_policy=self.child_policy,
+            start_to_close_timeout=_str_or_none(self.decision_duration),
+            execution_start_to_close_timeout=_str_or_none(self.workflow_duration),
+            task_list=_str_or_none(self.task_list),
+            input=str(input)[:_INPUT_SIZE],
+            tag_list=_tags(self.tags),
+            child_policy=_str_or_none(self.child_policy),
         )
         self.flush()
 
     def complete(self, result):
         self.decisions = Layer1Decisions()
-        self.decisions.complete_workflow_execution(str(result))
+        self.decisions.complete_workflow_execution(str(result)[:_RESULT_SIZE])
         self.flush()
 
     # Used by SWFProxy instances
@@ -608,9 +617,28 @@ class SWFContext(object):
 def start_workflow_worker(domain, task_list, layer1=None, reg_remote=True,
                           package=None, ignore=None, setup_log=True,
                           identity=None, registry=None):
+    """Start an endless single threaded/single process workflow worker loop.
+
+    The worker polls endlessly for new decisions from the specified domain and
+    task list and runs them.
+
+    If no registry is passed, a new one is created and used to scan for
+    workflows. Package and ignore can be used to control the scanning.
+
+    If reg_remote is set, all registered workflow are registered remotely.
+
+    An identity can be set to track this worker in the SWF console, otherwise
+    a default identity is generated from this machine domain and process pid.
+
+    If setup_log is set, a default configuration for the logger is loaded.
+
+    A custom SWF client can be passed in layer1, otherwise a default client is
+    instantiated and used.
+    """
     if setup_log:
         setup_default_logger()
     identity = identity if identity is not None else _default_identity()
+    identity = str(identity)[:_IDENTITY_SIZE]
     layer1 = layer1 if layer1 is not None else Layer1()
     if registry is None:
         registry = SWFWorkflowRegistry()
@@ -630,9 +658,37 @@ def start_workflow_worker(domain, task_list, layer1=None, reg_remote=True,
         pass
 
 
+class WorkflowStarter(object):
+    """A simple workflow starter."""
+    def __init__(self, layer1=None, setup_log=True):
+        self.layer1 = layer1 if layer1 is not None else Layer1()
+        if setup_log:
+            setup_default_logger()
+        self.registry = {}
+
+    def start(self, domain, name, version, task_list=None,
+              decision_duration=None, workflow_duration=None, id=None,
+              tags=None, serialize_input=_s_i, child_policy=None):
+        """Prepare to start a new workflow, returns a callable.
+
+        The callable should be called only with the input arguments.
+        """
+        def really_start(*args, **kwargs):
+            if id is None:
+                id = uuid.uuid4()
+            self.layer1.start_workflow_execution(
+                str(domain), str(id), str(name), str(version),
+                task_list=_str_or_none(task_list),
+                execution_start_to_close_timeout=_str_or_none(workflow_duration),
+                task_start_to_close_timeout=_str_or_none(decision_duration),
+                input=str(serialize_input(*args, **kwargs))[:_INPUT_SIZE],
+                tag_list=_tags(tags))
+        return really_start
+
+
 def _default_identity():
     id = "%s-%s" % (socket.getfqdn(), os.getpid())
-    return id[-256:]
+    return id[-_IDENTITY_SIZE:]  # keep the most important part
 
 
 class _PaginationError(Exception):
@@ -677,3 +733,9 @@ def _str_or_none(val):
     if val is None:
         return None
     return str(val)
+
+
+def _tags(tags):
+    if tags is None:
+        return None
+    return list(set(map(str, tags)))[:5]
