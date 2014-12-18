@@ -12,7 +12,6 @@ __all__ = ['WorkflowConfig', 'WorkflowRegistry', 'Workflow',
 
 
 logger = logging.getLogger(__package__)
-logging.basicConfig()
 
 
 _i = lambda x: x
@@ -93,7 +92,7 @@ class WorkflowConfig(object):
             scanner.scan()
         """
         def callback(venusian_scanner, f_name, obj):
-            venusian_scanner.register(config, workflow_factory)
+            venusian_scanner.register(self, workflow_factory)
         venusian.attach(workflow_factory, callback, category=self.category)
         return workflow_factory
 
@@ -112,6 +111,10 @@ class Workflow(object):
     def __init__(self, config, workflow_factory):
         self.config = config
         self.workflow_factory = workflow_factory
+
+    def key(self):
+        """Return an identifier for this workflow used for registration."""
+        raise NotImplementedError
 
     def run(self, context):
         """Run the workflow code.
@@ -175,16 +178,13 @@ class WorkflowRegistry(object):
     def __init__(self):
         self.registry = {}
 
-    def _key(self, config):
-        return config
-
     def register(self, config, workflow_factory):
         """Register a configuration and a workflow factory.
 
         It's an error to register the same name and version twice.
         """
-        key = self._key(config)
         workflow = self.WorkflowFactory(config, workflow_factory)
+        key = workflow.key()
         if key in self.registry:
             raise ValueError('Implementation is already registered: %r' % key)
         self.registry[key] = workflow
@@ -230,7 +230,7 @@ class WorkflowRegistry(object):
         configs = self.registry.values()
         MAX_ENTRIES = 4
         entries = sorted(self.registry.values())
-        more_entries = len(entries) - MAX_DEPS
+        more_entries = len(entries) - MAX_ENTRIES
         r = '<%s %r>'
         if more_entries > 0:
             entries = entries[:MAX_ENTRIES]
@@ -261,9 +261,12 @@ class ContextBoundProxy(object):
         self.proxy = proxy
         self.context = context
         self.rate_limit = rate_limit
+        self.call_number = 0
 
-    def _call_key(self, call_number):
-        return "%s-%s" % (self.proxy.identity, call_number)
+    def _call_key(self, retry_number):
+        r = "%s-%s-%s" % (self.proxy.identity, self.call_number, retry_number)
+        self.call_number += 1
+        return r
 
     def __call__(self, *args, **kwargs):
         """Consult the execution history for results or schedule a new task.
@@ -296,8 +299,8 @@ class ContextBoundProxy(object):
         c = self.context
         r = Placeholder()
         retry = getattr(self.proxy, 'retry', [0])
-        for call_number, delay in enumerate(retry):
-            call_key = self._call_key(call_number)
+        for retry_number, delay in enumerate(retry):
+            call_key = self._call_key(retry_number)
             if c.is_timeout(call_key):
                 continue
             if c.is_running(call_key):
@@ -419,6 +422,32 @@ class Placeholder(TaskResult):
         raise SuspendTask
 
 
+def first(result, *results):
+    return min(_i_or_args(result, results)).wait()
+
+
+def first_n(n, result, *results):
+    i = _i_or_args(result, results)
+    if n == 1:
+        yield first(i)
+        return
+    s = sorted(i)
+    for r in s[:n]:
+        yield r.wait()
+
+
+def all(result, *results):
+    i = list(_i_or_args(result, results))
+    for r in first_n(len(i), i):
+        yield r
+
+
+def _i_or_args(result, results):
+    if len(results) == 0:
+        return iter(result)
+    return (result,) + results
+
+
 class SuspendTask(Exception):
     """Special exception raised by result and used for flow control."""
 
@@ -445,7 +474,7 @@ def _short_circuit_on_args(a, kw):
 
 
 def _extract_results(a, kw):
-    aa = (_result_or_value(r) for r in a)
+    aa = [_result_or_value(r) for r in a]
     kwkw = dict((k, _result_or_value(v)) for k, v in kw.iteritems())
     return aa, kwkw
 

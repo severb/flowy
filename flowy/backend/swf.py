@@ -2,23 +2,30 @@ from __future__ import print_function
 
 import json
 import logging
+import os
+import socket
 import sys
 import uuid
 
 import venusian
+from boto.exception import SWFResponseError
+from boto.swf.exceptions import SWFTypeAlreadyExistsError
+from boto.swf.layer1 import Layer1
+from boto.swf.layer1_decisions import Layer1Decisions
 
+from flowy.base import ContextBoundProxy
 from flowy.base import DescCounter
 from flowy.base import setup_default_logger
 from flowy.base import Workflow
 from flowy.base import WorkflowConfig
 from flowy.base import WorkflowRegistry
 
-__all__ = ['SWFWorkflowConfig', 'SWFWorkflowRegistry', 'RegistrationError',
-           'start_workflow_worker']
+
+__all__ = ['SWFWorkflowConfig', 'SWFWorkflowRegistry',
+           'start_swf_workflow_worker']
 
 
 logger = logging.getLogger(__name__)
-logging.basicConfig()
 
 
 _CHILD_POLICY = ['TERMINATE', 'REQUEST_CANCEL', 'ABANDON', None]
@@ -30,7 +37,6 @@ _s_i = lambda *args, **kwargs: json.dumps((args, kwargs))
 _d_i = json.loads
 _s_r = json.dumps
 _d_r = json.loads
-_i = lambda x: x
 
 
 class SWFWorkflowConfig(WorkflowConfig):
@@ -100,7 +106,7 @@ class SWFWorkflowConfig(WorkflowConfig):
             c.conf(dep_name, proxy_factory)
         return c
 
-    def register(self, swf_layer1):
+    def register_remote(self, swf_layer1, domain):
         """Register the workflow config in Amazon SWF if it's missing.
 
         If the workflow registration fails because there is already another
@@ -115,16 +121,16 @@ class SWFWorkflowConfig(WorkflowConfig):
         RegistrationError. ValueError is raised if any configuration values
         can't be converted to the required types.
         """
-        registered_as_new = self.register_remote(swf_layer1)
+        registered_as_new = self.try_register_remote(swf_layer1, domain)
         if not registered_as_new:
-            success = self.check_compatible(swf_layer1)
+            self.check_compatible(swf_layer1, domain)  # raises if incompatible
 
     def _cvt_values(self):
         """Convert values to their expected types or bailout."""
         name = self.name
         if name is None:
             raise RuntimeError('Name is not set.')
-        d_t_l = _str_or_none(self.d_t_l),
+        d_t_l = _str_or_none(self.d_t_l)
         d_w_d = _timer_encode(self.d_w_d, 'default_workflow_duration')
         d_d_d = _timer_encode(self.d_d_d, 'default_decision_duration')
         d_c_p = _str_or_none(self.d_c_p)
@@ -132,9 +138,9 @@ class SWFWorkflowConfig(WorkflowConfig):
             d_c_p = d_c_p.upper()
         if d_c_p not in _CHILD_POLICY:
             raise ValueError('Invalid child policy value: %r' % d_c_p)
-        return name, self.version, d_t_l, d_w_d, d_d_d, d_c_p
+        return str(name), str(self.version), d_t_l, d_w_d, d_d_d, d_c_p
 
-    def register_remote(self, swf_layer1):
+    def try_register_remote(self, swf_layer1, domain):
         """Register the workflow remotely.
 
         Returns True if registration is successful and False if another
@@ -143,48 +149,57 @@ class SWFWorkflowConfig(WorkflowConfig):
         A name should be set before calling this method or RuntimeError is
         raised.
 
-        Raise RegistrationError in case of SWF communication errors and
+        Raise _RegistrationError in case of SWF communication errors and
         ValueError if any configuration values can't be converted to the
         required types.
         """
         name, version, d_t_l, d_w_d, d_d_d, d_c_p = self._cvt_values()
         try:
-            swf_layer1.register_workflow_type(
+            swf_layer1.register_workflow_type(str(domain),
                 name=name, version=version, task_list=d_t_l,
-                default_task_start_to_close_timeout=d_d_d,
                 default_execution_start_to_close_timeout=d_w_d,
+                default_task_start_to_close_timeout=d_d_d,
                 default_child_policy=d_c_p)
         except SWFTypeAlreadyExistsError:
             return False
         except SWFResponseError as e:
             logger.exception('Error while registering the workflow:')
-            raise RegistrationError(e)
+            raise _RegistrationError(e)
         return True
 
-    def check_compatible(self, swf_layer1):
+    def check_compatible(self, swf_layer1, domain):
         """Check if the remote config has the same defaults as this one.
-
-        Returns True if the two configs are identical and False otherwise.
 
         A name should be set before calling this method or RuntimeError is
         raised.
 
-        Raise RegistrationError in case of SWF communication errors and
-        ValueError if any configuration values can't be converted to the
-        required types.
+        Raise _RegistrationError in case of SWF communication errors or
+        incompatibility and ValueError if any configuration values can't be
+        converted to the required types.
         """
         name, version, d_t_l, d_w_d, d_d_d, d_c_p = self._cvt_values()
         try:
-            w = swf_layer1.describe_workflow_type(
-                workflow_name=name, workflow_version=version)['configuration']
+            w = swf_layer1.describe_workflow_type(str(domain), name, version)
+            w = w['configuration']
         except SWFResponseError as e:
             logger.exception('Error while checking workflow compatibility:')
-            raise RegistrationError(e)
-        return (
-            w.get('defaultTaskList', {}).get('name') == d_t_l
-            and w.get('defaultTaskStartToCloseTimeout') == d_d_d
-            and w.get('defaultExecutionStartToCloseTimeout') == d_w_d
-            and w.get('defaultChildPolicy') == d_c_p)
+            raise _RegistrationError(e)
+        r_d_t_l = w.get('defaultTaskList', {}).get('name')
+        if r_d_t_l != d_t_l:
+            raise _RegistrationError('Default task list for %r version %r does not match: %r != %r' %
+                                     (name, version, r_d_t_l, d_t_l))
+        r_d_d_d = w.get('defaultTaskStartToCloseTimeout')
+        if r_d_d_d != d_d_d:
+            raise _RegistrationError('Default decision duration for %r version %r does not match: %r != %r' %
+                                     (name, version, r_d_d_d, d_d_d))
+        r_d_w_d = w.get('defaultExecutionStartToCloseTimeout')
+        if r_d_w_d != d_w_d:
+            raise _RegistrationError('Default workflow duration for %r version %r does not match: %r != %r' %
+                                     (name, version, r_d_w_d, d_w_d))
+        r_d_c_p = w.get('defaultChildPolicy')
+        if r_d_c_p != d_c_p:
+            raise _RegistrationError('Default child policy for %r version %r does not match: %r != %r' %
+                                     (name, version, r_d_c_p, d_c_p))
 
     def conf_activity(self, dep_name, version, name=None, task_list=None,
                       heartbeat=None, schedule_to_close=None,
@@ -243,7 +258,11 @@ class SWFWorkflow(Workflow):
     def __init__(self, config, workflow_factory):
         config = config.set_alternate_name(workflow_factory.__name__)
         super(SWFWorkflow, self).__init__(config, workflow_factory)
-        self.register = config.register  # delegate
+        self.register_remote = config.register_remote  # delegate
+
+    def key(self):
+        """Use the name and the version to identify this workflow."""
+        return str(self.config.name), str(self.config.version)
 
 
 class SWFWorkflowRegistry(WorkflowRegistry):
@@ -255,15 +274,10 @@ class SWFWorkflowRegistry(WorkflowRegistry):
     categories = ['swf_workflow']
     WorkflowFactory = SWFWorkflow
 
-    def _key(self, o):
-        if o.name is None:
-            raise ValueError('No name set in object: %r' % o)
-        return str(o.name), str(o.version)
-
-    def register_remote(self, layer1):
+    def register_remote(self, layer1, domain):
         """Register or check compatibility of all configs in Amazon SWF."""
-        for workflow in self.registry.keys():
-            workflow.register(layer1)
+        for workflow in self.registry.values():
+            workflow.register_remote(layer1, domain)
 
     def __call__(self, context):
         """Run the workflow corresponding to this context.
@@ -272,8 +286,8 @@ class SWFWorkflowRegistry(WorkflowRegistry):
         otherwise bind the config to the context and use it to instantiate and
         run the workflow.
         """
-        key = self._key(context)
-        super(SWFWorkflowRegistry, self)(key, context)
+        key = (str(context.name), str(context.version))
+        super(SWFWorkflowRegistry, self).__call__(key, context)
 
 
 class SWFActivityProxy(object):
@@ -301,7 +315,7 @@ class SWFActivityProxy(object):
         self.serialize_input = serialize_input
         self.deserialize_result = deserialize_result
 
-    def bind(self, context, rate_limit=_DescCounter()):
+    def bind(self, context, rate_limit=DescCounter()):
         """Return a ContextBoundProxy instance that calls back schedule."""
         return ContextBoundProxy(self, context, rate_limit)
 
@@ -340,7 +354,7 @@ class SWFWorkflowProxy(object):
         self.serialize_input = serialize_input
         self.deserialize_result = deserialize_result
 
-    def bind(self, context, rate_limit=_DescCounter()):
+    def bind(self, context, rate_limit=DescCounter()):
         return ContextBoundProxy(self, context, rate_limit)
 
     def schedule(self, context, call_key, delay, *args, **kwargs):
@@ -357,11 +371,11 @@ class SWFWorkflowProxy(object):
                 self.workflow_duration, self.decision_duration)
 
 
-def poll_next_decision(layer1, task_list, domain, identity=None):
+def poll_next_decision(layer1, domain, task_list, identity=None):
     """Poll a decision and create a SWFContext instance."""
-    first_page = poll_first_page(layer1, task_list, domain, identity)
+    first_page = poll_first_page(layer1, domain, task_list, identity)
     token = first_page['taskToken']
-    all_events = events(first_page)
+    all_events = events(layer1, domain, task_list, first_page, identity)
     # Sometimes the first event in on the second page,
     # and the first page is empty
     first_event = next(all_events)
@@ -376,7 +390,7 @@ def poll_next_decision(layer1, task_list, domain, identity=None):
     version = first_event[WESEA]['workflowType']['version']
     input = first_event[WESEA]['input']
     try:
-        running, timedout, results, errors, order = _parse_events(events)
+        running, timedout, results, errors, order = parse_events(all_events)
     except _PaginationError:
         # There's nothing better to do than to retry
         return poll_next_decision(layer1, task_list, domain, identity)
@@ -394,7 +408,7 @@ def poll_first_page(layer1, domain, task_list, identity=None):
             logger.exception('Error while polling for decisions:')
     return swf_response
 
-def poll_response_page(domain, task_list, token, identity=None):
+def poll_response_page(layer1, domain, task_list, token, identity=None):
     swf_response = None
     for _ in range(7):  # give up after a limited number of retries
         try:
@@ -408,16 +422,17 @@ def poll_response_page(domain, task_list, token, identity=None):
         raise _PaginationError()
     return swf_response
 
-def events(first_page):
+def events(layer1, domain, task_list, first_page, identity=None):
     page = first_page
     while 1:
         for event in page['events']:
             yield event
         if not page.get('nextPageToken'):
             break
-        page = self.poll_response_page(token=page['nextPageToken'])
+        page = poll_response_page(layer1, domain, task_list,
+                                  page['nextPageToken'], identity)
 
-def parse_events(self, events):
+def parse_events(events):
     running, timedout = set(), set()
     results, errors = {}, {}
     order = []
@@ -546,11 +561,11 @@ class SWFContext(object):
         return str(call_key) in results
 
     def fail(self, reason):
-        self.decisions = Layer1Decisions()
-        decisions.fail_workflow_execution(reason=str(reason)[:_REASON_SIZE])
+        d = self.decisions = Layer1Decisions()
+        d.fail_workflow_execution(reason=str(reason)[:_REASON_SIZE])
         self.flush()
 
-    def flush(self, layer1):
+    def flush(self):
         if self.closed:
             return
         self.closed = True
@@ -563,11 +578,11 @@ class SWFContext(object):
             # ignore the error and let the decision timeout and retry
 
     def restart(self, input):
-        self.decisions = Layer1Decisions()
+        d = self.decisions = Layer1Decisions()
         child_policy = _str_or_none(self.child_policy)
         if child_policy not in _CHILD_POLICY:
             raise ValueError('Invalid child policy value: %r' % child_policy)
-        self.decisions.continue_as_new_workflow_execution(
+        d.continue_as_new_workflow_execution(
             start_to_close_timeout=_str_or_none(self.decision_duration),
             execution_start_to_close_timeout=_str_or_none(self.workflow_duration),
             task_list=_str_or_none(self.task_list),
@@ -578,8 +593,8 @@ class SWFContext(object):
         self.flush()
 
     def complete(self, result):
-        self.decisions = Layer1Decisions()
-        self.decisions.complete_workflow_execution(str(result)[:_RESULT_SIZE])
+        d = self.decisions = Layer1Decisions()
+        d.complete_workflow_execution(str(result)[:_RESULT_SIZE])
         self.flush()
 
     # Used by SWFProxy instances
@@ -614,9 +629,9 @@ class SWFContext(object):
         )
 
 
-def start_workflow_worker(domain, task_list, layer1=None, reg_remote=True,
-                          package=None, ignore=None, setup_log=True,
-                          identity=None, registry=None):
+def start_swf_workflow_worker(domain, task_list, layer1=None, reg_remote=True,
+                              package=None, ignore=None, setup_log=True,
+                              identity=None, registry=None):
     """Start an endless single threaded/single process workflow worker loop.
 
     The worker polls endlessly for new decisions from the specified domain and
@@ -646,19 +661,20 @@ def start_workflow_worker(domain, task_list, layer1=None, reg_remote=True,
         registry.scan(package=package, ignore=ignore, level=1)
     if reg_remote:
         try:
-            registry.register_remote(layer1)
-        except RegistrationError:
+            registry.register_remote(layer1, domain)
+        except _RegistrationError:
             logger.exception('Not all workflows could be registered:')
             print('Not all workflows could be registered.', file=sys.stderr)
+            sys.exit(1)
     try:
         while 1:
-            context = poll_next_decision(layer1, task_list, domain, identity)
+            context = poll_next_decision(layer1, domain, task_list, identity)
             registry(context)  # execute the workflow
     except KeyboardInterrupt:
         pass
 
 
-class WorkflowStarter(object):
+class SWFWorkflowStarter(object):
     """A simple workflow starter."""
     def __init__(self, layer1=None, setup_log=True):
         self.layer1 = layer1 if layer1 is not None else Layer1()
@@ -674,15 +690,20 @@ class WorkflowStarter(object):
         The callable should be called only with the input arguments.
         """
         def really_start(*args, **kwargs):
-            if id is None:
-                id = uuid.uuid4()
-            self.layer1.start_workflow_execution(
-                str(domain), str(id), str(name), str(version),
-                task_list=_str_or_none(task_list),
-                execution_start_to_close_timeout=_str_or_none(workflow_duration),
-                task_start_to_close_timeout=_str_or_none(decision_duration),
-                input=str(serialize_input(*args, **kwargs))[:_INPUT_SIZE],
-                tag_list=_tags(tags))
+            l_id = id  # closue hack
+            if l_id is None:
+                l_id = uuid.uuid4()
+            try:
+                self.layer1.start_workflow_execution(
+                    str(domain), str(l_id), str(name), str(version),
+                    task_list=_str_or_none(task_list),
+                    execution_start_to_close_timeout=_str_or_none(workflow_duration),
+                    task_start_to_close_timeout=_str_or_none(decision_duration),
+                    input=str(serialize_input(*args, **kwargs))[:_INPUT_SIZE],
+                    tag_list=_tags(tags))
+            except SWFResponseError:
+                return False
+            return True
         return really_start
 
 
@@ -695,7 +716,7 @@ class _PaginationError(Exception):
     pass
 
 
-class RegistrationError(Exception):
+class _RegistrationError(Exception):
     pass
 
 
