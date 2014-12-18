@@ -307,7 +307,7 @@ class ContextBoundProxy(object):
                 break
             if c.is_result(call_key):
                 value, order = c.result(call_key)
-                # make the result deserialization lazy; in case of
+                # Make the result deserialization lazy; in case of
                 # deserialization errors the result will fail the workflow
                 d_r = getattr(self.proxy, 'deserialize_result', _i)
                 d_r = partial(d_r, value)
@@ -321,19 +321,34 @@ class ContextBoundProxy(object):
             if errors:
                 r = first(errors)
             elif not placeholders:
-                if self.rate_limit.consume():
-                    try:
-                        # This can fail if a result can't deserialize.
-                        args, kwargs = _extract_results(args, kwargs)
-                    except SuspendTask:
-                        # In this case the resut will fail the workflow and
-                        # pretend the task running by returning a placehoder
-                        break
-                    # really schedule
-                    self.proxy.schedule(c, call_key, delay, args, kwargs)
+                if not self.rate_limit.consume():
+                    # Enough tasks have been scheduled for this decision
+                    break
+                try:
+                    # This can fail if a result can't deserialize.
+                    a, kw = _extract_results(args, kwargs)
+                except SuspendTask:
+                    # In this case the result will fail the workflow and
+                    # raise SuspendTask to act as a Placeholder.
+                    # If that's the case return a Placeholder since the
+                    # workflow was already failed.
+                    break
+                # really schedule
+                try:
+                    # Let the proxy serialize the args as there might be
+                    # other things (like timers) than need to be scheduled
+                    # before the real task is scheduled
+                    self.proxy.schedule(c, call_key, delay, *a, **kw)
+                except Exception as e:
+                    # If there are (input serialization) errors, fail the
+                    # workflow and pretend the task is running
+                    logger.exception('Cannot schedule task:')
+                    c.fail(e)
+                    break
+            # If we got here, it means the task was scheduled successfully
             break
         else:
-            # no retries left, it must be a timeout
+            # No retries left, it must be a timeout
             order = c.timeout(call_key)
             r = Timeout(order)
         return r

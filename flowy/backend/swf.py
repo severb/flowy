@@ -325,8 +325,11 @@ class SWFActivityProxy(object):
         If any delay is set use SWF timers before really scheduling anything.
         """
         if int(delay) > 0 and not context.timer_ready(call_key):
-            return context.schedule_timer(call_key, delay)
+            context.schedule_timer(call_key, delay)
+            return
         try:
+            # Serialization errors are also handled outside but the logging
+            # messages are more specific here
             input = self.serialize_input(*args, **kwargs)
         except Exception as e:
             logger.exception('Error while serializing activity input:')
@@ -592,7 +595,7 @@ class SWFContext(object):
         )
         self.flush()
 
-    def complete(self, result):
+    def finish(self, result):
         d = self.decisions = Layer1Decisions()
         d.complete_workflow_execution(str(result)[:_RESULT_SIZE])
         self.flush()
