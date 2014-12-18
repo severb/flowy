@@ -1,16 +1,22 @@
+from __future__ import print_function
+
 import json
 import logging
+import sys
 
 import venusian
 
+from flowy.base import DescCounter
+from flowy.base import setup_default_logger
 from flowy.base import Workflow
 from flowy.base import WorkflowConfig
 from flowy.base import WorkflowRegistry
 
-__all__ = ['SWFWorkflowConfig', 'SWFWorkflowRegistry', 'RegistrationError']
+__all__ = ['SWFWorkflowConfig', 'SWFWorkflowRegistry', 'RegistrationError',
+           'start_workflow_worker']
 
 
-logger = logging.getLogger(__package__)
+logger = logging.getLogger(__name__)
 logging.basicConfig()
 
 
@@ -33,14 +39,6 @@ class SWFWorkflowConfig(WorkflowConfig):
 
     category = 'swf_workflow'  # venusian category used for this type of confs
 
-    @property
-    def name(self):
-        return None if self._name is None else str(self._name)
-
-    @property
-    def version(self):
-        return str(self._version)
-
     def __init__(self, version, name=None, default_task_list=None,
                  default_workflow_duration=3600,
                  default_decision_duration=600,
@@ -62,8 +60,8 @@ class SWFWorkflowConfig(WorkflowConfig):
         to register this config remotely and can be set later with
         set_alternate_name.
         """
-        self._name = name
-        self._version = version
+        self.name = name
+        self.version = version
         self.d_t_l = default_task_list
         self.d_w_d = default_workflow_duration
         self.d_d_d = default_decision_duration
@@ -252,25 +250,25 @@ class SWFWorkflowRegistry(WorkflowRegistry):
     categories = ['swf_workflow']
     WorkflowFactory = SWFWorkflow
 
-    def _key(self, config):
-        if config.name is None:
-            raise ValueError('Cannot register an unnamed config object: %r' % config)
-        return config.name, config.version
+    def _key(self, o):
+        if o.name is None:
+            raise ValueError('No name set in object: %r' % o)
+        return str(o.name), str(o.version)
 
     def register_remote(self, layer1):
         """Register or check compatibility of all configs in Amazon SWF."""
         for workflow in self.registry.keys():
             workflow.register(layer1)
 
-    def __call__(self, name, version, context, input):
-        """Bind the corresponding config to the context and init a workflow.
+    def __call__(self, context):
+        """Run the workflow corresponding to this context.
 
         Raise value error if no config is found for this name and version,
-        otherwise bind the config to the context and use it to instantiate the
-        workflow.
+        otherwise bind the config to the context and use it to instantiate and
+        run the workflow.
         """
-        key = str(name), str(version)
-        return super(SWFWorkflowRegistry, self)(key, context, input)
+        key = self._key(context)
+        super(SWFWorkflowRegistry, self)(key, context)
 
 
 class SWFActivityProxy(object):
@@ -607,6 +605,36 @@ class SWFContext(object):
         )
 
 
+def start_workflow_worker(domain, task_list, layer1=None, reg_remote=True,
+                          package=None, ignore=None, setup_log=True,
+                          identity=None, registry=None):
+    if setup_log:
+        setup_default_logger()
+    identity = identity if identity is not None else _default_identity()
+    layer1 = layer1 if layer1 is not None else Layer1()
+    if registry is None:
+        registry = SWFWorkflowRegistry()
+        # Add an extra level when scanning because of this function
+        registry.scan(package=package, ignore=ignore, level=1)
+    if reg_remote:
+        try:
+            registry.register_remote(layer1)
+        except RegistrationError:
+            logger.exception('Not all workflows could be registered:')
+            print('Not all workflows could be registered.', file=sys.stderr)
+    try:
+        while 1:
+            context = poll_next_decision(layer1, task_list, domain, identity)
+            registry(context)  # execute the workflow
+    except KeyboardInterrupt:
+        pass
+
+
+def _default_identity():
+    id = "%s-%s" % (socket.getfqdn(), os.getpid())
+    return id[-256:]
+
+
 class _PaginationError(Exception):
     pass
 
@@ -634,6 +662,7 @@ def _subworkflow_key(call_key):
 
 def _subworkflow_call_key(subworkflow_key):
     return subworkflow_key.split('-')[-1]
+
 
 def _timer_encode(val, name):
     if val is None:

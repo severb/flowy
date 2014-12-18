@@ -31,7 +31,7 @@ class WorkflowConfig(object):
         """Initialize the config object.
 
         The rate_limit is used to limit the number of concurrent tasks. A value
-        of None means no rate limit. When the proxies are bound, a _DescCounter
+        of None means no rate limit. When the proxies are bound, a DescCounter
         instance (the same) will be passed to each of them and can be used to
         limit the number of total tasks scheduled.
 
@@ -67,7 +67,7 @@ class WorkflowConfig(object):
         Returns a callable that can be used to instantiate workflow factories
         passing proxies bound to this execution context.
         """
-        rate_limit = _DescCounter(self.rate_limit)
+        rate_limit = DescCounter(self.rate_limit)
         d = {}
         for dep_name, proxy in self.proxy_factory_registry.iteritems():
             d[dep_name] = proxy.bind(context, rate_limit)
@@ -113,7 +113,7 @@ class Workflow(object):
         self.config = config
         self.workflow_factory = workflow_factory
 
-    def run(self, context, input):
+    def run(self, context):
         """Run the workflow code.
 
         Bind the config to the context and use it to instantiate and run a new
@@ -124,7 +124,7 @@ class Workflow(object):
         wf = workflow_DI(self.workflow_factory)
         try:
             deserialize_input = getattr(c, 'deserialize_input', _i)
-            args, kwargs = deserialize_input(input)
+            args, kwargs = deserialize_input(context.input)
         except Exception as e:
             logger.exception('Error while deserializing workflow input:')
             context.fail(e)
@@ -189,17 +189,17 @@ class WorkflowRegistry(object):
             raise ValueError('Implementation is already registered: %r' % key)
         self.registry[key] = workflow
 
-    def __call__(self, key, context, input):
-        """Bind the corresponding config to the context and init a workflow.
+    def __call__(self, key, context):
+        """Bind the corresponding config to the context and run the workflow.
 
         Raise value error if no config is found, otherwise bind the config to
-        the context and use it to instantiate the workflow.
+        the context and use it to instantiate and run the workflow.
         """
         try:
             workflow = self.registry[key]
         except KeyError:
             raise ValueError('No workflow implementation found: %r' % key)
-        workflow.run(context, input)
+        workflow.run(context)
 
     def scan(self, package=None, ignore=None, level=0):
         """Scan for registered workflows and their configuration.
@@ -238,6 +238,18 @@ class WorkflowRegistry(object):
         return '<%s %r>' % (klass, entries)
 
 
+class DescCounter(object):
+    def __init__(self, to=None):
+        if to is None:
+            self.r = itertools.repeat(True)
+        else:
+            self.r = itertools.chain(itertools.repeat(True, to),
+                                     itertools.repeat(False))
+
+    def consume(self):
+        return next(self.r)
+
+
 class ContextBoundProxy(object):
     """A proxy bound to a context.
 
@@ -245,7 +257,7 @@ class ContextBoundProxy(object):
     scheduling logic. The real scheduling is dispatched back to the proxy; this
     way this logic can be reused across different backends.
     """
-    def __init__(self, proxy, context, rate_limit=_DescCounter()):
+    def __init__(self, proxy, context, rate_limit=DescCounter()):
         self.proxy = proxy
         self.context = context
         self.rate_limit = rate_limit
@@ -326,18 +338,6 @@ class ContextBoundProxy(object):
     def __repr__(self):
         klass = self.__class__.__name__
         return "<%s %r %r>" % (klass, self.context, self.proxy)
-
-
-class _DescCounter(object):
-    def __init__(self, to=None):
-        if to is None:
-            self.r = repeat(True)
-        else:
-            self.r = itertools.chain(itertools.repeat(True, to),
-                                     itertools.repeat(False))
-
-    def consume(self):
-        return next(self.r)
 
 
 class TaskResult(object):
@@ -459,6 +459,28 @@ def _result_or_value(r):
 _restart = namedtuple('restart', 'args kwargs')
 def restart(*args, **kwargs):
     return _restart(args, kwargs)
+
+
+def setup_default_logger():
+    logging.config.dictConfig({
+        'version': 1,
+        'disable_existing_loggers': False,
+        'formatters': {
+            'simple': {
+                'format': '%(asctime)s %(levelname)s\t%(name)s: %(message)s'
+            }},
+        'handlers': {
+            'console': {
+                'class': 'logging.StreamHandler',
+                'formatter': 'simple'
+            }},
+        'loggers': {
+            'flowy': {
+                'handlers': ['console'],
+                'popagate': False,
+                'level': 'INFO',
+            }}
+    })
 
 
 # Stolen from Pyramid
