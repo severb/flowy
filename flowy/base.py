@@ -15,6 +15,7 @@ logger = logging.getLogger(__package__)
 
 
 _i = lambda x: x
+_s_i = lambda *args, **kwargs: (args, kwargs)
 
 
 class WorkflowConfig(object):
@@ -26,7 +27,7 @@ class WorkflowConfig(object):
     category = None
 
     def __init__(self, rate_limit=64, deserialize_input=_i,
-                 serialize_result=_i, serialize_restart_input=_i):
+                 serialize_result=_i, serialize_restart_input=_s_i):
         """Initialize the config object.
 
         The rate_limit is used to limit the number of concurrent tasks. A value
@@ -344,8 +345,6 @@ class ContextBoundProxy(object):
                     # workflow and pretend the task is running
                     logger.exception('Cannot schedule task:')
                     c.fail(e)
-                    break
-            # If we got here, it means the task was scheduled successfully
             break
         else:
             # No retries left, it must be a timeout
