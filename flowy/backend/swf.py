@@ -204,7 +204,8 @@ class SWFWorkflowConfig(WorkflowConfig):
     def conf_activity(self, dep_name, version, name=None, task_list=None,
                       heartbeat=None, schedule_to_close=None,
                       schedule_to_start=None, start_to_close=None,
-                      serialize_input=_s_i, deserialize_result=_d_i):
+                      serialize_input=_s_i, deserialize_result=_d_i,
+                      retry=[0, 0, 0]):
         """Configure an activity dependency for a workflow implementation.
 
         dep_name is the name of one of the workflow factory arguments
@@ -232,12 +233,14 @@ class SWFWorkflowConfig(WorkflowConfig):
                                  schedule_to_start=schedule_to_start,
                                  start_to_close=start_to_close,
                                  serialize_input=serialize_input,
-                                 deserialize_result=deserialize_result)
+                                 deserialize_result=deserialize_result,
+                                 retry=retry)
         self.conf(dep_name, proxy)
 
     def conf_workflow(self, dep_name, version, name=None, task_list=None,
                       workflow_duration=None, decision_duration=None,
-                      serialize_input=_s_i, deserialize_result=_d_i):
+                      serialize_input=_s_i, deserialize_result=_d_i,
+                      retry=[0, 0, 0]):
         """Same as conf_activity but for sub-workflows."""
         if name is None:
             name = dep_name
@@ -246,7 +249,8 @@ class SWFWorkflowConfig(WorkflowConfig):
                                  workflow_duration=workflow_duration,
                                  decision_duration=decision_duration,
                                  serialize_input=serialize_input,
-                                 deserialize_result=deserialize_result)
+                                 deserialize_result=deserialize_result,
+                                 retry=retry)
         self.conf(dep_name, proxy)
 
 
@@ -509,6 +513,7 @@ def parse_events(events):
         elif e_type == 'TimerStarted':
             id = e['timerStartedEventAttributes']['timerId']
             # while the timer is running, act as if the task itself is running
+            # to prevent it from being scheduled again
             running.add(_timer_call_key(id))
         elif e_type == 'TimerFired':
             id = e['timerFiredEventAttributes']['timerId']
@@ -561,7 +566,7 @@ class SWFContext(object):
         return self.order.index(str(call_key))
 
     def timer_ready(self, call_key):
-        return str(call_key) in results
+        return _timer_key(call_key) in self.results
 
     def fail(self, reason):
         d = self.decisions = Layer1Decisions()
@@ -732,16 +737,16 @@ def _timer_key(call_key):
 
 
 def _timer_call_key(timer_key):
-    assert timer_id.endswith(':t')
-    return timer_id[:-2]
+    assert timer_key.endswith(':t')
+    return timer_key[:-2]
 
 
 def _subworkflow_key(call_key):
-    return '%s-%s' % (uuid.uuid4(), call_key)
+    return '%s:%s' % (uuid.uuid4(), call_key)
 
 
 def _subworkflow_call_key(subworkflow_key):
-    return subworkflow_key.split('-')[-1]
+    return subworkflow_key.split(':')[-1]
 
 
 def _timer_encode(val, name):
