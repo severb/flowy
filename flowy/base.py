@@ -126,8 +126,8 @@ class Workflow(object):
         c = self.config
         workflow_DI = c.bind(context)
         wf = workflow_DI(self.workflow_factory)
+        deserialize_input = getattr(c, 'deserialize_input', _i)
         try:
-            deserialize_input = getattr(c, 'deserialize_input', _i)
             args, kwargs = deserialize_input(context.input)
         except Exception as e:
             logger.exception('Error while deserializing workflow input:')
@@ -151,8 +151,8 @@ class Workflow(object):
                 else:
                     context.restart(input)
             else:
+                serialize_result = getattr(c, 'serialize_result', _i)
                 try:
-                    serialize_result = getattr(c, 'serialize_result', _i)
                     r = serialize_result(r)
                 except Exception as e:
                     logger.exception('Error while serializing workflow result:')
