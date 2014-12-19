@@ -151,7 +151,7 @@ class Workflow(object):
                     context.restart(input)
             else:
                 try:
-                    serialize_result = getattr(c, 'serialize_input', _i)
+                    serialize_result = getattr(c, 'serialize_result', _i)
                     r = serialize_result(r)
                 except Exception as e:
                     logger.exception('Error while serializing workflow result:')
