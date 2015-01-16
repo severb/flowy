@@ -7,15 +7,14 @@ from keyword import iskeyword
 
 import venusian
 
-__all__ = ['WorkflowConfig', 'WorkflowRegistry', 'Workflow',
-           'ContextBoundProxy', 'restart', 'TaskError', 'TaskTimedout',]
+__all__ = ('restart TaskError TaskTimedout wait_first wait_n wait_all').split()
 
 
 logger = logging.getLogger(__package__)
 
 
-_i = lambda x: x
-_s_i = lambda *args, **kwargs: (args, kwargs)
+_identity = lambda x: x
+_serialize_args = lambda *args, **kwargs: (args, kwargs)
 
 
 class WorkflowConfig(object):
@@ -26,8 +25,9 @@ class WorkflowConfig(object):
 
     category = None
 
-    def __init__(self, rate_limit=64, deserialize_input=_i,
-                 serialize_result=_i, serialize_restart_input=_s_i):
+    def __init__(self, rate_limit=64, deserialize_input=_identity,
+                 serialize_result=_identity,
+                 serialize_restart_input=_serialize_args):
         """Initialize the config object.
 
         The rate_limit is used to limit the number of concurrent tasks. A value
@@ -46,11 +46,12 @@ class WorkflowConfig(object):
         self.proxy_factory_registry = {}
 
     def _check_dep(self, dep_name):
+        """Check if dep_name is a unique valid identifier name."""
         # stolen from namedtuple
-        if not all(c.isalnum() or c=='_' for c in dep_name):
-            raise ValueError('Dependency names can only contain alphanumeric characters and underscores: %r' % name)
+        if not all(c.isalnum() or c == '_' for c in dep_name):
+            raise ValueError('Dependency names can only contain alphanumeric characters and underscores: %r' % dep_name)
         if iskeyword(dep_name):
-            raise ValueError('Dependency names cannot be a keyword: %r' % name)
+            raise ValueError('Dependency names cannot be a keyword: %r' % dep_name)
         if dep_name[0].isdigit():
             raise ValueError('Dependency names cannot start with a number: %r' % dep_name)
         if dep_name in self.proxy_factory_registry:
@@ -68,10 +69,10 @@ class WorkflowConfig(object):
         passing proxies bound to this execution context.
         """
         rate_limit = DescCounter(self.rate_limit)
-        d = {}
+        kwargs = {}
         for dep_name, proxy in self.proxy_factory_registry.iteritems():
-            d[dep_name] = proxy.bind(context, rate_limit)
-        return lambda wf_factory: wf_factory(**d)
+            kwargs[dep_name] = proxy.bind(context, rate_limit)
+        return lambda wf_factory: wf_factory(**kwargs)
 
     def __call__(self, workflow_factory):
         """Associate the factory to this config and make it discoverable.
@@ -92,18 +93,19 @@ class WorkflowConfig(object):
             # ... and later
             scanner.scan()
         """
-        def callback(venusian_scanner, f_name, obj):
+        def callback(venusian_scanner, *_):
+            """This gets called by venusian at scan time."""
             venusian_scanner.register(self, workflow_factory)
         venusian.attach(workflow_factory, callback, category=self.category)
         return workflow_factory
 
     def __repr__(self):
         klass = self.__class__.__name__
-        MAX_DEPS = 7
         deps = sorted(self.proxy_factory_registry.keys())
-        more_deps = len(deps) - MAX_DEPS
+        max_deps = 7
+        more_deps = len(deps) - max_deps
         if more_deps > 0:
-            deps = deps[:MAX_DEPS] + ['... and %s more' % more_deps]
+            deps = deps[:max_deps] + ['... and %s more' % more_deps]
         return '<%s deps=%s>' % (klass, ','.join(deps))
 
 
@@ -123,10 +125,9 @@ class Workflow(object):
         Bind the config to the context and use it to instantiate and run a new
         workflow instance.
         """
-        c = self.config
-        workflow_DI = c.bind(context)
-        wf = workflow_DI(self.workflow_factory)
-        deserialize_input = getattr(c, 'deserialize_input', _i)
+        conf = self.config
+        workflow = conf.bind(context)(self.workflow_factory)
+        deserialize_input = getattr(conf, 'deserialize_input', _identity)
         try:
             args, kwargs = deserialize_input(context.input)
         except Exception as e:
@@ -134,31 +135,31 @@ class Workflow(object):
             context.fail(e)
             return
         try:
-            r = wf.run(*args, **kwargs)
+            result = workflow.run(*args, **kwargs)
         except SuspendTask:
             context.flush()
         except Exception as e:
             logger.exception('Error while running:')
             context.fail(e)
         else:
-            if isinstance(r, _restart):
-                sri = getattr(c, 'serialize_restart_input', _i)
+            if isinstance(result, _restart):
+                sri = getattr(conf, 'serialize_restart_input', _identity)
                 try:
-                    input = sri(*r.args, **r.kwargs)
+                    input_data = sri(*result.args, **result.kwargs)
                 except Exception as e:
                     logger.exception('Error while serializing restart arguments:')
                     context.fail(e)
                 else:
-                    context.restart(input)
+                    context.restart(input_data)
             else:
-                serialize_result = getattr(c, 'serialize_result', _i)
+                serialize_result = getattr(conf, 'serialize_result', _identity)
                 try:
-                    r = serialize_result(r)
+                    result = serialize_result(result)
                 except Exception as e:
                     logger.exception('Error while serializing workflow result:')
                     context.fail(e)
                 else:
-                    context.finish(r)
+                    context.finish(result)
 
     def __repr__(self):
         klass = self.__class__.__name__
@@ -228,27 +229,27 @@ class WorkflowRegistry(object):
 
     def __repr__(self):
         klass = self.__class__.__name__
-        configs = self.registry.values()
-        MAX_ENTRIES = 4
+        max_entries = 4
         entries = sorted(self.registry.values())
-        more_entries = len(entries) - MAX_ENTRIES
-        r = '<%s %r>'
+        more_entries = len(entries) - max_entries
         if more_entries > 0:
-            entries = entries[:MAX_ENTRIES]
+            entries = entries[:max_entries]
             return '<%s %r ... and %s more>' % (klass, entries, more_entries)
         return '<%s %r>' % (klass, entries)
 
 
 class DescCounter(object):
+    """A simple semaphore-like descendent counter."""
     def __init__(self, to=None):
         if to is None:
-            self.r = itertools.repeat(True)
+            self.iterator = itertools.repeat(True)
         else:
-            self.r = itertools.chain(itertools.repeat(True, to),
-                                     itertools.repeat(False))
+            self.iterator = itertools.chain(itertools.repeat(True, to),
+                                            itertools.repeat(False))
 
     def consume(self):
-        return next(self.r)
+        """Conusme one position; returns True if positions are available."""
+        return next(self.iterator)
 
 
 class ContextBoundProxy(object):
@@ -297,30 +298,30 @@ class ContextBoundProxy(object):
               any result objects that might be in the arguments and schedule it
               for execution.
         """
-        c = self.context
-        r = Placeholder()
+        context = self.context
+        result = Placeholder()
         retry = getattr(self.proxy, 'retry', [0])
         for retry_number, delay in enumerate(retry):
             call_key = self._call_key(retry_number)
-            if c.is_timeout(call_key):
+            if context.is_timeout(call_key):
                 continue
-            if c.is_running(call_key):
+            if context.is_running(call_key):
                 break
-            if c.is_result(call_key):
-                value, order = c.result(call_key)
+            if context.is_result(call_key):
+                value, order = context.result(call_key)
                 # Make the result deserialization lazy; in case of
                 # deserialization errors the result will fail the workflow
-                d_r = getattr(self.proxy, 'deserialize_result', _i)
+                d_r = getattr(self.proxy, 'deserialize_result', _identity)
                 d_r = partial(d_r, value)
-                r = Result(c, d_r, order)
+                result = Result(context, d_r, order)
                 break
-            if c.is_error(call_key):
-                err, order = c.error(call_key)
-                r = Error(err, order)
+            if context.is_error(call_key):
+                err, order = context.error(call_key)
+                result = Error(err, order)
                 break
             errors, placeholders = _short_circuit_on_args(args, kwargs)
             if errors:
-                r = first(errors)
+                result = wait_first(errors)
             elif not placeholders:
                 if not self.rate_limit.consume():
                     # Enough tasks have been scheduled for this decision
@@ -339,18 +340,18 @@ class ContextBoundProxy(object):
                     # Let the proxy serialize the args as there might be
                     # other things (like timers) than need to be scheduled
                     # before the real task is scheduled
-                    self.proxy.schedule(c, call_key, delay, *a, **kw)
+                    self.proxy.schedule(context, call_key, delay, *a, **kw)
                 except Exception as e:
                     # If there are (input serialization) errors, fail the
                     # workflow and pretend the task is running
                     logger.exception('Cannot schedule task:')
-                    c.fail(e)
+                    context.fail(e)
             break
         else:
             # No retries left, it must be a timeout
-            order = c.timeout(call_key)
-            r = Timeout(order)
-        return r
+            order = context.timeout(call_key)
+            result = Timeout(order)
+        return result
 
     def __repr__(self):
         klass = self.__class__.__name__
@@ -358,6 +359,7 @@ class ContextBoundProxy(object):
 
 
 class TaskResult(object):
+    """Base class for all different types of task results."""
     _order = None
 
     def __lt__(self, other):
@@ -369,16 +371,38 @@ class TaskResult(object):
             return True
         return self._order < other._order
 
+    def result(self):
+        """Get the deserialized result of the task.
+
+        This method can raise 3 different types of exceptions:
+        * TaskError: if the task failed for whatever reason. This usually means
+          the task implementation raised an unhandled exception.
+        * TaskTimedout - If the task timed-out on all retry attemps.
+        * SuspendTask - This is an internal exception used by Flowy as control
+          flow and should not be handled by user code.
+        """
+        raise NotImplementedError
+
+    def wait(self):
+        """Wait for a task to complete.
+
+        This method may raise SuspendTask. See .result() for more details.
+        """
+        raise NotImplementedError
+
+    def is_error(self):
+        """Test if this result represents an error."""
+        return False
+
 
 class Result(TaskResult):
     """The result of a finished task.
 
-    A note about this class: even if wait/is_error don't block (by raising
-    SuspendTask) this doesn't guarantee that result call won't block.
+    A note about this class: even if .wait() doesn't block (by raising
+    SuspendTask) this doesn't guarantee that .result() call won't block.
     Actually, if the result can't be deserialized this class will act as if
-    it's a placeholder when calling result.
+    it's a placeholder when calling .result().
     """
-
     def __init__(self, context, lazy_result, order):
         self._context = context
         self._lazy_result = lazy_result
@@ -397,9 +421,6 @@ class Result(TaskResult):
             raise SuspendTask
         else:
             return self._result_cache
-
-    def is_error(self):
-        return False
 
     def wait(self):
         return self
@@ -436,24 +457,38 @@ class Placeholder(TaskResult):
         raise SuspendTask
 
 
-def first(result, *results):
+def wait_first(result, *results):
+    """Return the result of the first task to finish from a list of results.
+
+    If no task is finished yet it can raise SuspendTask.
+    """
     return min(_i_or_args(result, results)).wait()
 
 
-def first_n(n, result, *results):
+def wait_n(n, result, *results):
+    """Wait for first n tasks to finish and return their results in order.
+
+    This is a generator yielding results in the order their tasks finished. If
+    more results are consumed from this generator than tasks finished it will
+    raise SuspendTask. This means that you can use it to access results as soon
+    as possible, even before all n tasks are finished.
+    """
     i = _i_or_args(result, results)
     if n == 1:
-        yield first(i)
+        yield wait_first(i)
         return
-    s = sorted(i)
-    for r in s[:n]:
-        yield r.wait()
+    for result in sorted(i)[:n]:
+        yield result.wait()
 
 
-def all(result, *results):
+def wait_all(result, *results):
+    """Wait for all the tasks to finish and return their results in order.
+
+    Works just like wait_n(len(x), x)
+    """
     i = list(_i_or_args(result, results))
-    for r in first_n(len(i), i):
-        yield r
+    for result in wait_n(len(i), i):
+        yield result
 
 
 def _i_or_args(result, results):
@@ -477,11 +512,11 @@ class TaskTimedout(TaskError):
 def _short_circuit_on_args(a, kw):
     args = a + tuple(kw.values())
     errs, placeholders = [], False
-    for r in args:
-        if isinstance(r, TaskResult):
+    for result in args:
+        if isinstance(result, TaskResult):
             try:
-                if r.is_error():
-                    errs.append(r)
+                if result.is_error():
+                    errs.append(result)
             except SuspendTask:
                 placeholders = True
     return errs, placeholders
@@ -493,18 +528,20 @@ def _extract_results(a, kw):
     return aa, kwkw
 
 
-def _result_or_value(r):
-    if isinstance(r, TaskResult):
-        return r.result()
-    return r
+def _result_or_value(result):
+    if isinstance(result, TaskResult):
+        return result.result()
+    return result
 
 
 _restart = namedtuple('restart', 'args kwargs')
 def restart(*args, **kwargs):
+    """Return an instance of this to restart a workflow with the new input."""
     return _restart(args, kwargs)
 
 
 def setup_default_logger():
+    """Configure the default logger for Flowy."""
     logging.config.dictConfig({
         'version': 1,
         'disable_existing_loggers': False,
