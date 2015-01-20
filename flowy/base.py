@@ -7,7 +7,7 @@ from keyword import iskeyword
 
 import venusian
 
-__all__ = ('restart TaskError TaskTimedout wait_first wait_n wait_all').split()
+__all__ = 'restart TaskError TaskTimedout wait_first wait_n wait_all'.split()
 
 
 logger = logging.getLogger(__package__)
@@ -256,8 +256,8 @@ class ContextBoundProxy(object):
     """A proxy bound to a context.
 
     This is what gets passed as a dependency in a workflow and has most of the
-    scheduling logic. The real scheduling is dispatched back to the proxy; this
-    way this logic can be reused across different backends.
+    scheduling logic. The real scheduling is dispatched to the proxy; this
+    logic can be reused across different backends.
     """
     def __init__(self, proxy, context, rate_limit=DescCounter()):
         self.proxy = proxy

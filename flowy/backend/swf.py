@@ -7,7 +7,6 @@ import socket
 import sys
 import uuid
 
-import venusian
 from boto.exception import SWFResponseError
 from boto.swf.exceptions import SWFTypeAlreadyExistsError
 from boto.swf.layer1 import Layer1
@@ -33,10 +32,10 @@ _INPUT_SIZE = _RESULT_SIZE = 32768
 _IDENTITY_SIZE = _REASON_SIZE = 256
 
 
-_s_i = lambda *args, **kwargs: json.dumps((args, kwargs))
-_d_i = json.loads
-_s_r = json.dumps
-_d_r = json.loads
+_serialize_input = lambda *args, **kwargs: json.dumps((args, kwargs))
+_deserialize_input = json.loads
+_serialize_result = json.dumps
+_deserialize_result = json.loads
 
 
 class SWFWorkflowConfig(WorkflowConfig):
@@ -52,8 +51,9 @@ class SWFWorkflowConfig(WorkflowConfig):
                  default_workflow_duration=None,
                  default_decision_duration=None,
                  default_child_policy=None, rate_limit=64,
-                 deserialize_input=_d_i, serialize_result=_s_r,
-                 serialize_restart_input=_s_i):
+                 deserialize_input=_deserialize_input,
+                 serialize_result=_serialize_result,
+                 serialize_restart_input=_serialize_input):
         """Initialize the config object.
 
         The timer values are in seconds, and the child policy should be either
@@ -76,9 +76,9 @@ class SWFWorkflowConfig(WorkflowConfig):
         self.d_d_d = default_decision_duration
         self.d_c_p = default_child_policy
         self.proxy_factory_registry = {}
-        super(SWFWorkflowConfig, self).__init__(
-                rate_limit, deserialize_input, serialize_result,
-                serialize_restart_input)
+        super(SWFWorkflowConfig, self).__init__(rate_limit, deserialize_input,
+                                                serialize_result,
+                                                serialize_restart_input)
 
     def set_alternate_name(self, name):
         """Set the name of this workflow if one is not already set.
@@ -95,16 +95,16 @@ class SWFWorkflowConfig(WorkflowConfig):
         klass = self.__class__
         # Make a clone since this config can be used as a decorator on multiple
         # workflow factories and each has a different name.
-        c = klass(self.version, name=name,
-            default_task_list=self.d_t_l,
-            default_workflow_duration=self.d_w_d,
-            default_decision_duration=self.d_d_d,
-            default_child_policy=self.d_c_p,
-            deserialize_input=self.deserialize_input,
-            serialize_result=self.serialize_result)
+        new_instance = klass(self.version, name=name,
+                             default_task_list=self.d_t_l,
+                             default_workflow_duration=self.d_w_d,
+                             default_decision_duration=self.d_d_d,
+                             default_child_policy=self.d_c_p,
+                             deserialize_input=self.deserialize_input,
+                             serialize_result=self.serialize_result)
         for dep_name, proxy_factory in self.proxy_factory_registry.iteritems():
-            c.conf(dep_name, proxy_factory)
-        return c
+            new_instance.conf(dep_name, proxy_factory)
+        return new_instance
 
     def register_remote(self, swf_layer1, domain):
         """Register the workflow config in Amazon SWF if it's missing.
@@ -155,8 +155,8 @@ class SWFWorkflowConfig(WorkflowConfig):
         """
         name, version, d_t_l, d_w_d, d_d_d, d_c_p = self._cvt_values()
         try:
-            swf_layer1.register_workflow_type(str(domain),
-                name=name, version=version, task_list=d_t_l,
+            swf_layer1.register_workflow_type(
+                str(domain), name=name, version=version, task_list=d_t_l,
                 default_execution_start_to_close_timeout=d_w_d,
                 default_task_start_to_close_timeout=d_d_d,
                 default_child_policy=d_c_p)
@@ -179,24 +179,24 @@ class SWFWorkflowConfig(WorkflowConfig):
         """
         name, version, d_t_l, d_w_d, d_d_d, d_c_p = self._cvt_values()
         try:
-            w = swf_layer1.describe_workflow_type(str(domain), name, version)
-            w = w['configuration']
+            w_descr = swf_layer1.describe_workflow_type(str(domain), name, version)
+            w_descr = w_descr['configuration']
         except SWFResponseError as e:
             logger.exception('Error while checking workflow compatibility:')
             raise _RegistrationError(e)
-        r_d_t_l = w.get('defaultTaskList', {}).get('name')
+        r_d_t_l = w_descr.get('defaultTaskList', {}).get('name')
         if r_d_t_l != d_t_l:
             raise _RegistrationError('Default task list for %r version %r does not match: %r != %r' %
                                      (name, version, r_d_t_l, d_t_l))
-        r_d_d_d = w.get('defaultTaskStartToCloseTimeout')
+        r_d_d_d = w_descr.get('defaultTaskStartToCloseTimeout')
         if r_d_d_d != d_d_d:
             raise _RegistrationError('Default decision duration for %r version %r does not match: %r != %r' %
                                      (name, version, r_d_d_d, d_d_d))
-        r_d_w_d = w.get('defaultExecutionStartToCloseTimeout')
+        r_d_w_d = w_descr.get('defaultExecutionStartToCloseTimeout')
         if r_d_w_d != d_w_d:
             raise _RegistrationError('Default workflow duration for %r version %r does not match: %r != %r' %
                                      (name, version, r_d_w_d, d_w_d))
-        r_d_c_p = w.get('defaultChildPolicy')
+        r_d_c_p = w_descr.get('defaultChildPolicy')
         if r_d_c_p != d_c_p:
             raise _RegistrationError('Default child policy for %r version %r does not match: %r != %r' %
                                      (name, version, r_d_c_p, d_c_p))
@@ -204,8 +204,9 @@ class SWFWorkflowConfig(WorkflowConfig):
     def conf_activity(self, dep_name, version, name=None, task_list=None,
                       heartbeat=None, schedule_to_close=None,
                       schedule_to_start=None, start_to_close=None,
-                      serialize_input=_s_i, deserialize_result=_d_i,
-                      retry=[0, 0, 0]):
+                      serialize_input=_serialize_input,
+                      deserialize_result=_deserialize_input,
+                      retry=(0, 0, 0)):
         """Configure an activity dependency for a workflow implementation.
 
         dep_name is the name of one of the workflow factory arguments
@@ -239,8 +240,9 @@ class SWFWorkflowConfig(WorkflowConfig):
 
     def conf_workflow(self, dep_name, version, name=None, task_list=None,
                       workflow_duration=None, decision_duration=None,
-                      serialize_input=_s_i, deserialize_result=_d_i,
-                      retry=[0, 0, 0]):
+                      serialize_input=_serialize_input,
+                      deserialize_result=_deserialize_input,
+                      retry=(0, 0, 0)):
         """Same as conf_activity but for sub-workflows."""
         if name is None:
             name = dep_name
@@ -305,8 +307,9 @@ class SWFActivityProxy(object):
 
     def __init__(self, identity, name, version, task_list=None, heartbeat=None,
                  schedule_to_close=None, schedule_to_start=None,
-                 start_to_close=None, retry=[0, 0, 0], serialize_input=_s_i,
-                 deserialize_result=_d_r):
+                 start_to_close=None, retry=(0, 0, 0),
+                 serialize_input=_serialize_input,
+                 deserialize_result=_deserialize_result):
         self.identity = identity
         self.name = name
         self.version = version
@@ -334,13 +337,13 @@ class SWFActivityProxy(object):
         try:
             # Serialization errors are also handled outside but the logging
             # messages are more specific here
-            input = self.serialize_input(*args, **kwargs)
+            input_data = self.serialize_input(*args, **kwargs)
         except Exception as e:
             logger.exception('Error while serializing activity input:')
             context.fail(e)
         else:
             context.schedule_activity(
-                call_key, self.name, self.version, input, self.task_list,
+                call_key, self.name, self.version, input_data, self.task_list,
                 self.heartbeat, self.schedule_to_close, self.schedule_to_start,
                 self.start_to_close)
 
@@ -349,8 +352,8 @@ class SWFWorkflowProxy(object):
     """Same as SWFActivityProxy but for sub-workflows."""
     def __init__(self, identity, name, version, task_list=None,
                  workflow_duration=None, decision_duration=None,
-                 retry=[0, 0, 0], serialize_input=_s_i,
-                 deserialize_result=_d_r):
+                 retry=(0, 0, 0), serialize_input=_serialize_input,
+                 deserialize_result=_deserialize_result):
         self.identity = identity
         self.name = name
         self.version = version
@@ -368,14 +371,15 @@ class SWFWorkflowProxy(object):
         if int(delay) > 0 and not context.timer_ready(call_key):
             return context.schedule_timer(call_key, delay)
         try:
-            input = self.serialize_input(*args, **kwargs)
+            input_data = self.serialize_input(*args, **kwargs)
         except Exception as e:
             logger.exception('Error while serializing sub-workflow input:')
             context.fail(e)
         else:
-            context.schedule_workflow(
-                call_key, self.name, self.version, input, self.task_list,
-                self.workflow_duration, self.decision_duration)
+            context.schedule_workflow(call_key, self.name, self.version,
+                                      input_data, self.task_list,
+                                      self.workflow_duration,
+                                      self.decision_duration)
 
 
 def poll_next_decision(layer1, domain, task_list, identity=None):
@@ -387,25 +391,29 @@ def poll_next_decision(layer1, domain, task_list, identity=None):
     # and the first page is empty
     first_event = next(all_events)
     assert first_event['eventType'] == 'WorkflowExecutionStarted'
-    WESEA = 'workflowExecutionStartedEventAttributes'
-    assert first_event[WESEA]['taskList']['name'] == task_list
-    decision_duration = first_event[WESEA]['taskStartToCloseTimeout']
-    workflow_duration = first_event[WESEA]['executionStartToCloseTimeout']
-    tags = first_event[WESEA].get('tagList', None)
-    child_policy = first_event[WESEA]['childPolicy']
-    name = first_event[WESEA]['workflowType']['name']
-    version = first_event[WESEA]['workflowType']['version']
-    input = first_event[WESEA]['input']
+    wesea = 'workflowExecutionStartedEventAttributes'
+    assert first_event[wesea]['taskList']['name'] == task_list
+    decision_duration = first_event[wesea]['taskStartToCloseTimeout']
+    workflow_duration = first_event[wesea]['executionStartToCloseTimeout']
+    tags = first_event[wesea].get('tagList', None)
+    child_policy = first_event[wesea]['childPolicy']
+    name = first_event[wesea]['workflowType']['name']
+    version = first_event[wesea]['workflowType']['version']
+    input_data = first_event[wesea]['input']
     try:
-        running, timedout, results, errors, order = parse_events(all_events)
+        running, timedout, results, errors, order = load_events(all_events)
     except _PaginationError:
         # There's nothing better to do than to retry
         return poll_next_decision(layer1, task_list, domain, identity)
-    return SWFContext(layer1, token, name, version, input,
-        task_list, decision_duration, workflow_duration, tags, child_policy,
-        running, timedout, results, errors, order)
+    return SWFContext(layer1, token, name, version, input_data,
+                      task_list, decision_duration, workflow_duration, tags,
+                      child_policy, running, timedout, results, errors, order)
 
 def poll_first_page(layer1, domain, task_list, identity=None):
+    """Return the response from loading the first page.
+
+    In case of errors, empty responses or whatnot retry until a valid response.
+    """
     swf_response = {}
     while 'taskToken' not in swf_response or not swf_response['taskToken']:
         try:
@@ -416,6 +424,7 @@ def poll_first_page(layer1, domain, task_list, identity=None):
     return swf_response
 
 def poll_response_page(layer1, domain, task_list, token, identity=None):
+    """Return a specific page. In case of errors retry a number of times."""
     swf_response = None
     for _ in range(7):  # give up after a limited number of retries
         try:
@@ -430,6 +439,7 @@ def poll_response_page(layer1, domain, task_list, token, identity=None):
     return swf_response
 
 def events(layer1, domain, task_list, first_page, identity=None):
+    """Load pages one by one and generate all events found."""
     page = first_page
     while 1:
         for event in page['events']:
@@ -439,98 +449,107 @@ def events(layer1, domain, task_list, first_page, identity=None):
         page = poll_response_page(layer1, domain, task_list,
                                   page['nextPageToken'], identity)
 
-def parse_events(events):
+def load_events(event_iter):
+    """Combine all events in their order.
+
+    This returns a tuple of the following things:
+        running  - a set of the ids of running tasks
+        timedout - a set of the ids of tasks that have timedout
+        results  - a dictionary of id -> result for each finished task
+        errors   - a dictionary of id -> error message for each failed task
+        order    - an list of task ids in the order they finished
+    """
     running, timedout = set(), set()
     results, errors = {}, {}
     order = []
     event2call = {}
-    for e in events:
-        e_type = e.get('eventType')
+    for event in event_iter:
+        e_type = event.get('eventType')
         if e_type == 'ActivityTaskScheduled':
-            id = e['activityTaskScheduledEventAttributes']['activityId']
-            event2call[e['eventId']] = id
-            running.add(id)
+            eid = event['activityTaskScheduledEventAttributes']['activityId']
+            event2call[event['eventId']] = eid
+            running.add(eid)
         elif e_type == 'ActivityTaskCompleted':
-            ATCEA = 'activityTaskCompletedEventAttributes'
-            id = event2call[e[ATCEA]['scheduledEventId']]
-            result = e[ATCEA]['result']
-            running.remove(id)
-            results[id] = result
-            order.append(id)
+            atcea = 'activityTaskCompletedEventAttributes'
+            eid = event2call[event[atcea]['scheduledEventId']]
+            result = event[atcea]['result']
+            running.remove(eid)
+            results[eid] = result
+            order.append(eid)
         elif e_type == 'ActivityTaskFailed':
-            ATFEA = 'activityTaskFailedEventAttributes'
-            id = event2call[e[ATFEA]['scheduledEventId']]
-            reason = e[ATFEA]['reason']
-            running.remove(id)
-            errors[id] = reason
-            order.append(id)
+            atfea = 'activityTaskFailedEventAttributes'
+            eid = event2call[event[atfea]['scheduledEventId']]
+            reason = event[atfea]['reason']
+            running.remove(eid)
+            errors[eid] = reason
+            order.append(eid)
         elif e_type == 'ActivityTaskTimedOut':
-            ATTOEA = 'activityTaskTimedOutEventAttributes'
-            id = event2call[e[ATTOEA]['scheduledEventId']]
-            running.remove(id)
-            timedout.add(id)
-            order.append(id)
+            attoea = 'activityTaskTimedOutEventAttributes'
+            eid = event2call[event[attoea]['scheduledEventId']]
+            running.remove(eid)
+            timedout.add(eid)
+            order.append(eid)
         elif e_type == 'ScheduleActivityTaskFailed':
-            SATFEA = 'scheduleActivityTaskFailedEventAttributes'
-            id = e[SATFEA]['activityId']
-            reason = e[SATFEA]['cause']
+            satfea = 'scheduleActivityTaskFailedEventAttributes'
+            eid = event[satfea]['activityId']
+            reason = event[satfea]['cause']
             # when a job is not found it's not even started
-            errors[id] = reason
-            order.append(id)
+            errors[eid] = reason
+            order.append(eid)
         elif e_type == 'StartChildWorkflowExecutionInitiated':
-            SCWEIEA = 'startChildWorkflowExecutionInitiatedEventAttributes'
-            id = _subworkflow_call_key(e[SCWEIEA]['workflowId'])
-            running.add(id)
+            scweiea = 'startChildWorkflowExecutionInitiatedEventAttributes'
+            eid = _subworkflow_call_key(event[scweiea]['workflowId'])
+            running.add(eid)
         elif e_type == 'ChildWorkflowExecutionCompleted':
-            CWECEA = 'childWorkflowExecutionCompletedEventAttributes'
-            id = _subworkflow_call_key(
-                e[CWECEA]['workflowExecution']['workflowId'])
-            result = e[CWECEA]['result']
-            running.remove(id)
-            results[id] = result
-            order.append(id)
+            cwecea = 'childWorkflowExecutionCompletedEventAttributes'
+            eid = _subworkflow_call_key(
+                event[cwecea]['workflowExecution']['workflowId'])
+            result = event[cwecea]['result']
+            running.remove(eid)
+            results[eid] = result
+            order.append(eid)
         elif e_type == 'ChildWorkflowExecutionFailed':
-            CWEFEA = 'childWorkflowExecutionFailedEventAttributes'
-            id = _subworkflow_call_key(
-                e[CWEFEA]['workflowExecution']['workflowId'])
-            reason = e[CWEFEA]['reason']
-            running.remove(id)
-            errors[id] = reason
-            order.append(id)
+            cwefea = 'childWorkflowExecutionFailedEventAttributes'
+            eid = _subworkflow_call_key(
+                event[cwefea]['workflowExecution']['workflowId'])
+            reason = event[cwefea]['reason']
+            running.remove(eid)
+            errors[eid] = reason
+            order.append(eid)
         elif e_type == 'ChildWorkflowExecutionTimedOut':
-            CWETOEA = 'childWorkflowExecutionTimedOutEventAttributes'
-            id = _subworkflow_call_key(
-                e[CWETOEA]['workflowExecution']['workflowId'])
-            running.remove(id)
-            timedout.add(id)
-            order.append(id)
+            cwetoea = 'childWorkflowExecutionTimedOutEventAttributes'
+            eid = _subworkflow_call_key(
+                event[cwetoea]['workflowExecution']['workflowId'])
+            running.remove(eid)
+            timedout.add(eid)
+            order.append(eid)
         elif e_type == 'StartChildWorkflowExecutionFailed':
-            SCWEFEA = 'startChildWorkflowExecutionFailedEventAttributes'
-            id = _subworkflow_call_key(e[SCWEFEA]['workflowId'])
-            reason = e[SCWEFEA]['cause']
-            errors[id] = reason
-            order.append(id)
+            scwefea = 'startChildWorkflowExecutionFailedEventAttributes'
+            eid = _subworkflow_call_key(event[scwefea]['workflowId'])
+            reason = event[scwefea]['cause']
+            errors[eid] = reason
+            order.append(eid)
         elif e_type == 'TimerStarted':
-            id = e['timerStartedEventAttributes']['timerId']
+            eid = event['timerStartedEventAttributes']['timerId']
             # while the timer is running, act as if the task itself is running
             # to prevent it from being scheduled again
-            running.add(_timer_call_key(id))
+            running.add(_timer_call_key(eid))
         elif e_type == 'TimerFired':
-            id = e['timerFiredEventAttributes']['timerId']
-            running.remove(_timer_call_key(id))
-            results[id] = None
+            eid = event['timerFiredEventAttributes']['timerId']
+            running.remove(_timer_call_key(eid))
+            results[eid] = None
     return running, timedout, results, errors, order
 
 
 class SWFContext(object):
-    def __init__(self, layer1, token, name, version, input,
+    def __init__(self, layer1, token, name, version, input_data,
                  task_list, decision_duration, workflow_duration, tags,
                  child_policy, running, timedout, results, errors, order):
         self.layer1 = layer1
         self.token = token
         self.name = name
         self.version = version
-        self.input = input
+        self.input = input_data
         self.task_list = task_list
         self.decision_duration = decision_duration
         self.workflow_duration = workflow_duration
@@ -569,8 +588,8 @@ class SWFContext(object):
         return _timer_key(call_key) in self.results
 
     def fail(self, reason):
-        d = self.decisions = Layer1Decisions()
-        d.fail_workflow_execution(reason=str(reason)[:_REASON_SIZE])
+        decisions = self.decisions = Layer1Decisions()
+        decisions.fail_workflow_execution(reason=str(reason)[:_REASON_SIZE])
         self.flush()
 
     def flush(self):
@@ -579,30 +598,28 @@ class SWFContext(object):
         self.closed = True
         try:
             self.layer1.respond_decision_task_completed(
-                task_token=str(self.token), decisions=self.decisions._data
-            )
+                task_token=str(self.token), decisions=self.decisions._data)
         except SWFResponseError:
             logger.exception('Error while sending the decisions:')
             # ignore the error and let the decision timeout and retry
 
-    def restart(self, input):
-        d = self.decisions = Layer1Decisions()
+    def restart(self, input_data):
+        decisions = self.decisions = Layer1Decisions()
         child_policy = _str_or_none(self.child_policy)
         if child_policy not in _CHILD_POLICY:
             raise ValueError('Invalid child policy value: %r' % child_policy)
-        d.continue_as_new_workflow_execution(
+        decisions.continue_as_new_workflow_execution(
             start_to_close_timeout=_str_or_none(self.decision_duration),
             execution_start_to_close_timeout=_str_or_none(self.workflow_duration),
             task_list=_str_or_none(self.task_list),
-            input=str(input)[:_INPUT_SIZE],
+            input=str(input_data)[:_INPUT_SIZE],
             tag_list=_tags(self.tags),
-            child_policy=_str_or_none(self.child_policy),
-        )
+            child_policy=_str_or_none(self.child_policy))
         self.flush()
 
     def finish(self, result):
-        d = self.decisions = Layer1Decisions()
-        d.complete_workflow_execution(str(result)[:_RESULT_SIZE])
+        decisions = self.decisions = Layer1Decisions()
+        decisions.complete_workflow_execution(str(result)[:_RESULT_SIZE])
         self.flush()
 
     # Used by SWFProxy instances
@@ -612,7 +629,7 @@ class SWFContext(object):
         self.decisions.start_timer(timer_id=str(call_key),
                                    start_to_fire_timeout=str(delay))
 
-    def schedule_activity(self, call_key, name, version, input, task_list,
+    def schedule_activity(self, call_key, name, version, input_data, task_list,
                           heartbeat, schedule_to_close, schedule_to_start,
                           start_to_close):
         self.decisions.schedule_activity_task(
@@ -622,10 +639,9 @@ class SWFContext(object):
             schedule_to_start_timeout=_str_or_none(schedule_to_start),
             start_to_close_timeout=_str_or_none(start_to_close),
             task_list=_str_or_none(task_list),
-            input=str(input)
-        )
+            input=str(input_data))
 
-    def schedule_workflow(self, call_key, name, version, input, task_list,
+    def schedule_workflow(self, call_key, name, version, input_data, task_list,
                           workflow_duration, decision_duration):
         call_key = _subworkflow_key(call_key)
         self.decisions.start_child_workflow_execution(
@@ -633,8 +649,7 @@ class SWFContext(object):
             task_start_to_close_timeout=_str_or_none(decision_duration),
             execution_start_to_close_timeout=_str_or_none(workflow_duration),
             task_list=_str_or_none(task_list),
-            input=str(input)
-        )
+            input=str(input_data))
 
 
 def start_swf_workflow_worker(domain, task_list, layer1=None, reg_remote=True,
@@ -691,23 +706,30 @@ class SWFWorkflowStarter(object):
         self.registry = {}
 
     def start(self, domain, name, version, task_list=None,
-              decision_duration=None, workflow_duration=None, id=None,
-              tags=None, serialize_input=_s_i, child_policy=None):
+              decision_duration=None, workflow_duration=None, wid=None,
+              tags=None, serialize_input=_serialize_input, child_policy=None):
         """Prepare to start a new workflow, returns a callable.
 
-        The callable should be called only with the input arguments.
+        The callable should be called only with the input arguments and will
+        start the workflow.
         """
         def really_start(*args, **kwargs):
-            l_id = id  # closue hack
-            if l_id is None:
-                l_id = uuid.uuid4()
+            """Use this function to start a workflow by passing in the args."""
+            l_wid = wid  # closue hack
+            if l_wid is None:
+                l_wid = uuid.uuid4()
             try:
+                l_child_policy = _str_or_none(child_policy) # closure hack
+                if l_child_policy not in _CHILD_POLICY:
+                    raise ValueError("child_policy should be one of %s"
+                                     % ' '.join(_CHILD_POLICY))
                 self.layer1.start_workflow_execution(
-                    str(domain), str(l_id), str(name), str(version),
+                    str(domain), str(l_wid), str(name), str(version),
                     task_list=_str_or_none(task_list),
                     execution_start_to_close_timeout=_str_or_none(workflow_duration),
                     task_start_to_close_timeout=_str_or_none(decision_duration),
                     input=str(serialize_input(*args, **kwargs))[:_INPUT_SIZE],
+                    child_policy=l_child_policy,
                     tag_list=_tags(tags))
             except SWFResponseError:
                 return False
@@ -716,16 +738,17 @@ class SWFWorkflowStarter(object):
 
 
 def _default_identity():
-    id = "%s-%s" % (socket.getfqdn(), os.getpid())
-    return id[-_IDENTITY_SIZE:]  # keep the most important part
+    """Generate a local identity for this process."""
+    identity = "%s-%s" % (socket.getfqdn(), os.getpid())
+    return identity[-_IDENTITY_SIZE:]  # keep the most important part
 
 
 class _PaginationError(Exception):
-    pass
+    """Can't retrieve the next page after X retries."""
 
 
 class _RegistrationError(Exception):
-    pass
+    """Can't register a task remotely because of default config conflicts."""
 
 
 def _subworkflow_id(workflow_id):
@@ -767,4 +790,4 @@ def _str_or_none(val):
 def _tags(tags):
     if tags is None:
         return None
-    return list(set(map(str, tags)))[:5]
+    return list(set(str(t) for t in tags))[:5]
