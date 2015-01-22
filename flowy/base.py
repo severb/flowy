@@ -17,13 +17,53 @@ _identity = lambda x: x
 _serialize_args = lambda *args, **kwargs: (args, kwargs)
 
 
-class WorkflowConfig(object):
+class Config(object):
+    """A generic configuration object."""
+
+    category = None
+
+    def __init__(self, deserialize_input=_identity,
+                 serialize_result=_identity):
+        """Initialize the config object.
+
+        The deserialize_input/serialize_result callables are used to
+        deserialize the initial input data and serialize the final result.
+        By default they are the identity functions.
+        """
+        self.deserialize_input = deserialize_input
+        self.serialize_result = serialize_result
+
+    def __call__(self, obj):
+        """Associate an object to this config and make it discoverable.
+
+        The config object can be used as a decorator to bind it to a workflow
+        factory and make it discoverable later using a scanner. The original
+        factory is preserved.
+
+            cfg = MyConfig(version=1)
+            cfg.conf('a', MyProxy(...))
+            cfg.conf('b', MyProxy(...))
+
+            @cfg
+            class MyWorkflow:
+                def __init__(self, a, b):
+                    pass
+
+            # ... and later
+            scanner.scan()
+        """
+        def callback(venusian_scanner, *_):
+            """This gets called by venusian at scan time."""
+            venusian_scanner.register(self, obj)
+        venusian.attach(obj, callback, category=self.category)
+        return obj
+
+
+class WorkflowConfig(Config):
     """A generic configuration object.
 
     Use conf to configure workflow implementation dependencies.
     """
-
-    category = None
 
     def __init__(self, rate_limit=64, deserialize_input=_identity,
                  serialize_result=_identity,
@@ -39,9 +79,9 @@ class WorkflowConfig(object):
         deserialize the initial input data and serialize the final result.
         By default they are the identity functions.
         """
+        super(WorkflowConfig, self).__init__(deserialize_input,
+                                             serialize_result)
         self.rate_limit = rate_limit
-        self.deserialize_input = deserialize_input
-        self.serialize_result = serialize_result
         self.serialize_restart_input = serialize_restart_input
         self.proxy_factory_registry = {}
 
@@ -73,31 +113,6 @@ class WorkflowConfig(object):
         for dep_name, proxy in self.proxy_factory_registry.iteritems():
             kwargs[dep_name] = proxy.bind(context, rate_limit)
         return lambda wf_factory: wf_factory(**kwargs)
-
-    def __call__(self, workflow_factory):
-        """Associate the factory to this config and make it discoverable.
-
-        The config object can be used as a decorator to bind it to a workflow
-        factory and make it discoverable later using a scanner. The original
-        factory is preserved.
-
-            cfg = MyConfig(version=1)
-            cfg.conf('a', MyProxy(...))
-            cfg.conf('b', MyProxy(...))
-
-            @cfg
-            class MyWorkflow:
-                def __init__(self, a, b):
-                    pass
-
-            # ... and later
-            scanner.scan()
-        """
-        def callback(venusian_scanner, *_):
-            """This gets called by venusian at scan time."""
-            venusian_scanner.register(self, workflow_factory)
-        venusian.attach(workflow_factory, callback, category=self.category)
-        return workflow_factory
 
     def __repr__(self):
         klass = self.__class__.__name__
