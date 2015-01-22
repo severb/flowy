@@ -126,7 +126,17 @@ class Workflow(object):
         workflow instance.
         """
         conf = self.config
-        workflow = conf.bind(context)(self.workflow_factory)
+        workflow_di = conf.bind(context)
+        try:
+            # If there are proxy calls in __init__ this raises SuspendTask
+            workflow = workflow_di(self.workflow_factory)
+        except SuspendTask:
+            context.flush()
+            return
+        except Exception as e:
+            logger.exception('Error in workflow init:')
+            context.fail(e)
+            return
         deserialize_input = getattr(conf, 'deserialize_input', _identity)
         try:
             args, kwargs = deserialize_input(context.input)
