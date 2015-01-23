@@ -1,5 +1,5 @@
-SWF Backend
-===========
+SWF
+===
 
 
 .. toctree::
