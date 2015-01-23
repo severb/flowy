@@ -3,10 +3,10 @@ Flowy Docs
 
 
 `Flowy`_ is a library for building and running distributed, asynchronous
-workflows built on top of `Amazon's SWF`_.  Flowy deals away with the spaghetti
-code associated with orchestrating complex workflows.  It is ideal for
-applications that have to perform multi-phased batch processing on their input
-data.
+workflows built on top of `Amazon's SWF`_. Flowy deals away with the spaghetti
+code associated with orchestrating complex workflows. It is ideal for
+applications that have to deal with multi-phased batch processing, media
+encoding, long-running tasks or background processing.
 
 A toy map-reduce workflow with Flowy looks like this::
 
@@ -22,10 +22,10 @@ A toy map-reduce workflow with Flowy looks like this::
 
 In the above example we compute the sum of the squares for a range of numbers
 with the help of two activities (which make up a workflow): one that computes
-the squares for the given range of numbers and one that sums them up. Flowy will
-build the dependencies between the two activities so that the summing up of the
-squares will happen as soon as the result of the squaring operation is
-available.
+the square of a number and one that sums up two numbers. Flowy will figure out
+the dependencies between the activities so that the summing of the squares will
+happen as soon as any two results of the squaring operation are available and
+continue until everything is added together.
 
 Before you start you should read the :doc:`introduction`. It explains important
 concepts about the execution model of the workflows. Next, you should follow the
