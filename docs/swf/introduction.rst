@@ -1,14 +1,11 @@
-SWF Introduction
-================
+Introduction
+============
 
-This is a high-level overview of Amazon Simple Workflow. If you already
-know how SWF works you can head straight to the :doc:`tutorial`. If you
-never used it before then you should continue reading this introduction.
-
-SWF is a web service offered by Amazon as part of their Cloud Computing
-Services. It's advertised as something that helps you build, run, and scale
-background jobs that have parallel or sequential steps. A fully-managed state
-tracker and task coordinator in the Cloud.
+This is a high-level overview of Amazon Simple Workflow. SWF is a web service
+offered by Amazon as part of their Cloud Computing Services. It's advertised as
+something that helps you build, run, and scale background jobs that have
+parallel or sequential steps. A fully-managed state tracker and task
+coordinator in the Cloud.
 
 In simple words SWF is a web service over two different types of queues. In SWF
 parlance the queues are called task lists because they have some special
@@ -161,9 +158,6 @@ Additional Reading
 There is a lot more to learn about Amazon SWF. If you want to find out more
 about it the `Developer Guide`_ is a good place to start, especially the
 `Introduction`_ and `Basic Concepts`_.
-
-We're now ready to start the :doc:`tutorial` and get our hands dirty on some
-code.
 
 
 .. _Developer Guide: http://docs.aws.amazon.com/amazonswf/latest/developerguide/
