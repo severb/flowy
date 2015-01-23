@@ -1,16 +1,10 @@
 Introduction
 ============
 
-This is a high-level overview of Amazon Simple Workflow. SWF is a web service
-offered by Amazon as part of their Cloud Computing Services. It's advertised as
-something that helps you build, run, and scale background jobs that have
-parallel or sequential steps. A fully-managed state tracker and task
-coordinator in the Cloud.
-
-In simple words SWF is a web service over two different types of queues. In SWF
-parlance the queues are called task lists because they have some special
-behavior that queues don't have. But for now we're better of if we're thinking
-of them as queues.
+This is a high-level overview of Amazon Simple Workflow. In few words SWF is a
+web service over two different types of queues. In SWF parlance the queues are
+called task lists because they have some special behavior that queues don't
+have. But for now we're better of if we're thinking of them as queues.
 
 
 Polling Tasks
