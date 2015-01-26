@@ -1,5 +1,6 @@
 from __future__ import print_function
 
+import itertools
 import json
 import logging
 import os
@@ -12,16 +13,16 @@ from boto.swf.exceptions import SWFTypeAlreadyExistsError
 from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
 
+from flowy.base import Activity
 from flowy.base import ContextBoundProxy
-from flowy.base import DescCounter
+from flowy.base import Restart
 from flowy.base import setup_default_logger
+from flowy.base import SuspendTask
+from flowy.base import Worker
 from flowy.base import Workflow
-from flowy.base import WorkflowConfig, Config
-from flowy.base import WorkflowRegistry
 
 
-__all__ = ['SWFWorkflowConfig', 'SWFWorkflowRegistry',
-           'start_swf_workflow_worker']
+__all__ = 'SWFWorkflow SWFWorkflowWorker SWFActivity SWFActivityWorker'.split()
 
 
 logger = logging.getLogger(__name__)
@@ -33,9 +34,8 @@ _IDENTITY_SIZE = _REASON_SIZE = 256
 
 
 _serialize_input = lambda *args, **kwargs: json.dumps((args, kwargs))
-_deserialize_input = json.loads
 _serialize_result = json.dumps
-_deserialize_result = json.loads
+_deserialize_input = _deserialize_result = json.loads
 
 
 class SWFConfigMixin(object):
@@ -58,7 +58,7 @@ class SWFConfigMixin(object):
         if not registered_as_new:
             self.check_compatible(swf_layer1, domain)  # raises if incompatible
 
-    def set_alternate_name(self):
+    def set_alternate_name(self, name):
         """Set the name of this workflow if one is not already set.
 
         Returns a configuration instance with the new name or the existing
@@ -73,17 +73,25 @@ class SWFConfigMixin(object):
         klass = self.__class__
         # Make a clone since this config can be used as a decorator on multiple
         # workflow factories and each has a different name.
-        clone_args = {}
+        clone_args = {'name': name}
         for prop, val in self.__dict__.items():
-            if (prop in ['name', 'version']
-                or prop.startswith('default')
-                or prop.startswith('serialize')
-                or prop.startswith('deserialize')):
+            if (prop == 'version'
+                    or prop.startswith('default')
+                    or prop.startswith('serialize')
+                    or prop.startswith('deserialize')):
                 clone_args[prop] = val
         return klass(**clone_args)
 
+    @property
+    def key(self):
+        """Use the name and the version to identify this config."""
+        if self.name is None:
+            raise RuntimeError('Name is not set.')
+        return str(self.name), str(self.version)
 
-class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
+
+
+class SWFWorkflow(SWFConfigMixin, Workflow):
     """A configuration object suited for Amazon SWF Workflows.
 
     Use conf_activity and conf_workflow to configure workflow implementation
@@ -120,28 +128,31 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
         self.default_workflow_duration = default_workflow_duration
         self.default_decision_duration = default_decision_duration
         self.default_child_policy = default_child_policy
+        self.rate_limit = rate_limit
         self.proxy_factory_registry = {}
-        super(SWFWorkflowConfig, self).__init__(rate_limit, deserialize_input,
-                                                serialize_result,
-                                                serialize_restart_input)
+        super(SWFWorkflow, self).__init__(deserialize_input, serialize_result,
+                                          serialize_restart_input)
+
+    def init(self, impl_factory, context):
+        rate_limit = DescCounter(int(self.rate_limit))
+        return super(SWFWorkflow, self).init(impl_factory, context, rate_limit)
 
     def set_alternate_name(self, name):
-        new_config = super(SWFWorkflowConfig, self).set_alternate_name(name)
+        new_config = super(SWFWorkflow, self).set_alternate_name(name)
         if new_config is not self:
-            for dep, factory in self.proxy_factory_registry.iteritems():
-                new_config.conf(dep, factory)
+            for dep_name, proxy in self.proxy_factory_registry.iteritems():
+                new_config.conf_proxy(dep_name, proxy)
         return new_config
 
     def _cvt_values(self):
         """Convert values to their expected types or bailout."""
-        n = self.name
-        if n is None:
+        if self.name is None:
             raise RuntimeError('Name is not set.')
         d_t_l = _str_or_none(self.default_task_list)
         d_w_d = _timer_encode(self.default_workflow_duration, 'default_workflow_duration')
         d_d_d = _timer_encode(self.default_decision_duration, 'default_decision_duration')
         d_c_p = _cp_encode(self.default_child_policy)
-        return str(n), str(self.version), d_t_l, d_w_d, d_d_d, d_c_p
+        return str(self.name), str(self.version), d_t_l, d_w_d, d_d_d, d_c_p
 
     def try_register_remote(self, swf_layer1, domain):
         """Register the workflow remotely.
@@ -239,7 +250,7 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
                                  serialize_input=serialize_input,
                                  deserialize_result=deserialize_result,
                                  retry=retry)
-        self.conf(dep_name, proxy)
+        self.conf_proxy(dep_name, proxy)
 
     def conf_workflow(self, dep_name, version, name=None, task_list=None,
                       workflow_duration=None, decision_duration=None,
@@ -256,47 +267,153 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
                                  serialize_input=serialize_input,
                                  deserialize_result=deserialize_result,
                                  retry=retry)
-        self.conf(dep_name, proxy)
+        self.conf_proxy(dep_name, proxy)
 
 
-class SWFWorkflow(Workflow):
-    """Bind a SWFWorkflowConfig instance and a workflow factory together.
+class SWFActivity(SWFConfigMixin, Activity):
 
-    This will set the config alternate name to the workflow factory __name__.
-    """
-    def __init__(self, config, workflow_factory):
-        config = config.set_alternate_name(workflow_factory.__name__)
-        super(SWFWorkflow, self).__init__(config, workflow_factory)
-        self.register_remote = config.register_remote  # delegate
+    category = 'swf_activity'  # venusian category used for this type of confs
 
-    def key(self):
-        """Use the name and the version to identify this workflow."""
-        return str(self.config.name), str(self.config.version)
+    def __init__(self, version, name=None, default_task_list=None,
+                 default_heartbeat=None, default_schedule_to_close=None,
+                 default_schedule_to_start=None, default_start_to_close=None,
+                 deserialize_input=_deserialize_input,
+                 serialize_result=_serialize_result):
+        """Initialize the config object.
+
+        The timer values are in seconds.
+
+        For the default configs, a value of None means that the config is unset
+        and must be set explicitly in proxies pointing to this activity.
+
+        The name is not required at this point but should be set before trying
+        to register this config remotely and can be set later with
+        set_alternate_name.
+        """
+        self.name = name
+        self.version = version
+        self.default_task_list = default_task_list
+        self.default_heartbeat = default_heartbeat
+        self.default_schedule_to_close = default_schedule_to_close
+        self.default_schedule_to_start = default_schedule_to_start
+        self.default_start_to_close = default_start_to_close
+        super(SWFActivity, self).__init__(deserialize_input, serialize_result)
+
+    def _cvt_values(self):
+        """Convert values to their expected types or bailout."""
+        n = self.name
+        if n is None:
+            raise RuntimeError('Name is not set.')
+        d_t_l = _str_or_none(self.default_task_list)
+        d_h = _str_or_none(self.default_heartbeat)
+        d_sch_c = _str_or_none(self.default_schedule_to_close)
+        d_sch_s = _str_or_none(self.default_schedule_to_start)
+        d_s_c = _str_or_none(self.default_start_to_close)
+        return str(n), str(self.version), d_t_l, d_h, d_sch_c, d_sch_s, d_s_c
+
+    def try_register_remote(self, swf_layer1, domain):
+        """Same as SWFWorkflowConfig.try_register_remote."""
+        n, version, d_t_l, d_h, d_sch_c, d_sch_s, d_s_c = self._cvt_values()
+        try:
+            swf_layer1.register_activity_type(
+                str(domain), name=n, version=version, task_list=d_t_l,
+                default_task_heartbeat_timeout=d_h,
+                default_task_schedule_to_close_timeout=d_sch_c,
+                default_task_schedule_to_start_timeout=d_sch_s,
+                default_task_start_to_close_timeout=d_s_c)
+        except SWFTypeAlreadyExistsError:
+            return False
+        except SWFResponseError as e:
+            logger.exception('Error while registering the activity:')
+            raise _RegistrationError(e)
+        return True
+
+    def check_compatible(self, swf_layer1, domain):
+        """Same as SWFWorkflowConfig.check_compatible."""
+        n, v, d_t_l, d_h, d_sch_c, d_sch_s, d_s_c = self._cvt_values()
+        try:
+            a_descr = swf_layer1.describe_activity_type(str(domain), n, v)
+            a_descr = a_descr['configuration']
+        except SWFResponseError as e:
+            logger.exception('Error while checking activity compatibility:')
+            raise _RegistrationError(e)
+        r_d_t_l = a_descr.get('defaultTaskList', {}).get('name')
+        if r_d_t_l != d_t_l:
+            raise _RegistrationError('Default task list for %r version %r does not match: %r != %r' %
+                                     (n, v, r_d_t_l, d_t_l))
+        r_d_h = a_descr.get('defaultTaskHeartbeatTimeout')
+        if r_d_h != d_h:
+            raise _RegistrationError('Default heartbeat for %r version %r does not match: %r != %r' %
+                                     (n, v, r_d_h, d_h))
+        r_d_sch_c = a_descr.get('defaultTaskScheduleToCloseTimeout')
+        if r_d_sch_c != d_sch_c:
+            raise _RegistrationError('Default schedule to close for %r version %r does not match: %r != %r' %
+                                     (n, v, r_d_sch_c, d_sch_c))
+        r_d_sch_s = a_descr.get('defaultTaskScheduleToStartTimeout')
+        if r_d_sch_s != d_sch_s:
+            raise _RegistrationError('Default schedule to start for %r version %r does not match: %r != %r' %
+                                     (n, v, r_d_sch_s, d_sch_s))
+        r_d_s_c = a_descr.get('defaultTaskStartToCloseTimeout')
+        if r_d_s_c != d_s_c:
+            raise _RegistrationError('Default start to close for %r version %r does not match: %r != %r' %
+                                     (n, v, r_d_s_c, d_s_c))
 
 
-class SWFWorkflowRegistry(WorkflowRegistry):
-    """A factory for all registered workflows and their configs.
-
-    The registered workflows are identified by their name and version.
-    """
-
-    categories = ['swf_workflow']
-    WorkflowFactory = SWFWorkflow
+class SWFWorker(Worker):
 
     def register_remote(self, layer1, domain):
         """Register or check compatibility of all configs in Amazon SWF."""
         for workflow in self.registry.values():
             workflow.register_remote(layer1, domain)
 
-    def __call__(self, context):
-        """Run the workflow corresponding to this context.
+    def register(self, config, impl_factory):
+        config = config.set_alternate_name(impl_factory)
+        super(SWFWorker, self).register(config, impl_factory)
 
-        Raise value error if no config is found for this name and version,
-        otherwise bind the config to the context and use it to instantiate and
-        run the workflow.
-        """
-        key = (str(context.name), str(context.version))
-        super(SWFWorkflowRegistry, self).__call__(key, context)
+
+class SWFWorkflowWorker(SWFWorker):
+
+    categories = ['swf_workflow']
+
+    def __call__(self, key, input_data, context):
+        try:
+            s = super(SWFWorkflowWorker, self)
+            serialized_result = s.__call__(key, input_data, context)
+        except SuspendTask:
+            context.flush()
+        except Restart as e:
+            context.restart(e.input_data)
+        except Exception as e:
+            context.fail(e)
+        else:
+            context.finish(serialized_result)
+
+    def run_forever(self):
+        """Run the worker forever."""
+        pass  # XXX: start the worker here
+
+
+class SWFActivityWorker(SWFWorker):
+
+    categories = ['swf_activity']
+
+    def __call__(self, key, input_data, context):
+        try:
+            s = super(SWFWorkflowWorker, self)
+            serialized_result = s.__call__(key, input_data, context.heartbeat)
+        except SuspendTask:
+            logger.info('Suspending activity.')
+        except Restart:
+            msg = 'Cannot user restart for activities.'
+            logger.error(msg)
+            context.fail(msg)
+        except Exception as e:
+            context.fail(e)
+        else:
+            context.finish(serialized_result)
+
+    def run_forever(self):
+        pass
 
 
 class SWFActivityProxy(object):
@@ -313,6 +430,7 @@ class SWFActivityProxy(object):
                  start_to_close=None, retry=(0, 0, 0),
                  serialize_input=_serialize_input,
                  deserialize_result=_deserialize_result):
+        # This is a unique name used to generate unique identifiers
         self.identity = identity
         self.name = name
         self.version = version
@@ -325,9 +443,9 @@ class SWFActivityProxy(object):
         self.serialize_input = serialize_input
         self.deserialize_result = deserialize_result
 
-    def bind(self, context, rate_limit=DescCounter()):
+    def __call__(self, context, rate_limit):
         """Return a ContextBoundProxy instance that calls back schedule."""
-        return ContextBoundProxy(self, context, rate_limit)
+        return ContextBoundProxy(self, context)
 
     def schedule(self, context, call_key, delay, *args, **kwargs):
         """Schedule the activity in the execution context.
@@ -733,94 +851,20 @@ class SWFWorkflowStarter(object):
         return really_start
 
 
-class SWFActivityConfig(SWFConfigMixin, Config):
 
-    category = 'swf_activity'  # venusian category used for this type of confs
 
-    def __init__(self, version, name=None, default_task_list=None,
-                 default_heartbeat=None, default_schedule_to_close=None,
-                 default_schedule_to_start=None, default_start_to_close=None,
-                 deserialize_input=_deserialize_input,
-                 serialize_result=_serialize_result):
-        """Initialize the config object.
+class DescCounter(object):
+    """A simple semaphore-like descendent counter."""
+    def __init__(self, to=None):
+        if to is None:
+            self.iterator = itertools.repeat(True)
+        else:
+            self.iterator = itertools.chain(itertools.repeat(True, to),
+                                            itertools.repeat(False))
 
-        The timer values are in seconds.
-
-        For the default configs, a value of None means that the config is unset
-        and must be set explicitly in proxies pointing to this activity.
-
-        The name is not required at this point but should be set before trying
-        to register this config remotely and can be set later with
-        set_alternate_name.
-        """
-        self.name = name
-        self.version = version
-        self.default_task_list = default_task_list
-        self.default_heartbeat = default_heartbeat
-        self.default_schedule_to_close = default_schedule_to_close
-        self.default_schedule_to_start = default_schedule_to_start
-        self.default_start_to_close = default_start_to_close
-        self.deserialize_input = deserialize_input
-        self.serialize_result = serialize_result
-
-    def _cvt_values(self):
-        """Convert values to their expected types or bailout."""
-        n = self.name
-        if n is None:
-            raise RuntimeError('Name is not set.')
-        d_t_l = _str_or_none(self.default_task_list)
-        d_h = _str_or_none(self.default_heartbeat)
-        d_sch_c = _str_or_none(self.default_schedule_to_close)
-        d_sch_s = _str_or_none(self.default_schedule_to_start)
-        d_s_c = _str_or_none(self.default_start_to_close)
-        return str(n), str(self.version), d_t_l, d_h, d_sch_c, d_sch_s, d_s_c
-
-    def try_register_remote(self, swf_layer1, domain):
-        """Same as SWFWorkflowConfig.try_register_remote."""
-        n, version, d_t_l, d_h, d_sch_c, d_sch_s, d_s_c = self._cvt_values()
-        try:
-            swf_layer1.register_activity_type(
-                str(domain), name=n, version=version, task_list=d_t_l,
-                default_task_heartbeat_timeout=d_h,
-                default_task_schedule_to_close_timeout=d_sch_c,
-                default_task_schedule_to_start_timeout=d_sch_s,
-                default_task_start_to_close_timeout=d_s_c)
-        except SWFTypeAlreadyExistsError:
-            return False
-        except SWFResponseError as e:
-            logger.exception('Error while registering the activity:')
-            raise _RegistrationError(e)
-        return True
-
-    def check_compatible(self, swf_layer1, domain):
-        """Same as SWFWorkflowConfig.check_compatible."""
-        n, v, d_t_l, d_h, d_sch_c, d_sch_s, d_s_c = self._cvt_values()
-        try:
-            a_descr = swf_layer1.describe_activity_type(str(domain), n, v)
-            a_descr = a_descr['configuration']
-        except SWFResponseError as e:
-            logger.exception('Error while checking activity compatibility:')
-            raise _RegistrationError(e)
-        r_d_t_l = a_descr.get('defaultTaskList', {}).get('name')
-        if r_d_t_l != d_t_l:
-            raise _RegistrationError('Default task list for %r version %r does not match: %r != %r' %
-                                     (n, v, r_d_t_l, d_t_l))
-        r_d_h = a_descr.get('defaultTaskHeartbeatTimeout')
-        if r_d_h != d_h:
-            raise _RegistrationError('Default heartbeat for %r version %r does not match: %r != %r' %
-                                     (n, v, r_d_h, d_h))
-        r_d_sch_c = a_descr.get('defaultTaskScheduleToCloseTimeout')
-        if r_d_sch_c != d_sch_c:
-            raise _RegistrationError('Default schedule to close for %r version %r does not match: %r != %r' %
-                                     (n, v, r_d_sch_c, d_sch_c))
-        r_d_sch_s = a_descr.get('defaultTaskScheduleToStartTimeout')
-        if r_d_sch_s != d_sch_s:
-            raise _RegistrationError('Default schedule to start for %r version %r does not match: %r != %r' %
-                                     (n, v, r_d_sch_s, d_sch_s))
-        r_d_s_c = a_descr.get('defaultTaskStartToCloseTimeout')
-        if r_d_s_c != d_s_c:
-            raise _RegistrationError('Default start to close for %r version %r does not match: %r != %r' %
-                                     (n, v, r_d_s_c, d_s_c))
+    def consume(self):
+        """Conusme one position; returns True if positions are available."""
+        return next(self.iterator)
 
 
 def _default_identity():

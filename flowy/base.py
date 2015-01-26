@@ -1,4 +1,3 @@
-import itertools
 import logging
 import sys
 from collections import namedtuple
@@ -17,14 +16,14 @@ _identity = lambda x: x
 _serialize_args = lambda *args, **kwargs: (args, kwargs)
 
 
-class Config(object):
-    """A generic configuration object."""
+class Activity(object):
+    """A generic activity configuration object."""
 
     category = None
 
     def __init__(self, deserialize_input=_identity,
                  serialize_result=_identity):
-        """Initialize the config object.
+        """Initialize the activity config object.
 
         The deserialize_input/serialize_result callables are used to
         deserialize the initial input data and serialize the final result.
@@ -36,18 +35,15 @@ class Config(object):
     def __call__(self, obj):
         """Associate an object to this config and make it discoverable.
 
-        The config object can be used as a decorator to bind it to a workflow
-        factory and make it discoverable later using a scanner. The original
-        factory is preserved.
+        The config object can be used as a decorator to bind it to an object
+        and make it discoverable later using a scanner. The original object is
+        preserved.
 
-            cfg = MyConfig(version=1)
-            cfg.conf('a', MyProxy(...))
-            cfg.conf('b', MyProxy(...))
+            mycfg = MyConfig(version=1)
 
-            @cfg
-            class MyWorkflow:
-                def __init__(self, a, b):
-                    pass
+            @mycfg
+            def x(..):
+                ...
 
             # ... and later
             scanner.scan()
@@ -58,30 +54,27 @@ class Config(object):
         venusian.attach(obj, callback, category=self.category)
         return obj
 
+    init = partial
 
-class WorkflowConfig(Config):
-    """A generic configuration object.
+    @property
+    def key(self):
+        """A unique identifier for this config used for registration."""
+        return self
 
-    Use conf to configure workflow implementation dependencies.
-    """
 
-    def __init__(self, rate_limit=64, deserialize_input=_identity,
+class Workflow(Activity):
+    """A generic workflow configuration object with dependencies."""
+
+    def __init__(self, deserialize_input=_identity,
                  serialize_result=_identity,
                  serialize_restart_input=_serialize_args):
-        """Initialize the config object.
+        """Initialize the workflow config object.
 
-        The rate_limit is used to limit the number of concurrent tasks. A value
-        of None means no rate limit. When the proxies are bound, a DescCounter
-        instance (the same) will be passed to each of them and can be used to
-        limit the number of total tasks scheduled.
-
-        The deserialize_input/serialize_result callables are used to
-        deserialize the initial input data and serialize the final result.
-        By default they are the identity functions.
+        The deserialize_input, serialize_result and serialize_restart_input
+        callables are used to deserialize the initial input data, serialize the
+        final result and serialize the restart arguments.
         """
-        super(WorkflowConfig, self).__init__(deserialize_input,
-                                             serialize_result)
-        self.rate_limit = rate_limit
+        super(Workflow, self).__init__(deserialize_input, serialize_result)
         self.serialize_restart_input = serialize_restart_input
         self.proxy_factory_registry = {}
 
@@ -97,136 +90,74 @@ class WorkflowConfig(Config):
         if dep_name in self.proxy_factory_registry:
             raise ValueError('Dependency name is already registered: %r' % dep_name)
 
-    def conf(self, dep_name, proxy_factory):
-        """Configure a proxy factory for a dependency."""
+    def conf_proxy(self, dep_name, proxy_factory):
+        """Set a proxy factory for a dependency name."""
         self._check_dep(dep_name)
         self.proxy_factory_registry[dep_name] = proxy_factory
 
-    def bind(self, context):
-        """Bind the current configuration to an execution context.
+    def init(self, impl_factory, *args, **kwargs):
+        """Instantiate the workflow factory object.
 
-        Returns a callable that can be used to instantiate workflow factories
-        passing proxies bound to this execution context.
+        Call each proxy with *args and **kwargs and instatiate the workflow
+        factory with the results.
         """
-        rate_limit = DescCounter(self.rate_limit)
-        kwargs = {}
+        wf_kwargs = {}
         for dep_name, proxy in self.proxy_factory_registry.iteritems():
-            kwargs[dep_name] = proxy.bind(context, rate_limit)
-        return lambda wf_factory: wf_factory(**kwargs)
+            wf_kwargs[dep_name] = proxy(*args, **kwargs)
+        return impl_factory(**wf_kwargs)
 
     def __repr__(self):
         klass = self.__class__.__name__
         deps = sorted(self.proxy_factory_registry.keys())
-        max_deps = 7
-        more_deps = len(deps) - max_deps
+        max_entries = 5
+        more_deps = len(deps) - max_entries
         if more_deps > 0:
-            deps = deps[:max_deps] + ['... and %s more' % more_deps]
+            deps = deps[:max_entries] + ['... and %s more' % more_deps]
         return '<%s deps=%s>' % (klass, ','.join(deps))
 
 
-class Workflow(object):
-    """Bind a config and a workflow factory together."""
-    def __init__(self, config, workflow_factory):
-        self.config = config
-        self.workflow_factory = workflow_factory
-
-    def key(self):
-        """Return an identifier for this workflow used for registration."""
-        raise NotImplementedError
-
-    def run(self, context):
-        """Run the workflow code.
-
-        Bind the config to the context and use it to instantiate and run a new
-        workflow instance.
-        """
-        conf = self.config
-        workflow_di = conf.bind(context)
-        try:
-            # If there are proxy calls in __init__ this raises SuspendTask
-            workflow = workflow_di(self.workflow_factory)
-        except SuspendTask:
-            context.flush()
-            return
-        except Exception as e:
-            logger.exception('Error in workflow init:')
-            context.fail(e)
-            return
-        deserialize_input = getattr(conf, 'deserialize_input', _identity)
-        try:
-            args, kwargs = deserialize_input(context.input)
-        except Exception as e:
-            logger.exception('Error while deserializing workflow input:')
-            context.fail(e)
-            return
-        try:
-            result = workflow.run(*args, **kwargs)
-        except SuspendTask:
-            context.flush()
-        except Exception as e:
-            logger.exception('Error while running:')
-            context.fail(e)
-        else:
-            if isinstance(result, _restart):
-                sri = getattr(conf, 'serialize_restart_input', _identity)
-                try:
-                    input_data = sri(*result.args, **result.kwargs)
-                except Exception as e:
-                    logger.exception('Error while serializing restart arguments:')
-                    context.fail(e)
-                else:
-                    context.restart(input_data)
-            else:
-                serialize_result = getattr(conf, 'serialize_result', _identity)
-                try:
-                    result = serialize_result(result)
-                except Exception as e:
-                    logger.exception('Error while serializing workflow result:')
-                    context.fail(e)
-                else:
-                    context.finish(result)
-
-    def __repr__(self):
-        klass = self.__class__.__name__
-        return "<%s %r %r>" % (klass, self.config, self.workflow_factory)
-
-
-class WorkflowRegistry(object):
-    """A factory for all registered workflows and their configs.
-
-    Register and/or detect workflows and their configuration. The registered
-    workflows can be instantiated and run by passing a context and the input
-    arguments.
-    """
+class Worker(object):
+    """A runner for all registered task implementations and their configs."""
 
     categories = []  # venusian categories to scan for
-    WorkflowFactory = Workflow
 
     def __init__(self):
         self.registry = {}
 
-    def register(self, config, workflow_factory):
-        """Register a configuration and a workflow factory.
-
-        It's an error to register the same name and version twice.
-        """
-        workflow = self.WorkflowFactory(config, workflow_factory)
-        key = workflow.key()
+    def register(self, config, impl_factory):
+        """Register a task configuration and an implementation."""
+        key = config.key
         if key in self.registry:
             raise ValueError('Implementation is already registered: %r' % key)
-        self.registry[key] = workflow
+        self.registry[key] = (config, impl_factory)
 
-    def __call__(self, key, context):
-        """Bind the corresponding config to the context and run the workflow.
-
-        Raise value error if no config is found, otherwise bind the config to
-        the context and use it to instantiate and run the workflow.
-        """
+    def __call__(self, key, input_data, *args, **kwargs):
+        if key not in self.registry:
+            logger.error("Colud not find implementation for key: %r", key)
+            return
+        config, impl_factory = self.registry[key]
+        impl = config.init(impl_factory, *args, **kwargs)
+        deserialize_input = getattr(config, 'deserialize_input', _identity)
         try:
-            workflow = self.registry[key]
-        except KeyError:
-            raise ValueError('No workflow implementation found: %r' % key)
-        workflow.run(context)
+            iargs, ikwargs = deserialize_input(input_data)
+        except Exception:
+            logger.exception('Error while deserializing input:')
+            raise
+        result = impl(*iargs, **ikwargs)
+        if isinstance(result, _restart): # If it's a restart return it
+            sri = getattr(config, 'serialize_restart_input', _identity)
+            try:
+                input_data = sri(*result.args, **result.kwargs)
+            except Exception:
+                logger.exception('Error while serializing restart input:')
+                raise
+            raise Restart(input_data)
+        serialize_result = getattr(config, 'serialize_result', _identity)
+        try:
+            return serialize_result(result)
+        except Exception:
+            logger.exception('Error while serializing result:')
+            raise
 
     def scan(self, package=None, ignore=None, level=0):
         """Scan for registered workflows and their configuration.
@@ -254,27 +185,13 @@ class WorkflowRegistry(object):
 
     def __repr__(self):
         klass = self.__class__.__name__
-        max_entries = 4
+        max_entries = 5
         entries = sorted(self.registry.values())
         more_entries = len(entries) - max_entries
         if more_entries > 0:
             entries = entries[:max_entries]
             return '<%s %r ... and %s more>' % (klass, entries, more_entries)
         return '<%s %r>' % (klass, entries)
-
-
-class DescCounter(object):
-    """A simple semaphore-like descendent counter."""
-    def __init__(self, to=None):
-        if to is None:
-            self.iterator = itertools.repeat(True)
-        else:
-            self.iterator = itertools.chain(itertools.repeat(True, to),
-                                            itertools.repeat(False))
-
-    def consume(self):
-        """Conusme one position; returns True if positions are available."""
-        return next(self.iterator)
 
 
 class ContextBoundProxy(object):
@@ -284,10 +201,9 @@ class ContextBoundProxy(object):
     scheduling logic. The real scheduling is dispatched to the proxy; this
     logic can be reused across different backends.
     """
-    def __init__(self, proxy, context, rate_limit=DescCounter()):
+    def __init__(self, proxy, context):
         self.proxy = proxy
         self.context = context
-        self.rate_limit = rate_limit
         self.call_number = 0
 
     def _call_key(self, retry_number):
@@ -532,6 +448,12 @@ class TaskError(Exception):
 
 class TaskTimedout(TaskError):
     """Raised by result when a task has timedout its execution."""
+
+
+class Restart(Exception):
+    """Raised if the workflow returns a restart."""
+    def __init__(self, input_data):
+        self.input_data = input_data
 
 
 def _short_circuit_on_args(a, kw):
