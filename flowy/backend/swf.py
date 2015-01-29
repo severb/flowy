@@ -404,7 +404,7 @@ class SWFActivityWorker(SWFWorker):
         except SuspendTask:
             logger.info('Suspending activity.')
         except Restart:
-            msg = 'Cannot user restart for activities.'
+            msg = 'Cannot restart activities.'
             logger.error(msg)
             context.fail(msg)
         except Exception as e:

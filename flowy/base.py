@@ -54,12 +54,12 @@ class Activity(object):
         venusian.attach(obj, callback, category=self.category)
         return obj
 
-    init = partial
-
     @property
     def key(self):
         """A unique identifier for this config used for registration."""
         return self
+
+    init = partial
 
 
 class Workflow(Activity):
@@ -92,19 +92,20 @@ class Workflow(Activity):
 
     def conf_proxy(self, dep_name, proxy_factory):
         """Set a proxy factory for a dependency name."""
+        # XXX: Introspect and make sure the arguments match
         self._check_dep(dep_name)
         self.proxy_factory_registry[dep_name] = proxy_factory
 
-    def init(self, impl_factory, *args, **kwargs):
+    def init(self, workflow_factory, *args, **kwargs):
         """Instantiate the workflow factory object.
 
         Call each proxy with *args and **kwargs and instatiate the workflow
         factory with the results.
         """
         wf_kwargs = {}
-        for dep_name, proxy in self.proxy_factory_registry.iteritems():
+        for dep_name, proxy in self.proxy_factory_registry.items():
             wf_kwargs[dep_name] = proxy(*args, **kwargs)
-        return impl_factory(**wf_kwargs)
+        return workflow_factory(**wf_kwargs)
 
     def __repr__(self):
         klass = self.__class__.__name__
@@ -124,59 +125,56 @@ class Worker(object):
     def __init__(self):
         self.registry = {}
 
-    def register(self, config, impl_factory):
-        """Register a task configuration and an implementation."""
+    def register(self, config, impl):
+        """Register a task configuration and an implementation.
+
+        Implementations can be executed later by calling Worker instances and
+        passing them a key. The key must have the same value the config.key had
+        at registration time.
+        """
         key = config.key
         if key in self.registry:
             raise ValueError('Implementation is already registered: %r' % key)
-        self.registry[key] = (config, impl_factory)
+        self.registry[key] = (config, impl)
 
     def __call__(self, key, input_data, *args, **kwargs):
+        """Execute the implementation identified by key passing the input_data.
+
+        The associated config is used to instantiate (config.init) the
+        implementation passing any *args and **kwargs.
+        The implementation instance is then called passing the deserialized
+        input_data.
+        """
         if key not in self.registry:
-            logger.error("Colud not find implementation for key: %r", key)
-            return
-        config, impl_factory = self.registry[key]
-        impl = config.init(impl_factory, *args, **kwargs)
-        deserialize_input = getattr(config, 'deserialize_input', _identity)
+            msg = "Colud not find implementation for key: %r" % key
+            logger.error(msg)
+            raise KeyError(msg)  # A subclass can do better in this case
+        config, impl = self.registry[key]
+        impl = config.init(impl, *args, **kwargs)
         try:
-            iargs, ikwargs = deserialize_input(input_data)
+            iargs, ikwargs = config.deserialize_input(input_data)
         except Exception:
             logger.exception('Error while deserializing input:')
             raise
         result = impl(*iargs, **ikwargs)
-        if isinstance(result, _restart): # If it's a restart return it
-            sri = getattr(config, 'serialize_restart_input', _identity)
-            try:
-                input_data = sri(*result.args, **result.kwargs)
-            except Exception:
-                logger.exception('Error while serializing restart input:')
-                raise
-            raise Restart(input_data)
-        serialize_result = getattr(config, 'serialize_result', _identity)
+        if isinstance(result, _restart):
+            raise Restart(result.args, result.kwargs)
         try:
-            return serialize_result(result)
+            return config.serialize_result(result)
         except Exception:
             logger.exception('Error while serializing result:')
             raise
 
     def scan(self, package=None, ignore=None, level=0):
-        """Scan for registered workflows and their configuration.
+        """Scan for registered implementations and their configuration.
 
         Use venusian to scan. By default it will scan the package of the scan
         caller but this can be changed using the package and ignore arguments.
         Their semantics is the same with the ones in venusian documentation.
 
         The level represents the additional stack frames to add to the caller
-        package identification code. This is useful when this call is wrapped
-        in another place like so:
-
-            def scan():
-                reg = WorkflowRegistry()
-                reg.scan(level=1)
-                return reg
-
-            # ... and later, in another package
-            reg = scan()
+        package identification code. This is useful when this call happens
+        inside another function.
         """
         scanner = venusian.Scanner(register=self.register)
         if package is None:
@@ -194,22 +192,76 @@ class Worker(object):
         return '<%s %r>' % (klass, entries)
 
 
-class ContextBoundProxy(object):
-    """A proxy bound to a context.
+class WorkflowWorker(Worker):
+    """A runner specialised on workflows. See Worker."""
+    def __call__(self, key, input_data, decision, execution_history):
+        """Run the workflow implementation identified by key.
+
+        The decision and execution_history are bound to the proxies.
+        The workflow implementation instance is then called by passing the
+        deserialized input_data. Finnaly, the actual work is delegated to the
+        decision object.
+        """
+        if key not in self.registry:
+            return  # Let it timeout, otherwise it will err
+        try:
+            s = super(WorkflowWorker, self)
+            serialized_result = s.__call__(key, input_data, decision,
+                                           execution_history)
+        except SuspendTask:
+            decision.flush()
+        except Restart as e:
+            config, _ = self.registry[key]
+            try:
+                restart_input = config.serialize_restart_input(e.args, e.kwags)
+            except Exception as e:
+                logger.exception("Error while serializing restart input:")
+                decision.fail(e)
+            else:
+                decision.restart(restart_input)
+        except Exception as e:
+            decision.fail(e)
+        else:
+            decision.finish(serialized_result)
+
+
+class ActivityWorker(Worker):
+    """A runner specialised on activities. See Worker."""
+    def __call__(self, key, input_data, decision):
+        """Run the activity implementation identified by key.
+
+        Similar with WorkflowWorker.__call__ but passes decision.heartbeat to
+        the implementation and doesn't use an execution_history.
+        """
+        if key not in self.registry:
+            return  # Let it timeout, otherwise it will err
+        try:
+            s = super(WorkflowWorker, self)
+            serialized_result = s.__call__(key, input_data, decision.heartbeat)
+        except SuspendTask:
+            logger.info('Suspending activity.')
+        except Restart:
+            msg = 'Cannot restart activities.'
+            logger.error(msg)
+            decision.fail(msg)
+        except Exception as e:
+            decision.fail(e)
+        else:
+            decision.finish(serialized_result)
+
+
+class BoundProxy(object):
+    """A proxy bound to a task_exec_history and a decision object.
 
     This is what gets passed as a dependency in a workflow and has most of the
-    scheduling logic. The real scheduling is dispatched to the proxy; this
-    logic can be reused across different backends.
+    scheduling logic that can be reused across different backends.
+    The real scheduling is dispatched to the decision object.
     """
-    def __init__(self, proxy, context):
-        self.proxy = proxy
-        self.context = context
+    def __init__(self, task_exec_history, task_decision, retry=(0,)):
+        self.task_exec_history = task_exec_history
+        self.task_decision = task_decision
+        self.retry = retry
         self.call_number = 0
-
-    def _call_key(self, retry_number):
-        r = "%s-%s-%s" % (self.proxy.identity, self.call_number, retry_number)
-        self.call_number += 1
-        return r
 
     def __call__(self, *args, **kwargs):
         """Consult the execution history for results or schedule a new task.
@@ -239,64 +291,39 @@ class ContextBoundProxy(object):
               any result objects that might be in the arguments and schedule it
               for execution.
         """
-        context = self.context
+        task_exec_history = self.task_exec_history
+        call_number = self.call_number
+        self.call_number += 1
         result = Placeholder()
-        retry = getattr(self.proxy, 'retry', [0])
-        for retry_number, delay in enumerate(retry):
-            call_key = self._call_key(retry_number)
-            if context.is_timeout(call_key):
+        for retry_number, delay in enumerate(self.retry):
+            if task_exec_history.is_timeout(call_number, retry_number):
                 continue
-            if context.is_running(call_key):
+            if task_exec_history.is_running(call_number, retry_number):
+                break  # result = Placehloder
+            if task_exec_history.has_result(call_number, retry_number):
+                value = task_exec_history.result(call_number, retry_number)
+                order = task_exec_history.order(call_number, retry_number)
+                result = Result(value, order)
                 break
-            if context.is_result(call_key):
-                value, order = context.result(call_key)
-                # Make the result deserialization lazy; in case of
-                # deserialization errors the result will fail the workflow
-                d_r = getattr(self.proxy, 'deserialize_result', _identity)
-                d_r = partial(d_r, value)
-                result = Result(context, d_r, order)
+            if task_exec_history.is_error(call_number, retry_number):
+                error = task_exec_history.error(call_number, retry_number)
+                order = task_exec_history.order(call_number, retry_number)
+                result = Error(error, order)
                 break
-            if context.is_error(call_key):
-                err, order = context.error(call_key)
-                result = Error(err, order)
-                break
-            errors, placeholders = _short_circuit_on_args(args, kwargs)
+            errors, placeholders, args, kwargs = _scan_args(args, kwargs)
             if errors:
                 result = wait_first(errors)
-            elif not placeholders:
-                if not self.rate_limit.consume():
-                    # Enough tasks have been scheduled for this decision
-                    break
-                try:
-                    # This can fail if a result can't deserialize.
-                    a, kw = _extract_results(args, kwargs)
-                except SuspendTask:
-                    # In this case the result will fail the workflow and
-                    # raise SuspendTask to act as a Placeholder.
-                    # If that's the case return a Placeholder since the
-                    # workflow was already failed.
-                    break
-                # really schedule
-                try:
-                    # Let the proxy serialize the args as there might be
-                    # other things (like timers) than need to be scheduled
-                    # before the real task is scheduled
-                    self.proxy.schedule(context, call_key, delay, *a, **kw)
-                except Exception as e:
-                    # If there are (input serialization) errors, fail the
-                    # workflow and pretend the task is running
-                    logger.exception('Cannot schedule task:')
-                    context.fail(e)
-            break
+                break
+            if placeholders:
+                break  # result = Placeholder
+            self.task_decision.schedule(call_number, retry_number, delay,
+                                        args, kwargs)
+            break  # result = Placeholder
         else:
             # No retries left, it must be a timeout
-            order = context.timeout(call_key)
+            order = task_exec_history.order(call_number, retry_number)
             result = Timeout(order)
         return result
-
-    def __repr__(self):
-        klass = self.__class__.__name__
-        return "<%s %r %r>" % (klass, self.context, self.proxy)
 
 
 class TaskResult(object):
@@ -329,7 +356,7 @@ class TaskResult(object):
 
         This method may raise SuspendTask. See .result() for more details.
         """
-        raise NotImplementedError
+        return self
 
     def is_error(self):
         """Test if this result represents an error."""
@@ -337,34 +364,13 @@ class TaskResult(object):
 
 
 class Result(TaskResult):
-    """The result of a finished task.
-
-    A note about this class: even if .wait() doesn't block (by raising
-    SuspendTask) this doesn't guarantee that .result() call won't block.
-    Actually, if the result can't be deserialized this class will act as if
-    it's a placeholder when calling .result().
-    """
-    def __init__(self, context, lazy_result, order):
-        self._context = context
-        self._lazy_result = lazy_result
+    """The result of a finished task."""
+    def __init__(self, result, order):
+        self._result = result
         self._order = order
 
     def result(self):
-        if not hasattr(self, '_result_cache'):
-            try:
-                self._result_cache = self._lazy_result()
-            except Exception as e:
-                logger.exception('Error while deserializing result:')
-                self._result_cache = e
-                self._context.fail(e)
-        if isinstance(self._result_cache, Exception):
-            # Act as if the result is not available
-            raise SuspendTask
-        else:
-            return self._result_cache
-
-    def wait(self):
-        return self
+        return self._result
 
 
 class Error(Result):
@@ -452,33 +458,37 @@ class TaskTimedout(TaskError):
 
 class Restart(Exception):
     """Raised if the workflow returns a restart."""
-    def __init__(self, input_data):
-        self.input_data = input_data
+    def __init__(self, args, kwargs):
+        self.args = args
+        self.kwargs = kwargs
 
 
-def _short_circuit_on_args(a, kw):
-    args = a + tuple(kw.values())
-    errs, placeholders = [], False
+def _scan_args(args, kwargs):
+    new_args, new_kwargs, errs = [], {}, []
     for result in args:
         if isinstance(result, TaskResult):
             try:
                 if result.is_error():
                     errs.append(result)
+                else:
+                    new_args.append(result.result())
             except SuspendTask:
-                placeholders = True
-    return errs, placeholders
+                return [], True, args, kwargs
+        else:
+            new_args.append(result)
+    for key, result in kwargs.items():
+        if isinstance(result, TaskResult):
+            try:
+                if result.is_error():
+                    errs.append(result)
+                else:
+                    new_kwargs[key] = result.result()
+            except SuspendTask:
+                return [], True, args, kwargs
+        else:
+            new_kwargs[key] = result
+    return errs, False, new_args, new_kwargs
 
-
-def _extract_results(a, kw):
-    aa = [_result_or_value(r) for r in a]
-    kwkw = dict((k, _result_or_value(v)) for k, v in kw.iteritems())
-    return aa, kwkw
-
-
-def _result_or_value(result):
-    if isinstance(result, TaskResult):
-        return result.result()
-    return result
 
 
 _restart = namedtuple('restart', 'args kwargs')
