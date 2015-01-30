@@ -14,10 +14,8 @@ from boto.swf.layer1 import Layer1
 from boto.swf.layer1_decisions import Layer1Decisions
 
 from flowy.base import Activity
-from flowy.base import ContextBoundProxy
-from flowy.base import Restart
+from flowy.base import BoundProxy
 from flowy.base import setup_default_logger
-from flowy.base import SuspendTask
 from flowy.base import Worker
 from flowy.base import Workflow
 
@@ -133,9 +131,11 @@ class SWFWorkflow(SWFConfigMixin, Workflow):
         super(SWFWorkflow, self).__init__(deserialize_input, serialize_result,
                                           serialize_restart_input)
 
-    def init(self, impl_factory, context):
+    def init(self, workflow_factory, execution_history, decision):
         rate_limit = DescCounter(int(self.rate_limit))
-        return super(SWFWorkflow, self).init(impl_factory, context, rate_limit)
+        return super(SWFWorkflow, self).init(workflow_factory,
+                                             execution_history,
+                                             decision, rate_limit)
 
     def set_alternate_name(self, name):
         new_config = super(SWFWorkflow, self).set_alternate_name(name)
@@ -366,54 +366,25 @@ class SWFWorker(Worker):
         for workflow in self.registry.values():
             workflow.register_remote(layer1, domain)
 
-    def register(self, config, impl_factory):
-        config = config.set_alternate_name(impl_factory)
-        super(SWFWorker, self).register(config, impl_factory)
+    def register(self, config, impl):
+        config = config.set_alternate_name(impl)
+        super(SWFWorker, self).register(config, impl)
 
 
 class SWFWorkflowWorker(SWFWorker):
 
     categories = ['swf_workflow']
 
-    def __call__(self, key, input_data, context):
-        try:
-            s = super(SWFWorkflowWorker, self)
-            serialized_result = s.__call__(key, input_data, context)
-        except SuspendTask:
-            context.flush()
-        except Restart as e:
-            context.restart(e.input_data)
-        except Exception as e:
-            context.fail(e)
-        else:
-            context.finish(serialized_result)
-
     def run_forever(self):
         """Run the worker forever."""
-        pass  # XXX: start the worker here
 
 
 class SWFActivityWorker(SWFWorker):
 
     categories = ['swf_activity']
 
-    def __call__(self, key, input_data, context):
-        try:
-            s = super(SWFWorkflowWorker, self)
-            serialized_result = s.__call__(key, input_data, context.heartbeat)
-        except SuspendTask:
-            logger.info('Suspending activity.')
-        except Restart:
-            msg = 'Cannot restart activities.'
-            logger.error(msg)
-            context.fail(msg)
-        except Exception as e:
-            context.fail(e)
-        else:
-            context.finish(serialized_result)
-
     def run_forever(self):
-        pass
+        """Run the worker forever."""
 
 
 class SWFActivityProxy(object):
