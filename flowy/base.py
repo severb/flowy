@@ -441,7 +441,7 @@ def _i_or_args(result, results):
     return (result,) + results
 
 
-class SuspendTask(Exception):
+class SuspendTask(BaseException):
     """Special exception raised by result and used for flow control."""
 
 
@@ -451,13 +451,6 @@ class TaskError(Exception):
 
 class TaskTimedout(TaskError):
     """Raised by result when a task has timedout its execution."""
-
-
-class Restart(Exception):
-    """Raised if the workflow returns a restart."""
-    def __init__(self, args, kwargs):
-        self.args = args
-        self.kwargs = kwargs
 
 
 def _scan_args(args, kwargs):
@@ -485,7 +478,6 @@ def _scan_args(args, kwargs):
         else:
             new_kwargs[key] = result
     return errs, False, new_args, new_kwargs
-
 
 
 _restart = namedtuple('restart', 'args kwargs')

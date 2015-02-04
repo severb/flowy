@@ -414,9 +414,13 @@ class SWFActivityProxy(object):
         self.serialize_input = serialize_input
         self.deserialize_result = deserialize_result
 
-    def __call__(self, context, rate_limit):
-        """Return a ContextBoundProxy instance that calls back schedule."""
-        return ContextBoundProxy(self, context)
+    def __call__(self, decison, config, execution_history):
+        """Return a BoundProxy instance."""
+        task_execution_history = SWFTaskExecutionHistory(execution_history,
+                                                         self.identity)
+        task_decision = SWFTaskDecision(execution_history, rate_limit)
+        return BoundProxy(config, task_execution_history, task_decision,
+                          self.retry)
 
     def schedule(self, context, call_key, delay, *args, **kwargs):
         """Schedule the activity in the execution context.
@@ -631,6 +635,62 @@ def load_events(event_iter):
             running.remove(_timer_call_key(eid))
             results[eid] = None
     return running, timedout, results, errors, order
+
+
+class SWFWorkflowHistory(object):
+    def __init__(self, running, timedout, results, errors, order):
+        self.r = running
+        self.t = timedout
+        self.r = results
+        self.e = errors
+        self.o = order
+
+    def is_running(self, call_key):
+        return str(call_key) in self.r
+
+    def order(self, call_key):
+        return self.o.index(str(call_key))
+
+    def has_result(self, call_key):
+        return str(call_key) in self.r
+
+    def result(self, call_key):
+        return self.r[str(call_key)]
+
+    def is_error(self, call_key):
+        return str(call_key) in self.e
+
+    def error(self, call_key):
+        return self.e[str(call_key)]
+
+    def is_timeout(self, call_key):
+        return str(call_key) in self.t
+
+    def is_timer_ready(self, call_key):
+        return _timer_key(call_key) in self.r
+
+
+class SWFTaskExecutionHistory(object):
+    def __init__(self, exec_history, identity):
+        self.exec_history = exec_history
+        self.identity = identity
+
+    def k(self, call_number, retry_number):
+        return '%s-%s-%s' % (self.identity, call_number, retry_number)
+
+    def __getattr__(self, fname):
+        """Compute the key and delegate to exec_history."""
+        if fname not in ['is_running', 'is_timeout', 'is_error', 'has_result',
+                         'result', 'order', 'error']:
+            return super(SWFTaskExecutionHistory, self).__getattr__(fname)
+
+        delegate_to = getattr(self.exec_history, fname)
+
+        def clos(call_number, retry_number):
+            return delegate_to(self.k(call_number, retry_number))
+
+        setattr(self, fname, clos)  # cache it
+        return clos
 
 
 class SWFWorkflowContext(object):
