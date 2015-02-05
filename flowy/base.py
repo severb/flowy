@@ -105,7 +105,7 @@ class Workflow(Activity):
         """
         wf_kwargs = {}
         for dep_name, proxy in self.proxy_factory_registry.items():
-            wf_kwargs[dep_name] = proxy(decision, self, *args, **kwargs)
+            wf_kwargs[dep_name] = proxy(decision, *args, **kwargs)
         return workflow_factory(**wf_kwargs)
 
     def __repr__(self):
@@ -158,7 +158,7 @@ class Worker(object):
             return  # Let it timeout
         config, impl = self.registry[key]
         try:
-            # Pass the decision and the config automatically
+            # Pass the decision and any other arguments
             impl = config.init(impl, decision, *args, **kwargs)
         except SuspendTask:
             decision.flush()

@@ -88,7 +88,6 @@ class SWFConfigMixin(object):
         return str(self.name), str(self.version)
 
 
-
 class SWFWorkflow(SWFConfigMixin, Workflow):
     """A configuration object suited for Amazon SWF Workflows.
 
@@ -131,11 +130,10 @@ class SWFWorkflow(SWFConfigMixin, Workflow):
         super(SWFWorkflow, self).__init__(deserialize_input, serialize_result,
                                           serialize_restart_input)
 
-    def init(self, workflow_factory, execution_history, decision):
+    def init(self, workflow_factory, decision, execution_history):
         rate_limit = DescCounter(int(self.rate_limit))
-        return super(SWFWorkflow, self).init(workflow_factory,
-                                             execution_history,
-                                             decision, rate_limit)
+        return super(SWFWorkflow, self).init(workflow_factory, decision,
+                                             execution_history, rate_limit)
 
     def set_alternate_name(self, name):
         new_config = super(SWFWorkflow, self).set_alternate_name(name)
@@ -271,7 +269,6 @@ class SWFWorkflow(SWFConfigMixin, Workflow):
 
 
 class SWFActivity(SWFConfigMixin, Activity):
-
     category = 'swf_activity'  # venusian category used for this type of confs
 
     def __init__(self, version, name=None, default_task_list=None,
@@ -360,7 +357,6 @@ class SWFActivity(SWFConfigMixin, Activity):
 
 
 class SWFWorker(Worker):
-
     def register_remote(self, layer1, domain):
         """Register or check compatibility of all configs in Amazon SWF."""
         for workflow in self.registry.values():
@@ -372,16 +368,25 @@ class SWFWorker(Worker):
 
 
 class SWFWorkflowWorker(SWFWorker):
-
     categories = ['swf_workflow']
+
+    # Be explicit about what arguments are expected
+    def __call__(self, key, input_data, decision, execution_history):
+        # One extra argument for execution_history
+        super(SWFWorkflowWorker, self).__call__(key, input_data, decision,
+                                                execution_history)
 
     def run_forever(self):
         """Run the worker forever."""
 
 
 class SWFActivityWorker(SWFWorker):
-
     categories = ['swf_activity']
+
+    #Be explicit about what arguments are expected
+    def __call__(self, key, input_data, decision):
+        # No extra arguments are used
+        super(SWFActivityWorker, self).__call__(key, input_data, decision)
 
     def run_forever(self):
         """Run the worker forever."""
@@ -414,34 +419,12 @@ class SWFActivityProxy(object):
         self.serialize_input = serialize_input
         self.deserialize_result = deserialize_result
 
-    def __call__(self, decison, config, execution_history):
+    def __call__(self, decision, execution_history, rate_limit):
         """Return a BoundProxy instance."""
-        task_execution_history = SWFTaskExecutionHistory(execution_history,
-                                                         self.identity)
-        task_decision = SWFTaskDecision(execution_history, rate_limit)
-        return BoundProxy(config, task_execution_history, task_decision,
-                          self.retry)
-
-    def schedule(self, context, call_key, delay, *args, **kwargs):
-        """Schedule the activity in the execution context.
-
-        If any delay is set use SWF timers before really scheduling anything.
-        """
-        if int(delay) > 0 and not context.timer_ready(call_key):
-            context.schedule_timer(call_key, delay)
-            return
-        try:
-            # Serialization errors are also handled outside but the logging
-            # messages are more specific here
-            input_data = self.serialize_input(*args, **kwargs)
-        except Exception as e:
-            logger.exception('Error while serializing activity input:')
-            context.fail(e)
-        else:
-            context.schedule_activity(
-                call_key, self.name, self.version, input_data, self.task_list,
-                self.heartbeat, self.schedule_to_close, self.schedule_to_start,
-                self.start_to_close)
+        task_exe_h = SWFTaskExecutionHistory(execution_history, self.identity)
+        task_dec = SWFActivityTaskDecision(
+            decision, execution_history, self, rate_limit)
+        return BoundProxy(self, task_exe_h, task_dec, self.retry)
 
 
 class SWFWorkflowProxy(object):
@@ -460,22 +443,206 @@ class SWFWorkflowProxy(object):
         self.serialize_input = serialize_input
         self.deserialize_result = deserialize_result
 
-    def bind(self, context, rate_limit=DescCounter()):
-        return ContextBoundProxy(self, context, rate_limit)
+    def __call__(self, decision, execution_history, rate_limit):
+        """Return a BoundProxy instance."""
+        task_exe_h = SWFTaskExecutionHistory(execution_history, self.identity)
+        task_dec = SWFWorkflowTaskDecision(
+            decision, execution_history, self, rate_limit)
+        return BoundProxy(self, task_exe_h, task_dec, self.retry)
 
-    def schedule(self, context, call_key, delay, *args, **kwargs):
-        if int(delay) > 0 and not context.timer_ready(call_key):
-            return context.schedule_timer(call_key, delay)
+
+class SWFExecutionHistory(object):
+    def __init__(self, running, timedout, results, errors, order):
+        self.r = running
+        self.t = timedout
+        self.r = results
+        self.e = errors
+        self.o = order
+
+    def is_running(self, call_key):
+        return str(call_key) in self.r
+
+    def order(self, call_key):
+        return self.o.index(str(call_key))
+
+    def has_result(self, call_key):
+        return str(call_key) in self.r
+
+    def result(self, call_key):
+        return self.r[str(call_key)]
+
+    def is_error(self, call_key):
+        return str(call_key) in self.e
+
+    def error(self, call_key):
+        return self.e[str(call_key)]
+
+    def is_timeout(self, call_key):
+        return str(call_key) in self.t
+
+    def is_timer_ready(self, call_key):
+        return _timer_key(call_key) in self.r
+
+
+class SWFTaskExecutionHistory(object):
+    def __init__(self, exec_history, identity):
+        self.exec_history = exec_history
+        self.identity = identity
+
+    def k(self, call_number, retry_number):
+        return _task_key(self.identity, call_number, retry_number)
+
+    def __getattr__(self, fname):
+        """Compute the key and delegate to exec_history."""
+        if fname not in ['is_running', 'is_timeout', 'is_error', 'has_result',
+                         'result', 'order', 'error']:
+            return super(SWFTaskExecutionHistory, self).__getattr__(fname)
+
+        delegate_to = getattr(self.exec_history, fname)
+
+        def clos(call_number, retry_number):
+            return delegate_to(self.k(call_number, retry_number))
+
+        setattr(self, fname, clos)  # cache it
+        return clos
+
+
+class SWFWorkflowDecision(object):
+    def __init__(self, layer1, token, name, version, task_list,
+                 decision_duration, workflow_duration, tags, child_policy,
+                 running, timedout, results, errors, order):
+        self.layer1 = layer1
+        self.token = token
+        self.task_list = task_list
+        self.decision_duration = decision_duration
+        self.workflow_duration = workflow_duration
+        self.tags = tags
+        self.child_policy = child_policy
+        self.decisions = Layer1Decisions()
+        self.closed = False
+
+    def fail(self, reason):
+        """Fail the workflow and flush.
+
+        Any other decisions queued are cleared.
+        The reason is truncated if too large.
+        """
+        decisions = self.decisions = Layer1Decisions()
+        decisions.fail_workflow_execution(reason=str(reason)[:_REASON_SIZE])
+        self.flush()
+
+    def flush(self):
+        """Flush the decisions; no other decisions can be sent after that."""
+        if self.closed:
+            return
+        self.closed = True
         try:
-            input_data = self.serialize_input(*args, **kwargs)
-        except Exception as e:
-            logger.exception('Error while serializing sub-workflow input:')
-            context.fail(e)
+            self.layer1.respond_decision_task_completed(
+                task_token=str(self.token), decisions=self.decisions._data)
+        except SWFResponseError:
+            logger.exception('Error while sending the decisions:')
+            # ignore the error and let the decision timeout and retry
+
+    def restart(self, input_data):
+        """Restart the workflow and flush.
+
+        Any other decisions queued are cleared.
+        """
+        decisions = self.decisions = Layer1Decisions()
+        decisions.continue_as_new_workflow_execution(
+            start_to_close_timeout=_str_or_none(self.decision_duration),
+            execution_start_to_close_timeout=_str_or_none(self.workflow_duration),
+            task_list=_str_or_none(self.task_list),
+            input=str(input_data)[:_INPUT_SIZE],
+            tag_list=_tags(self.tags),
+            child_policy=_cp_encode(self.child_policy))
+        self.flush()
+
+    def finish(self, result):
+        """Finish the workflow execution and flush.
+
+        Any other decisions queued are cleared.
+        """
+        decisions = self.decisions = Layer1Decisions()
+        result = str(result)
+        if len(result) > _RESULT_SIZE:
+            self.fail("Result too large: %s/%s" % (len(result), _RESULT_SIZE))
         else:
-            context.schedule_workflow(call_key, self.name, self.version,
-                                      input_data, self.task_list,
-                                      self.workflow_duration,
-                                      self.decision_duration)
+            decisions.complete_workflow_execution(str(result)[:_RESULT_SIZE])
+            self.flush()
+
+    def schedule_timer(self, call_key, delay):
+        """Schedule a timer. This is used to delay execution of tasks."""
+        call_key = _timer_key(call_key)
+        self.decisions.start_timer(timer_id=str(call_key),
+                                   start_to_fire_timeout=str(delay))
+
+    def schedule_activity(self, call_key, name, version, input_data, task_list,
+                          heartbeat, schedule_to_close, schedule_to_start,
+                          start_to_close):
+        """Schedule an activity execution."""
+        self.decisions.schedule_activity_task(
+            str(call_key), str(name), str(version),
+            heartbeat_timeout=_str_or_none(heartbeat),
+            schedule_to_close_timeout=_str_or_none(schedule_to_close),
+            schedule_to_start_timeout=_str_or_none(schedule_to_start),
+            start_to_close_timeout=_str_or_none(start_to_close),
+            task_list=_str_or_none(task_list),
+            input=str(input_data))
+
+    def schedule_workflow(self, call_key, name, version, input_data, task_list,
+                          workflow_duration, decision_duration):
+        """Schedule a workflow execution."""
+        call_key = _subworkflow_key(call_key)
+        self.decisions.start_child_workflow_execution(
+            str(name), str(version), str(call_key),
+            task_start_to_close_timeout=_str_or_none(decision_duration),
+            execution_start_to_close_timeout=_str_or_none(workflow_duration),
+            task_list=_str_or_none(task_list),
+            input=str(input_data))
+
+
+class SWFWorkflowTaskDecision(object):
+    def __init__(self, decision, execution_history, proxy, rate_limit):
+        self.decision = decision
+        self.execution_history = execution_history
+        self.proxy = proxy
+        self.rate_limit = rate_limit
+
+    def fail(self, reason):
+        self.decision.fail(reason)
+
+    def schedule(self, call_number, retry_number, delay, input_data):
+        if not self.rate_limit.consume():
+            return
+        task_key = _task_key(self.proxy.identity, call_number, retry_number)
+        if delay:
+            timer_key = _timer_key(task_key)
+            if self.execution_history.has_result(timer_key):
+                self._schedule(task_key, input_data)
+            elif not self.execution_history.is_running(timer_key):
+                self.decision.schedule_timer(timer_key, delay)
+        else:
+            self._schedule(task_key, input_data)
+
+    def _schedule(self, task_key, input_data):
+        self.decision.schedule_workflow(
+            task_key, self.proxy.name, self.proxy.version, input_data,
+            self.proxy.task_list, self.proxy.workflow_duration,
+            self.proxy.decision_duration)
+
+
+class SWFActivityTaskDecision(SWFWorkflowTaskDecision):
+    def _schedule(self, task_key, input_data):
+        self.decision.schedule_activity(
+            task_key, self.proxy.name, self.proxy.version, input_data,
+            self.proxy.task_list, self.proxy.heartbeat,
+            self.proxy.schedule_to_close, self.proxy.schedule_to_start,
+            self.proxy.start_to_close)
+
+
+class SWFActivityDecision(object):
+    pass
 
 
 def poll_next_decision(layer1, domain, task_list, identity=None):
@@ -637,170 +804,6 @@ def load_events(event_iter):
     return running, timedout, results, errors, order
 
 
-class SWFWorkflowHistory(object):
-    def __init__(self, running, timedout, results, errors, order):
-        self.r = running
-        self.t = timedout
-        self.r = results
-        self.e = errors
-        self.o = order
-
-    def is_running(self, call_key):
-        return str(call_key) in self.r
-
-    def order(self, call_key):
-        return self.o.index(str(call_key))
-
-    def has_result(self, call_key):
-        return str(call_key) in self.r
-
-    def result(self, call_key):
-        return self.r[str(call_key)]
-
-    def is_error(self, call_key):
-        return str(call_key) in self.e
-
-    def error(self, call_key):
-        return self.e[str(call_key)]
-
-    def is_timeout(self, call_key):
-        return str(call_key) in self.t
-
-    def is_timer_ready(self, call_key):
-        return _timer_key(call_key) in self.r
-
-
-class SWFTaskExecutionHistory(object):
-    def __init__(self, exec_history, identity):
-        self.exec_history = exec_history
-        self.identity = identity
-
-    def k(self, call_number, retry_number):
-        return '%s-%s-%s' % (self.identity, call_number, retry_number)
-
-    def __getattr__(self, fname):
-        """Compute the key and delegate to exec_history."""
-        if fname not in ['is_running', 'is_timeout', 'is_error', 'has_result',
-                         'result', 'order', 'error']:
-            return super(SWFTaskExecutionHistory, self).__getattr__(fname)
-
-        delegate_to = getattr(self.exec_history, fname)
-
-        def clos(call_number, retry_number):
-            return delegate_to(self.k(call_number, retry_number))
-
-        setattr(self, fname, clos)  # cache it
-        return clos
-
-
-class SWFWorkflowContext(object):
-    def __init__(self, layer1, token, name, version, input_data,
-                 task_list, decision_duration, workflow_duration, tags,
-                 child_policy, running, timedout, results, errors, order):
-        self.layer1 = layer1
-        self.token = token
-        self.name = name
-        self.version = version
-        self.input = input_data
-        self.task_list = task_list
-        self.decision_duration = decision_duration
-        self.workflow_duration = workflow_duration
-        self.tags = tags
-        self.child_policy = child_policy
-        self.running = running
-        self.timedout = timedout
-        self.results = results
-        self.errors = errors
-        self.order = order
-        self.decisions = Layer1Decisions()
-        self.closed = False
-
-    def is_running(self, call_key):
-        return str(call_key) in self.running
-
-    def is_result(self, call_key):
-        return str(call_key) in self.results
-
-    def result(self, call_key):
-        return self.results[str(call_key)], self.order.index(str(call_key))
-
-    def is_error(self, call_key):
-        return str(call_key) in self.errors
-
-    def error(self, call_key):
-        return self.errors[str(call_key)], self.order.index(str(call_key))
-
-    def is_timeout(self, call_key):
-        return str(call_key) in self.timedout
-
-    def timeout(self, call_key):
-        return self.order.index(str(call_key))
-
-    def timer_ready(self, call_key):
-        return _timer_key(call_key) in self.results
-
-    def fail(self, reason):
-        decisions = self.decisions = Layer1Decisions()
-        decisions.fail_workflow_execution(reason=str(reason)[:_REASON_SIZE])
-        self.flush()
-
-    def flush(self):
-        if self.closed:
-            return
-        self.closed = True
-        try:
-            self.layer1.respond_decision_task_completed(
-                task_token=str(self.token), decisions=self.decisions._data)
-        except SWFResponseError:
-            logger.exception('Error while sending the decisions:')
-            # ignore the error and let the decision timeout and retry
-
-    def restart(self, input_data):
-        decisions = self.decisions = Layer1Decisions()
-        decisions.continue_as_new_workflow_execution(
-            start_to_close_timeout=_str_or_none(self.decision_duration),
-            execution_start_to_close_timeout=_str_or_none(self.workflow_duration),
-            task_list=_str_or_none(self.task_list),
-            input=str(input_data)[:_INPUT_SIZE],
-            tag_list=_tags(self.tags),
-            child_policy=_cp_encode(self.child_policy))
-        self.flush()
-
-    def finish(self, result):
-        decisions = self.decisions = Layer1Decisions()
-        decisions.complete_workflow_execution(str(result)[:_RESULT_SIZE])
-        self.flush()
-
-    # Used by SWFProxy instances
-
-    def schedule_timer(self, call_key, delay):
-        call_key = _timer_key(call_key)
-        self.decisions.start_timer(timer_id=str(call_key),
-                                   start_to_fire_timeout=str(delay))
-
-    def schedule_activity(self, call_key, name, version, input_data, task_list,
-                          heartbeat, schedule_to_close, schedule_to_start,
-                          start_to_close):
-        self.decisions.schedule_activity_task(
-            str(call_key), str(name), str(version),
-            heartbeat_timeout=_str_or_none(heartbeat),
-            schedule_to_close_timeout=_str_or_none(schedule_to_close),
-            schedule_to_start_timeout=_str_or_none(schedule_to_start),
-            start_to_close_timeout=_str_or_none(start_to_close),
-            task_list=_str_or_none(task_list),
-            input=str(input_data))
-
-    def schedule_workflow(self, call_key, name, version, input_data, task_list,
-                          workflow_duration, decision_duration):
-        call_key = _subworkflow_key(call_key)
-        self.decisions.start_child_workflow_execution(
-            str(name), str(version), str(call_key),
-            task_start_to_close_timeout=_str_or_none(decision_duration),
-            execution_start_to_close_timeout=_str_or_none(workflow_duration),
-            task_list=_str_or_none(task_list),
-            input=str(input_data))
-
-
 def start_swf_workflow_worker(domain, task_list, layer1=None, reg_remote=True,
                               package=None, ignore=None, setup_log=True,
                               identity=None, registry=None):
@@ -882,8 +885,6 @@ class SWFWorkflowStarter(object):
         return really_start
 
 
-
-
 class DescCounter(object):
     """A simple semaphore-like descendent counter."""
     def __init__(self, to=None):
@@ -960,3 +961,6 @@ def _tags(tags):
     if tags is None:
         return None
     return list(set(str(t) for t in tags))[:5]
+
+def _task_key(identity, call_number, retry_number):
+    return '%s-%s-%s' % (identity, call_number, retry_number)
