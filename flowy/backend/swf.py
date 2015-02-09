@@ -85,7 +85,7 @@ class SWFConfigMixin(object):
         """Use the name and the version to identify this config."""
         if self.name is None:
             raise RuntimeError('Name is not set.')
-        return str(self.name), str(self.version)
+        return _proxy_key(self.name, self.version)
 
 
 class SWFWorkflow(SWFConfigMixin, Workflow):
@@ -359,8 +359,8 @@ class SWFActivity(SWFConfigMixin, Activity):
 class SWFWorker(Worker):
     def register_remote(self, layer1, domain):
         """Register or check compatibility of all configs in Amazon SWF."""
-        for workflow in self.registry.values():
-            workflow.register_remote(layer1, domain)
+        return all(workflow.register_remote(layer1, domain)
+                   for workflow in self.registry.values())
 
     def register(self, config, impl):
         config = config.set_alternate_name(impl)
@@ -376,8 +376,37 @@ class SWFWorkflowWorker(SWFWorker):
         super(SWFWorkflowWorker, self).__call__(key, input_data, decision,
                                                 execution_history)
 
-    def run_forever(self):
-        """Run the worker forever."""
+    def run_forever(self, domain, task_list, layer1=None, setup_log=True,
+                    identity=None):
+        """Start an endless single threaded/single process worker loop.
+
+        The worker polls endlessly for new decisions from the specified domain
+        and task list and runs them.
+
+        If reg_remote is set, all registered workflow are registered remotely.
+
+        An identity can be set to track this worker in the SWF console,
+        otherwise a default identity is generated from this machine domain and
+        process pid.
+
+        If setup_log is set, a default configuration for the logger is loaded.
+
+        A custom SWF client can be passed in layer1, otherwise a default client
+        is used.
+
+        """
+        if setup_log:
+            setup_default_logger()
+        identity = identity if identity is not None else _default_identity()
+        identity = str(identity)[:_IDENTITY_SIZE]
+        layer1 = layer1 if layer1 is not None else Layer1()
+        try:
+            while 1:
+                key, input_data, exec_history, decision = poll_next_decision(
+                    layer1, domain, task_list, identity)
+                self(key, input_data, decision, exec_history)
+        except KeyboardInterrupt:
+            pass
 
 
 class SWFActivityWorker(SWFWorker):
@@ -388,8 +417,34 @@ class SWFActivityWorker(SWFWorker):
         # No extra arguments are used
         super(SWFActivityWorker, self).__call__(key, input_data, decision)
 
-    def run_forever(self):
-        """Run the worker forever."""
+    def run_forever(self, domain, task_list, layer1=None, setup_log=True,
+                    identity=None):
+        """Same as SWFWorkflowWorker.run_forever but for activities."""
+        if setup_log:
+            setup_default_logger()
+        identity = identity if identity is not None else _default_identity()
+        identity = str(identity)[:_IDENTITY_SIZE]
+        layer1 = layer1 if layer1 is not None else Layer1()
+        try:
+            while 1:
+                swf_response = {}
+                while ('taskToken' not in swf_response
+                       or not swf_response['taskToken']):
+                    try:
+                        swf_response = layer1.poll_for_activity_task(
+                            task_list=task_list)
+                    except SWFResponseError:
+                        # add a delay before retrying?
+                        logger.exception('Error while polling for activities:')
+
+                at = swf_response['activityType']
+                key = _proxy_key(at['name'], at['version'])
+                input_data = swf_response['input']
+                token = swf_response['taskToken']
+                decision = SWFActivityDecision(layer1, token)
+                self(key, input_data, decision)
+        except KeyboardInterrupt:
+            pass
 
 
 class SWFActivityProxy(object):
@@ -509,8 +564,7 @@ class SWFTaskExecutionHistory(object):
 
 class SWFWorkflowDecision(object):
     def __init__(self, layer1, token, name, version, task_list,
-                 decision_duration, workflow_duration, tags, child_policy,
-                 running, timedout, results, errors, order):
+                 decision_duration, workflow_duration, tags, child_policy):
         self.layer1 = layer1
         self.token = token
         self.task_list = task_list
@@ -568,7 +622,7 @@ class SWFWorkflowDecision(object):
         if len(result) > _RESULT_SIZE:
             self.fail("Result too large: %s/%s" % (len(result), _RESULT_SIZE))
         else:
-            decisions.complete_workflow_execution(str(result)[:_RESULT_SIZE])
+            decisions.complete_workflow_execution(result)
             self.flush()
 
     def schedule_timer(self, call_key, delay):
@@ -642,7 +696,76 @@ class SWFActivityTaskDecision(SWFWorkflowTaskDecision):
 
 
 class SWFActivityDecision(object):
-    pass
+    def __init__(self, layer1, token):
+        self.layer1 = layer1
+        self.token = token
+
+    def heartbeat(self):
+        try:
+            self.layer1.record_activity_task_heartbeat(
+                task_token=str(self.token))
+        except SWFResponseError:
+            logger.exception('Error while sending the heartbeat:')
+            return False
+        return True
+
+    def fail(self, reason):
+        try:
+            self.layer1.respond_activity_task_failed(
+                reason=str(reason)[:256], task_token=str(self.token))
+        except SWFResponseError:
+            logger.exception('Error while failing the activity:')
+            return False
+        return True
+
+    def flush(self):
+        pass
+
+    def restart(self, input_data):
+        self.fail("Can't restart activities.")
+
+    def finish(self, result):
+        result = str(result)
+        if len(result) > _RESULT_SIZE:
+            self.fail("Result too large: %s/%s" % (len(result), _RESULT_SIZE))
+        try:
+            self.layer1.respond_activity_task_completed(
+                result=result, task_token=str(self.token))
+        except SWFResponseError:
+            logger.exception('Error while finishing the activity:')
+            return False
+        return True
+
+
+def SWFWorkflowStarter(domain, name, version, layer1=None, task_list=None,
+                       decision_duration=None, workflow_duration=None,
+                       wid=None, tags=None, serialize_input=_serialize_input,
+                       child_policy=None):
+    """Prepare to start a new workflow, returns a callable.
+
+    The callable should be called only with the input arguments and will
+    start the workflow.
+    """
+    def really_start(*args, **kwargs):
+        """Use this function to start a workflow by passing in the args."""
+        l1 = layer1 if layer1 is not None else Layer1()
+        l_wid = wid  # closue hack
+        if l_wid is None:
+            l_wid = uuid.uuid4()
+        try:
+            r = l1.start_workflow_execution(
+                str(domain), str(l_wid), str(name), str(version),
+                task_list=_str_or_none(task_list),
+                execution_start_to_close_timeout=_str_or_none(workflow_duration),
+                task_start_to_close_timeout=_str_or_none(decision_duration),
+                input=str(serialize_input(*args, **kwargs))[:_INPUT_SIZE],
+                child_policy=_cp_encode(child_policy),
+                tag_list=_tags(tags))
+        except SWFResponseError:
+            logger.exception('Error while starting the workflow:')
+            return None
+        return r['runId']
+    return really_start
 
 
 def poll_next_decision(layer1, domain, task_list, identity=None):
@@ -668,9 +791,12 @@ def poll_next_decision(layer1, domain, task_list, identity=None):
     except _PaginationError:
         # There's nothing better to do than to retry
         return poll_next_decision(layer1, task_list, domain, identity)
-    return SWFWorkflowContext(layer1, token, name, version, input_data,
-                      task_list, decision_duration, workflow_duration, tags,
-                      child_policy, running, timedout, results, errors, order)
+    execution_history = SWFExecutionHistory(running, timedout, results, errors,
+                                            order)
+    decision = SWFWorkflowDecision(layer1, token, name, version, task_list,
+                                   decision_duration, workflow_duration, tags,
+                                   child_policy)
+    return _proxy_key(name, version), input_data, execution_history, decision
 
 def poll_first_page(layer1, domain, task_list, identity=None):
     """Return the response from loading the first page.
@@ -685,6 +811,7 @@ def poll_first_page(layer1, domain, task_list, identity=None):
         except SWFResponseError:
             logger.exception('Error while polling for decisions:')
     return swf_response
+
 
 def poll_response_page(layer1, domain, task_list, token, identity=None):
     """Return a specific page. In case of errors retry a number of times."""
@@ -701,6 +828,7 @@ def poll_response_page(layer1, domain, task_list, token, identity=None):
         raise _PaginationError()
     return swf_response
 
+
 def events(layer1, domain, task_list, first_page, identity=None):
     """Load pages one by one and generate all events found."""
     page = first_page
@@ -711,6 +839,7 @@ def events(layer1, domain, task_list, first_page, identity=None):
             break
         page = poll_response_page(layer1, domain, task_list,
                                   page['nextPageToken'], identity)
+
 
 def load_events(event_iter):
     """Combine all events in their order.
@@ -804,87 +933,6 @@ def load_events(event_iter):
     return running, timedout, results, errors, order
 
 
-def start_swf_workflow_worker(domain, task_list, layer1=None, reg_remote=True,
-                              package=None, ignore=None, setup_log=True,
-                              identity=None, registry=None):
-    """Start an endless single threaded/single process workflow worker loop.
-
-    The worker polls endlessly for new decisions from the specified domain and
-    task list and runs them.
-
-    If no registry is passed, a new one is created and used to scan for
-    workflows. Package and ignore can be used to control the scanning.
-
-    If reg_remote is set, all registered workflow are registered remotely.
-
-    An identity can be set to track this worker in the SWF console, otherwise
-    a default identity is generated from this machine domain and process pid.
-
-    If setup_log is set, a default configuration for the logger is loaded.
-
-    A custom SWF client can be passed in layer1, otherwise a default client is
-    instantiated and used.
-    """
-    if setup_log:
-        setup_default_logger()
-    identity = identity if identity is not None else _default_identity()
-    identity = str(identity)[:_IDENTITY_SIZE]
-    layer1 = layer1 if layer1 is not None else Layer1()
-    if registry is None:
-        registry = SWFWorkflowRegistry()
-        # Add an extra level when scanning because of this function
-        registry.scan(package=package, ignore=ignore, level=1)
-    if reg_remote:
-        try:
-            registry.register_remote(layer1, domain)
-        except _RegistrationError:
-            logger.exception('Not all workflows could be registered:')
-            print('Not all workflows could be registered.', file=sys.stderr)
-            sys.exit(1)
-    try:
-        while 1:
-            context = poll_next_decision(layer1, domain, task_list, identity)
-            registry(context)  # execute the workflow
-    except KeyboardInterrupt:
-        pass
-
-
-class SWFWorkflowStarter(object):
-    """A simple workflow starter."""
-    def __init__(self, layer1=None, setup_log=True):
-        self.layer1 = layer1 if layer1 is not None else Layer1()
-        if setup_log:
-            setup_default_logger()
-        self.registry = {}
-
-    def start(self, domain, name, version, task_list=None,
-              decision_duration=None, workflow_duration=None, wid=None,
-              tags=None, serialize_input=_serialize_input, child_policy=None):
-        """Prepare to start a new workflow, returns a callable.
-
-        The callable should be called only with the input arguments and will
-        start the workflow.
-        """
-        def really_start(*args, **kwargs):
-            """Use this function to start a workflow by passing in the args."""
-            l_wid = wid  # closue hack
-            if l_wid is None:
-                l_wid = uuid.uuid4()
-            try:
-                self.layer1.start_workflow_execution(
-                    str(domain), str(l_wid), str(name), str(version),
-                    task_list=_str_or_none(task_list),
-                    execution_start_to_close_timeout=_str_or_none(workflow_duration),
-                    task_start_to_close_timeout=_str_or_none(decision_duration),
-                    input=str(serialize_input(*args, **kwargs))[:_INPUT_SIZE],
-                    child_policy=_cp_encode(child_policy),
-                    tag_list=_tags(tags))
-            except SWFResponseError:
-                return False
-            return True
-        return really_start
-
-
 class DescCounter(object):
     """A simple semaphore-like descendent counter."""
     def __init__(self, to=None):
@@ -964,3 +1012,7 @@ def _tags(tags):
 
 def _task_key(identity, call_number, retry_number):
     return '%s-%s-%s' % (identity, call_number, retry_number)
+
+
+def _proxy_key(name, version):
+    return str(name), str(version)
