@@ -1,11 +1,8 @@
-from __future__ import print_function
-
 import itertools
 import json
 import logging
 import os
 import socket
-import sys
 import uuid
 
 from boto.exception import SWFResponseError
@@ -20,7 +17,7 @@ from flowy.base import Worker
 from flowy.base import Workflow
 
 
-__all__ = 'SWFWorkflow SWFWorkflowWorker SWFActivity SWFActivityWorker'.split()
+__all__ = 'SWFWorkflow SWFWorkflowWorker SWFActivity SWFActivityWorker SWFWorkflowStarter'.split()
 
 
 logger = logging.getLogger(__name__)
@@ -359,11 +356,11 @@ class SWFActivity(SWFConfigMixin, Activity):
 class SWFWorker(Worker):
     def register_remote(self, layer1, domain):
         """Register or check compatibility of all configs in Amazon SWF."""
-        return all(workflow.register_remote(layer1, domain)
-                   for workflow in self.registry.values())
+        return all(config.register_remote(layer1, domain)
+                   for config, _ in self.registry.values())
 
     def register(self, config, impl):
-        config = config.set_alternate_name(impl)
+        config = config.set_alternate_name(impl.__name__)
         super(SWFWorker, self).register(config, impl)
 
 
@@ -377,7 +374,7 @@ class SWFWorkflowWorker(SWFWorker):
                                                 execution_history)
 
     def run_forever(self, domain, task_list, layer1=None, setup_log=True,
-                    identity=None):
+                    register_remote=True, identity=None):
         """Start an endless single threaded/single process worker loop.
 
         The worker polls endlessly for new decisions from the specified domain
@@ -400,6 +397,8 @@ class SWFWorkflowWorker(SWFWorker):
         identity = identity if identity is not None else _default_identity()
         identity = str(identity)[:_IDENTITY_SIZE]
         layer1 = layer1 if layer1 is not None else Layer1()
+        if register_remote:
+            self.register_remote(layer1, domain)
         try:
             while 1:
                 key, input_data, exec_history, decision = poll_next_decision(
@@ -418,13 +417,15 @@ class SWFActivityWorker(SWFWorker):
         super(SWFActivityWorker, self).__call__(key, input_data, decision)
 
     def run_forever(self, domain, task_list, layer1=None, setup_log=True,
-                    identity=None):
+                    register_remote=True, identity=None):
         """Same as SWFWorkflowWorker.run_forever but for activities."""
         if setup_log:
             setup_default_logger()
         identity = identity if identity is not None else _default_identity()
         identity = str(identity)[:_IDENTITY_SIZE]
         layer1 = layer1 if layer1 is not None else Layer1()
+        if register_remote:
+            self.register_remote(layer1, domain)
         try:
             while 1:
                 swf_response = {}
@@ -432,7 +433,7 @@ class SWFActivityWorker(SWFWorker):
                        or not swf_response['taskToken']):
                     try:
                         swf_response = layer1.poll_for_activity_task(
-                            task_list=task_list)
+                            domain=domain, task_list=task_list)
                     except SWFResponseError:
                         # add a delay before retrying?
                         logger.exception('Error while polling for activities:')
@@ -508,35 +509,35 @@ class SWFWorkflowProxy(object):
 
 class SWFExecutionHistory(object):
     def __init__(self, running, timedout, results, errors, order):
-        self.r = running
-        self.t = timedout
-        self.r = results
-        self.e = errors
-        self.o = order
+        self.running = running
+        self.timedout = timedout
+        self.results = results
+        self.errors = errors
+        self.order_ = order
 
     def is_running(self, call_key):
-        return str(call_key) in self.r
+        return str(call_key) in self.running
 
     def order(self, call_key):
-        return self.o.index(str(call_key))
+        return self.order_.index(str(call_key))
 
     def has_result(self, call_key):
-        return str(call_key) in self.r
+        return str(call_key) in self.results
 
     def result(self, call_key):
-        return self.r[str(call_key)]
+        return self.results[str(call_key)]
 
     def is_error(self, call_key):
-        return str(call_key) in self.e
+        return str(call_key) in self.errors
 
     def error(self, call_key):
-        return self.e[str(call_key)]
+        return self.errors[str(call_key)]
 
     def is_timeout(self, call_key):
-        return str(call_key) in self.t
+        return str(call_key) in self.timedout
 
     def is_timer_ready(self, call_key):
-        return _timer_key(call_key) in self.r
+        return _timer_key(call_key) in self.results
 
 
 class SWFTaskExecutionHistory(object):

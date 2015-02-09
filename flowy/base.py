@@ -97,7 +97,7 @@ class Workflow(Activity):
         self._check_dep(dep_name)
         self.proxy_factory_registry[dep_name] = proxy_factory
 
-    def init(self, decision, workflow_factory, *args, **kwargs):
+    def init(self, workflow_factory, decision, *args, **kwargs):
         """Instantiate the workflow factory object.
 
         Call each proxy with *args and **kwargs and instatiate the workflow

@@ -1,7 +1,7 @@
 import argparse
 import sys
 
-from flowy import workflow_starter
+from flowy import SWFWorkflowStarter
 
 
 def main():
@@ -12,13 +12,16 @@ def main():
     parser.add_argument("--task-list")
     parser.add_argument("--decision-duration", type=int, default=None)
     parser.add_argument("--workflow-duration", type=int, default=None)
+    parser.add_argument("--child-policy", type=str, default=None)
     parser.add_argument('args', nargs=argparse.REMAINDER)
 
     args = parser.parse_args()
 
-    wf = workflow_starter(args.domain, args.name, args.version, args.task_list,
-                          args.decision_duration, args.workflow_duration)
-    return not wf.start(*args.args)  # 0 is success
+    starter = SWFWorkflowStarter(args.domain, args.name, args.version,
+                                 args.task_list, args.decision_duration,
+                                 args.workflow_duration,
+                                 child_policy=args.child_policy)
+    return not starter(*args.args)  # 0 is success
 
 
 if __name__ == '__main__':
