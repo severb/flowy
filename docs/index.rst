@@ -21,7 +21,7 @@ A toy map-reduce workflow with Flowy looks like this::
 
         def run(self, n=5):
                 squares = map(self.square, range(n))
-                return reduce(self.sum, wait_all(squares))
+                return parallel_reduce(self.sum, squares)
 
 In the above example we compute the sum of the squares for a range of numbers
 with the help of two activities (which make up a workflow): one that computes
