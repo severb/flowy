@@ -457,11 +457,16 @@ def parallel_reduce(f, iterable):
     O-----------/
 
     The iterable must have at least one element, otherwise a ValueError will be
-    rasied. Note that there is no initializer as the order of the operations
-    and of the argumets are not deterministic.
+    raised. Note that there is no initializer as the order of the operations
+    and of the arguments are not deterministic.
+
+    The improvement over the built-in reduce() is obtained by starting the
+    reduction as soon as any two results are available. The number of reduce
+    operations is always constant and equal to len(iterable) - 1 regardless of
+    how the reduction graph looks like.
 
     XXX: The order of the arguments can be preserved and the function
-    restrictions relaxed only to associtavitity by keeping track of result
+    restrictions relaxed only to associativity by keeping track of result
     creation order not only finish order.
 
     """
