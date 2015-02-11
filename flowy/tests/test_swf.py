@@ -1,11 +1,31 @@
+import unittest
+
 from flowy.tests.workflows import *
 
 
-def TestCase(workflow, test_cases):
-    pass
+def TCase(workflow, test_cases):
+
+    class Test(unittest.TestCase):
+        pass
+
+    for i, test_case in enumerate(test_cases):
+
+        def t(test_case):
+            def test(self):
+                assert False
+            return test
+
+        test = t(test_case)
+        test_name = 'test_case_%s' % i
+        test.__name__ = test_name
+        setattr(Test, test_name, test)
+
+    class_name = 'Test%s' % workflow.__name__
+    Test.__name__ = class_name
+    globals()[class_name] = Test
 
 
-TestCase(QuickReturn, [
+TCase(QuickReturn, [
     {
         'input_args': [10],
         'expected': {
@@ -27,7 +47,7 @@ TestCase(QuickReturn, [
 ])
 
 
-TestCase(Closure, [
+TCase(Closure, [
     {
         'input_args': [1],
         'expected': {
@@ -37,7 +57,7 @@ TestCase(Closure, [
 ])
 
 
-TestCase(Arguments, [
+TCase(Arguments, [
     {
         'input_args': ['a', 'b'],
         'expected': {
@@ -60,7 +80,7 @@ TestCase(Arguments, [
 ])
 
 
-TestCase(Dependency, [
+TCase(Dependency, [
     {
         'input_args': [5],
         'expected': {
@@ -103,7 +123,7 @@ TestCase(Dependency, [
 ])
 
 
-TestCase(Parallel, [
+TCase(Parallel, [
     {
         'input_args': [4],
         'expected': {
