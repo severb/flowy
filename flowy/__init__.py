@@ -4,6 +4,7 @@ from flowy.backend.swf import SWFWorkflow
 from flowy.backend.swf import SWFWorkflowStarter
 from flowy.backend.swf import SWFWorkflowWorker
 
+from flowy.base import parallel_reduce
 from flowy.base import restart
 from flowy.base import TaskError
 from flowy.base import TaskTimedout

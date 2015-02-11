@@ -477,10 +477,11 @@ class SWFActivityProxy(object):
 
     def __call__(self, decision, execution_history, rate_limit):
         """Return a BoundProxy instance."""
-        task_exe_h = SWFTaskExecutionHistory(execution_history, self.identity)
-        task_dec = SWFActivityTaskDecision(
-            decision, execution_history, self, rate_limit)
-        return BoundProxy(self, task_exe_h, task_dec, self.retry)
+        task_exec_hist = SWFTaskExecutionHistory(execution_history,
+                                                 self.identity)
+        task_decision = SWFActivityTaskDecision(decision, execution_history,
+                                                self, rate_limit)
+        return BoundProxy(self, task_exec_hist, task_decision, self.retry)
 
 
 class SWFWorkflowProxy(object):
@@ -501,10 +502,11 @@ class SWFWorkflowProxy(object):
 
     def __call__(self, decision, execution_history, rate_limit):
         """Return a BoundProxy instance."""
-        task_exe_h = SWFTaskExecutionHistory(execution_history, self.identity)
-        task_dec = SWFWorkflowTaskDecision(
-            decision, execution_history, self, rate_limit)
-        return BoundProxy(self, task_exe_h, task_dec, self.retry)
+        task_exec_hist = SWFTaskExecutionHistory(execution_history,
+                                                 self.identity)
+        task_decision = SWFWorkflowTaskDecision(decision, execution_history,
+                                                self, rate_limit)
+        return BoundProxy(self, task_exec_hist, task_decision, self.retry)
 
 
 class SWFExecutionHistory(object):

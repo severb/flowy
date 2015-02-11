@@ -1,3 +1,4 @@
+import heapq
 import logging
 import sys
 from collections import namedtuple
@@ -6,7 +7,7 @@ from keyword import iskeyword
 
 import venusian
 
-__all__ = 'restart TaskError TaskTimedout wait_first wait_n wait_all'.split()
+__all__ = 'restart TaskError TaskTimedout wait_first wait_n wait_all parallel_reduce'.split()
 
 
 logger = logging.getLogger(__package__)
@@ -14,6 +15,7 @@ logger = logging.getLogger(__package__)
 
 _identity = lambda x: x
 _serialize_input = lambda *args, **kwargs: (args, kwargs)
+_sentinel = object()
 
 
 class Activity(object):
@@ -433,6 +435,72 @@ def wait_all(result, *results):
     i = list(_i_or_args(result, results))
     for result in wait_n(len(i), i):
         yield result
+
+
+def parallel_reduce(f, iterable):
+    """Like reduce() but optimized to maximize paralellel execution.
+
+    The reduce function must be associative and commutative.
+
+    The reduction will start as soon as two results are available, regardless
+    of their "position". For example, the following reduction is possible:
+
+    O--------------\
+                    O----\
+    O--------------/      \
+    O--------\             \
+              O-----\       O
+    O--------/       \     /
+    O----\            O---/
+          O-----\    /
+    O----/       O--/
+    O-----------/
+
+    The iterable must have at least one element, otherwise a ValueError will be
+    rasied. Note that there is no initializer as the order of the operations
+    and of the argumets are not deterministic.
+
+    XXX: The order of the arguments can be preserved and the function
+    restrictions relaxed only to associtavitity by keeping track of result
+    creation order not only finish order.
+
+    """
+    results, non_results = [], []
+    for x in iterable:
+        if isinstance(x, TaskResult):
+            results.append(x)
+        else:
+            non_results.append(x)
+    i = iter(non_results)
+    reminder = _sentinel
+    for x in i:
+        try:
+            y = next(i)
+            results.append(f(x, y))
+        except StopIteration:
+            reminder = x
+            if not results:  # len(iterable) == 1
+                # Wrap the value in a result for uniform interface
+                return Result(x, -1, 'xxx')
+    if not results:  # len(iterable) == 0
+        raise ValueError('parallel_reduce() iterable cannot be empty')
+    heapq.heapify(results)
+    return _parallel_reduce_recurse(f, results, reminder)
+
+
+def _parallel_reduce_recurse(f, results, reminder=_sentinel):
+    if reminder is not _sentinel:
+        new_result = f(reminder, heapq.heappop(results))
+        heapq.heappush(results, new_result)
+        return _parallel_reduce_recurse(f, results)
+    x = heapq.heappop(results)
+    try:
+        y = heapq.heappop(results)
+    except IndexError:
+        return x
+    new_result = f(x, y)
+    heapq.heappush(results, new_result)
+    return _parallel_reduce_recurse(f, results)
 
 
 def _i_or_args(result, results):
