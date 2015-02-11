@@ -438,7 +438,7 @@ def wait_all(result, *results):
 
 
 def parallel_reduce(f, iterable):
-    """Like reduce() but optimized to maximize paralellel execution.
+    """Like reduce() but optimized to maximize parallel execution.
 
     The reduce function must be associative and commutative.
 
