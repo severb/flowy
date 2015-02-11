@@ -480,8 +480,11 @@ def parallel_reduce(f, iterable):
         except StopIteration:
             reminder = x
             if not results:  # len(iterable) == 1
-                # Wrap the value in a result for uniform interface
-                return Result(x, -1, 'xxx')
+                if isinstance(x, TaskResult):
+                    return x
+                else:
+                    # Wrap the value in a result for uniform interface
+                    return Result(x, -1)
     if not results:  # len(iterable) == 0
         raise ValueError('parallel_reduce() iterable cannot be empty')
     heapq.heapify(results)
