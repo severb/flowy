@@ -7,7 +7,8 @@ class QuickReturn(object):
 
 
 def Closure():
-    def run(self, n):
+    def run(n):
+        print 'aici' * 100
         return n
     return run
 
