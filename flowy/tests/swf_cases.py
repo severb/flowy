@@ -11,6 +11,8 @@ DependencyWorkflow = SWFWorkflow(version=1)
 DependencyWorkflow.conf_activity('inc', version=1)
 ParallelWorkflow = SWFWorkflow(version=1)
 ParallelWorkflow.conf_activity('inc', version=1)
+ParallelWorkflowRL = SWFWorkflow(name='ParallelRL', version=1, rate_limit=3)
+ParallelWorkflowRL.conf_activity('inc', version=1)
 
 worker = SWFWorkflowWorker()
 worker.register(QuickReturnWorkflow, QuickReturn)
@@ -18,6 +20,7 @@ worker.register(ClosureWorkflow, Closure)
 worker.register(ArgumentsWorkflow, Arguments)
 worker.register(DependencyWorkflow, Dependency)
 worker.register(ParallelWorkflow, Parallel)
+worker.register(ParallelWorkflowRL, Parallel)
 
 
 cases = [{
@@ -168,5 +171,34 @@ cases = [{
     },
     'expected': {
         'schedule': [],
+    },
+}, {
+    'name': 'ParallelRL',
+    'version': 1,
+    'input_args': [4],
+    'expected': {
+        'schedule': [
+            {
+                'type': 'activity',
+                'call_key': 'inc-0-0',
+                'name': 'inc',
+                'version': 1,
+                'input_args': [0],
+            },
+            {
+                'type': 'activity',
+                'call_key': 'inc-1-0',
+                'name': 'inc',
+                'version': 1,
+                'input_args': [1],
+            },
+            {
+                'type': 'activity',
+                'call_key': 'inc-2-0',
+                'name': 'inc',
+                'version': 1,
+                'input_args': [2],
+            },
+        ],
     },
 }]
