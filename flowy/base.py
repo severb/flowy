@@ -178,6 +178,9 @@ class Worker(object):
                     result = impl(*iargs, **ikwargs)
                 except SuspendTask:
                     decision.flush()
+                except Exception as e:
+                    logger.exception('Error while running the task:')
+                    decision.fail(e)
                 else:
                     if isinstance(result, _restart):
                         serialize_restart = getattr(

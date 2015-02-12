@@ -18,7 +18,7 @@ class DummyDecision(object):
     def fail(self, reason):
         if self.result is not None:
             return
-        self.result = {'fail': reason}
+        self.result = {'fail': str(reason)}
 
     def flush(self):
         if self.result is not None:
@@ -139,12 +139,17 @@ for i, case in enumerate(cases):
             decision = DummyDecision()
             results = case.get('results', {})
             results = dict((k, str(v)) for k, v in results.items())
+            order = (
+                list(case.get('results', {}).keys()) 
+                + list(case.get('errors', {}).keys())
+                + list(case.get('timedout', []))
+            )
             execution_history = SWFExecutionHistory(
                 case.get('running', []),
                 case.get('timedout', []),
                 results,
                 case.get('errors', {}),
-                list(case.get('results', {}).keys()),
+                order,
             )
             worker(key, input_data, decision, execution_history)
             decision.assert_equals(case.get('expected'))

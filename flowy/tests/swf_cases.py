@@ -108,6 +108,19 @@ cases = [{
         ],
     },
 }, {
+    'name': 'Dependency',
+    'version': 1,
+    'input_args': [5],
+    'results': {
+        'inc-0-0': 1,
+    },
+    'errors': {
+        'inc-1-0': 'err!',
+    },
+    'expected': {
+        'fail': 'err!',
+    },
+}, {
     'name': 'Parallel',
     'version': 1,
     'input_args': [5],
