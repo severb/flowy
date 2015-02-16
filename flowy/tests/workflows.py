@@ -8,7 +8,6 @@ class QuickReturn(object):
 
 def Closure():
     def run(n):
-        print 'aici' * 100
         return n
     return run
 
@@ -34,7 +33,7 @@ class Parallel(object):
         self.inc = inc
 
     def __call__(self, n):
-        return map(self.inc, range(n))
+        return list(map(self.inc, range(n)))
 
 
 class UhnadledException(object):

@@ -148,7 +148,7 @@ class SWFWorkflow(SWFConfigMixin, Workflow):
     def set_alternate_name(self, name):
         new_config = super(SWFWorkflow, self).set_alternate_name(name)
         if new_config is not self:
-            for dep_name, proxy in self.proxy_factory_registry.iteritems():
+            for dep_name, proxy in self.proxy_factory_registry.items():
                 new_config.conf_proxy(dep_name, proxy)
         return new_config
 

@@ -149,7 +149,7 @@ for i, case in enumerate(cases):
                 case.get('timedout', []),
                 results,
                 case.get('errors', {}),
-                order,
+                case.get('order', order),
             )
             worker(key, input_data, decision, execution_history)
             decision.assert_equals(case.get('expected'))
