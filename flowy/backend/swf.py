@@ -4,6 +4,7 @@ import logging
 import os
 import socket
 import uuid
+from functools import partial
 
 from boto.exception import SWFResponseError
 from boto.swf.exceptions import SWFTypeAlreadyExistsError
@@ -12,6 +13,7 @@ from boto.swf.layer1_decisions import Layer1Decisions
 
 from flowy.base import Activity
 from flowy.base import BoundProxy
+from flowy.base import ResultProxy
 from flowy.base import setup_default_logger
 from flowy.base import Worker
 from flowy.base import Workflow
@@ -28,8 +30,19 @@ _INPUT_SIZE = _RESULT_SIZE = 32768
 _IDENTITY_SIZE = _REASON_SIZE = 256
 
 
-_serialize_input = lambda *args, **kwargs: json.dumps((args, kwargs))
-_serialize_result = json.dumps
+class JSONProxyEncoder(json.JSONEncoder):
+    # The pure Python implementation uses isinstance() which work on proxy
+    # objects but the C implementation uses a stricter check that won't work on
+    # proxy objects.
+    def default(self, obj):
+        if isinstance(obj, ResultProxy):
+            return obj.__wrapped__
+        return json.JSONEncoder.default(self, obj)
+
+
+_serialize_input = lambda *args, **kwargs: json.dumps((args, kwargs),
+                                                      cls=JSONProxyEncoder)
+_serialize_result = partial(json.dumps, cls=JSONProxyEncoder)
 _deserialize_input = _deserialize_result = json.loads
 
 

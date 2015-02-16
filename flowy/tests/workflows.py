@@ -26,7 +26,7 @@ class Dependency(object):
         accumulator = self.inc(0)
         for _ in range(n):
             accumulator = self.inc(accumulator)
-        return accumulator.result()
+        return accumulator
 
 
 class Parallel(object):
@@ -34,8 +34,7 @@ class Parallel(object):
         self.inc = inc
 
     def __call__(self, n):
-        results = map(self.inc, range(n))
-        return [r.result() for r in results]
+        return map(self.inc, range(n))
 
 
 class UhnadledException(object):
@@ -48,7 +47,7 @@ class ActivityException(object):
         self.err = err
 
     def __call__(self):
-        return self.err().result()
+        return self.err()
 
 
 class ActivityExceptionPropagation(object):
@@ -59,8 +58,7 @@ class ActivityExceptionPropagation(object):
     def __call__(self):
         a = self.err()
         b = self.inc(a)
-        c = self.inc(b)
-        return c.result()
+        return self.inc(b)
 
 
 class Recurse(object):
@@ -69,7 +67,7 @@ class Recurse(object):
 
     def __call__(self, recurse=True):
         if recurse:
-            return self.myself(recurse=False).result()
+            return self.myself(recurse=False)
         else:
             return 1
 

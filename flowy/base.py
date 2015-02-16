@@ -6,6 +6,8 @@ from functools import partial
 from keyword import iskeyword
 
 import venusian
+from lazy_object_proxy.slots import Proxy
+
 
 __all__ = 'restart TaskError TaskTimedout wait_first wait_n wait_all parallel_reduce'.split()
 
@@ -164,20 +166,26 @@ class Worker(object):
             impl = config.init(impl, decision, *args, **kwargs)
         except SuspendTask:
             decision.flush()
+        except TaskError as e:
+            logger.exception('Unhandled task error while initializing the task:')
+            decision.fail(e)
         except Exception as e:
-            logger.exception("Error while running task:")
+            logger.exception('Error while initializing the task:')
             decision.fail(e)
         else:
             try:
                 iargs, ikwargs = config.deserialize_input(input_data)
             except Exception as e:
-                logger.exception('Error while deserializing input:')
+                logger.exception('Error while deserializing the task input:')
                 decision.fail(e)
             else:
                 try:
                     result = impl(*iargs, **ikwargs)
                 except SuspendTask:
                     decision.flush()
+                except TaskError as e:
+                    logger.exception('Unhandled task error while running the task:')
+                    decision.fail(e)
                 except Exception as e:
                     logger.exception('Error while running the task:')
                     decision.fail(e)
@@ -188,16 +196,29 @@ class Worker(object):
                         try:
                             r_i = serialize_restart(*result.args,
                                                     **result.kwargs)
-                        except Exception as e:
+                        except TaskError as e:
+                            logger.exception('Unhandled task error in restart arguments:')
                             decision.fail(e)
+                        except Exception as e:
+                            logger.exception('Error while serializing restart arguments:')
+                            decision.fail(e)
+                        except SuspendTask:
+                            # There are placeholders in the restart args
+                            decision.flush()
                         else:
                             decision.restart(r_i)
                     else:
                         try:
                             result = config.serialize_result(result)
+                        except TaskError as e:
+                            logger.exception('Unhandled task error in result:')
+                            decision.fail(e)
                         except Exception as e:
                             logger.exception('Error while serializing result:')
                             decision.fail(e)
+                        except SuspendTask:
+                            # There are placeholders in the result
+                            decision.flush()
                         else:
                             decision.finish(result)
 
@@ -279,14 +300,12 @@ class BoundProxy(object):
               another error.
             * If any placeholders in arguments, don't do anything because there
               are unresolved dependencies.
-            * Finally, if all the arguments look OK, extract the values from
-              any result objects that might be in the arguments and schedule it
-              for execution.
+            * Finally, if all the arguments look OK, schedule it for execution.
         """
         task_exec_history = self.task_exec_history
         call_number = self.call_number
         self.call_number += 1
-        result = Placeholder()
+        r = placeholder()
         for retry_number, delay in enumerate(self.retry):
             if task_exec_history.is_timeout(call_number, retry_number):
                 continue
@@ -300,16 +319,16 @@ class BoundProxy(object):
                 except Exception as e:
                     self.task_decision.fail(e)
                     break  # result = Placeholder
-                result = Result(value, order)
+                r = result(value, order)
                 break
             if task_exec_history.is_error(call_number, retry_number):
-                error = task_exec_history.error(call_number, retry_number)
+                err = task_exec_history.error(call_number, retry_number)
                 order = task_exec_history.order(call_number, retry_number)
-                result = Error(error, order)
+                r = error(err, order)
                 break
-            errors, placeholders, args, kwargs = _scan_args(args, kwargs)
+            errors, placeholders = _scan_args(args, kwargs)
             if errors:
-                result = wait_first(errors)
+                r = wait_first(errors)
                 break
             if placeholders:
                 break  # result = Placeholder
@@ -324,25 +343,29 @@ class BoundProxy(object):
         else:
             # No retries left, it must be a timeout
             order = task_exec_history.order(call_number, retry_number)
-            result = Timeout(order)
-        return result
+            r = timeout(order)
+        return r
 
 
-class TaskResult(object):
-    """Base class for all different types of task results."""
-    _order = None
+def result(value, order):
+    return ResultProxy(TaskResult(value, order))
 
-    def __lt__(self, other):
-        if not isinstance(other, TaskResult):
-            return NotImplemented
-        if self._order is None:
-            return False
-        if other._order is None:
-            return True
-        return self._order < other._order
 
-    def result(self):
-        """Get the deserialized result of the task.
+def error(reason, order):
+    return ResultProxy(TaskResult(TaskError(reason), order))
+
+
+def timeout(order):
+    return ResultProxy(TaskResult(TaskTimedout, order))
+
+
+def placeholder():
+    return ResultProxy(TaskResult())
+
+
+class ResultProxy(Proxy):
+    def wait(self):
+        """Wait for a task to complete.
 
         This method can raise 3 different types of exceptions:
         * TaskError - if the task failed for whatever reason. This usually means
@@ -351,59 +374,39 @@ class TaskResult(object):
         * SuspendTask - This is an internal exception used by Flowy as control
           flow and should not be handled by user code.
         """
-        raise NotImplementedError
-
-    def wait(self):
-        """Wait for a task to complete.
-
-        This method may raise SuspendTask. See .result() for more details.
-        """
-        return self
-
-    def is_error(self):
-        """Test if this result represents an error."""
-        return False
+        self.__wrapped__  # force the evaluation
 
 
-class Result(TaskResult):
-    """The result of a finished task."""
-    def __init__(self, result, order):
-        self._result = result
-        self._order = order
+class TaskResult(object):
+    def __init__(self, value=_sentinel, order=None):
+        self.value = value
+        self.order = order
+        self.called = False
 
-    def result(self):
-        return self._result
+    def __lt__(self, other):
+        if not isinstance(other, TaskResult):
+            return NotImplemented
+        if self.order is None:
+            return False
+        if other.order is None:
+            return True
+        return self.order < other.order
 
+    def __call__(self):
+        self.called = True
+        if self.value is _sentinel:  # Placeholder
+            raise SuspendTask
+        if isinstance(self.value, Exception):
+            raise self.value
+        return self.value
 
-class Error(Result):
-    def __init__(self, err, order):
-        self._err = err
-        self._order = order
-
-    def result(self):
-        raise TaskError(self._err)
-
-    def is_error(self):
-        return True
-
-
-class Timeout(Error):
-    def __init__(self, order):
-        self._order = order
-
-    def result(self):
-        raise TaskTimedout
+    def __del__(self):
+        if not self.called and isinstance(self.value, Exception):
+            logger.warning("Result with error was ignored: %s", self.value)
 
 
-class Placeholder(TaskResult):
-    def result(self):
-        raise SuspendTask
-
-    def is_error(self):
-        raise SuspendTask
-
-    def wait(self):
-        raise SuspendTask
+def _order_key(i):
+    return i.__factory__
 
 
 def wait_first(result, *results):
@@ -411,7 +414,7 @@ def wait_first(result, *results):
 
     If no task is finished yet it can raise SuspendTask.
     """
-    return min(_i_or_args(result, results)).wait()
+    return min(_i_or_args(result, results), key=_order_key).wait()
 
 
 def wait_n(n, result, *results):
@@ -426,7 +429,7 @@ def wait_n(n, result, *results):
     if n == 1:
         yield wait_first(i)
         return
-    for result in sorted(i)[:n]:
+    for result in sorted(i, key=_order_key)[:n]:
         yield result.wait()
 
 
@@ -475,7 +478,7 @@ def parallel_reduce(f, iterable):
     """
     results, non_results = [], []
     for x in iterable:
-        if isinstance(x, TaskResult):
+        if isinstance(x, ResultProxy):
             results.append(x)
         else:
             non_results.append(x)
@@ -488,29 +491,30 @@ def parallel_reduce(f, iterable):
         except StopIteration:
             reminder = x
             if not results:  # len(iterable) == 1
-                if isinstance(x, TaskResult):
+                if isinstance(x, ResultProxy):
                     return x
                 else:
                     # Wrap the value in a result for uniform interface
-                    return Result(x, -1)
+                    return result(x, -1)
     if not results:  # len(iterable) == 0
         raise ValueError('parallel_reduce() iterable cannot be empty')
-    heapq.heapify(results)
+    heapq.heapify((r.__factory__, r) for r in results)
     return _parallel_reduce_recurse(f, results, reminder)
 
 
 def _parallel_reduce_recurse(f, results, reminder=_sentinel):
     if reminder is not _sentinel:
-        new_result = f(reminder, heapq.heappop(results))
-        heapq.heappush(results, new_result)
+        _, first = heapq.heappop(results)
+        new_result = f(reminder, first)
+        heapq.heappush(results, (new_result.__factory__, new_result))
         return _parallel_reduce_recurse(f, results)
-    x = heapq.heappop(results)
+    x, _ = heapq.heappop(results)
     try:
-        y = heapq.heappop(results)
+        y, _ = heapq.heappop(results)
     except IndexError:
         return x
     new_result = f(x, y)
-    heapq.heappush(results, new_result)
+    heapq.heappush(results, (new_result.__factory__, new_result))
     return _parallel_reduce_recurse(f, results)
 
 
@@ -533,30 +537,24 @@ class TaskTimedout(TaskError):
 
 
 def _scan_args(args, kwargs):
-    new_args, new_kwargs, errs = [], {}, []
+    errs = []
     for result in args:
-        if isinstance(result, TaskResult):
+        if isinstance(result, ResultProxy):
             try:
-                if result.is_error():
-                    errs.append(result)
-                else:
-                    new_args.append(result.result())
+                result.wait()
             except SuspendTask:
-                return [], True, args, kwargs
-        else:
-            new_args.append(result)
+                return [], True
+            except Exception:
+                errs.append(result)
     for key, result in kwargs.items():
-        if isinstance(result, TaskResult):
+        if isinstance(result, ResultProxy):
             try:
-                if result.is_error():
-                    errs.append(result)
-                else:
-                    new_kwargs[key] = result.result()
+                result.wait()
             except SuspendTask:
-                return [], True, args, kwargs
-        else:
-            new_kwargs[key] = result
-    return errs, False, new_args, new_kwargs
+                return [], True
+            except Exception:
+                errs.append(result)
+    return errs, False
 
 
 _restart = namedtuple('restart', 'args kwargs')
