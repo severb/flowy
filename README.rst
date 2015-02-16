@@ -18,3 +18,6 @@
 
 .. image:: https://pypip.in/format/flowy/badge.png
    :target: https://pypi.python.org/pypi/flowy/
+
+
+.. include:: docs/index.rst
