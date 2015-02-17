@@ -1,7 +1,7 @@
 from flowy import restart
 
 
-class QuickReturn(object):
+class NoTask(object):
     def __call__(self, n):
         return n
 
@@ -18,46 +18,45 @@ class Arguments(object):
 
 
 class Dependency(object):
-    def __init__(self, inc):
-        self.inc = inc
+    def __init__(self, task):
+        self.task = task
 
     def __call__(self, n):
-        accumulator = self.inc(0)
+        accumulator = self.task(0)
         for _ in range(n):
-            accumulator = self.inc(accumulator)
+            accumulator = self.task(accumulator)
         return accumulator
 
 
 class Parallel(object):
-    def __init__(self, inc):
-        self.inc = inc
+    def __init__(self, task):
+        self.task = task
 
     def __call__(self, n):
-        return list(map(self.inc, range(n)))
+        return list(map(self.task, range(n)))
 
 
-class UhnadledException(object):
+class UnhandledException(object):
     def __call__(self):
         raise RuntimeError('err!')
 
 
-class ActivityException(object):
-    def __init__(self, err):
-        self.err = err
+class SingleActivity(object):
+    def __init__(self, task):
+        self.task = task
 
     def __call__(self):
-        return self.err()
+        return self.task()
 
 
-class ActivityExceptionPropagation(object):
-    def __init__(self, err, inc):
-        self.err = err
-        self.inc = inc
+class ThreeActivities(object):
+    def __init__(self, task):
+        self.task = task
 
     def __call__(self):
-        a = self.err()
-        b = self.inc(a)
-        return self.inc(b)
+        a = self.task()
+        b = self.task(a)
+        return self.task(b)
 
 
 class Recurse(object):
