@@ -1,18 +1,17 @@
+language: python
+install:
+  - pip install tox coveralls
 before_install:
+  - uname -a
+  - lsb_release -a
   - python --version
   - virtualenv --version
   - pip --version
-  - uname -a
-  - lsb_release -a
-language: python
-install: pip install coveralls
-python:
-  - "2.6"
-  - "2.7"
-  - "3.4"
-  - "pypy"
-script: python setup.py nosetests
-after_success: coveralls
+  - tox --version
+script:
+  - tox
+after_success:
+  - coveralls
 notifications:
   email:
     on_success: never
