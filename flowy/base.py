@@ -192,48 +192,41 @@ class Worker(object):
                     logger.exception('Error while running the task:')
                     decision.fail(e)
                 else:
-                    is_restart = False
-                    try:
-                        # This may trigger the evaluation and can fail
-                        # On python 2 it gets swallowed but on 3 it won't
-                        is_restart = isinstance(result, _restart)
-                    except TaskError as e:
-                        logger.exception('Unhandled task error in result:')
-                        decision.fail(e)
-                    except SuspendTask:
-                        decision.flush()
-                    else:
-                        if is_restart:
-                            serialize_restart = getattr(
-                                config, 'serialize_restart_input', _identity)
-                            try:
-                                r_i = serialize_restart(*result.args,
-                                                        **result.kwargs)
-                            except TaskError as e:
-                                logger.exception('Unhandled task error in restart arguments:')
-                                decision.fail(e)
-                            except Exception as e:
-                                logger.exception('Error while serializing restart arguments:')
-                                decision.fail(e)
-                            except SuspendTask:
-                                # There are placeholders in the restart args
-                                decision.flush()
-                            else:
-                                decision.restart(r_i)
+                    # Use type() instead of isinstance() to avoid the
+                    # evaluation of the ResultProxy if the result is a proxy.
+                    # This also fixes another issue, on python2 isinstance()
+                    # swallows any exception while python3 doesn't.
+                    if type(result) is _restart:
+                        serialize_restart = getattr(
+                            config, 'serialize_restart_input', _identity)
+                        try:
+                            r_i = serialize_restart(*result.args,
+                                                    **result.kwargs)
+                        except TaskError as e:
+                            logger.exception('Unhandled task error in restart arguments:')
+                            decision.fail(e)
+                        except Exception as e:
+                            logger.exception('Error while serializing restart arguments:')
+                            decision.fail(e)
+                        except SuspendTask:
+                            # There are placeholders in the restart args
+                            decision.flush()
                         else:
-                            try:
-                                result = config.serialize_result(result)
-                            except TaskError as e:
-                                logger.exception('Unhandled task error in result:')
-                                decision.fail(e)
-                            except Exception as e:
-                                logger.exception('Error while serializing result:')
-                                decision.fail(e)
-                            except SuspendTask:
-                                # There are placeholders in the result
-                                decision.flush()
-                            else:
-                                decision.finish(result)
+                            decision.restart(r_i)
+                    else:
+                        try:
+                            result = config.serialize_result(result)
+                        except TaskError as e:
+                            logger.exception('Unhandled task error in result:')
+                            decision.fail(e)
+                        except Exception as e:
+                            logger.exception('Error while serializing result:')
+                            decision.fail(e)
+                        except SuspendTask:
+                            # There are placeholders in the result
+                            decision.flush()
+                        else:
+                            decision.finish(result)
 
     def scan(self, categories=None, package=None, ignore=None, level=0):
         """Scan for registered implementations and their configuration.
