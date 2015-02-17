@@ -20,7 +20,7 @@ setup(
     install_requires=['boto==2.33.0',
                       'venusian>=1.0a8',
                       'lazy_object_proxy==1.0.1'],
-    tests_require=['coverage'],
+    tests_require=['coverage<4.0'],
     test_suite="nose.collector",
     extras_require={'docs': ['sphinx', 'sphinx_rtd_theme']},
     entry_points={
