@@ -11,7 +11,7 @@ import venusian
 from lazy_object_proxy.slots import Proxy
 
 
-__all__ = 'restart TaskError TaskTimedout wait_first wait_n wait_all parallel_reduce'.split()
+__all__ = 'restart TaskError TaskTimedout first finish_order parallel_reduce'.split()
 
 
 logger = logging.getLogger(__package__)
@@ -141,7 +141,8 @@ class Worker(object):
         """
         key = config.key
         if key in self.registry:
-            raise ValueError('Implementation is already registered: %r' % key)
+            raise ValueError(
+                'Implementation is already registered: %r' % (key,))
         self.registry[key] = (config, impl)
 
     def __call__(self, key, input_data, decision, *args, **kwargs):
@@ -334,7 +335,7 @@ class BoundProxy(object):
                 break
             errors, placeholders = _scan_args(args, kwargs)
             if errors:
-                r = wait_first(errors)
+                r = first(errors)
                 break
             if placeholders:
                 break  # result = Placeholder
@@ -415,38 +416,23 @@ def _order_key(i):
     return i.__factory__
 
 
-def wait_first(result, *results):
-    """Return the result of the first task to finish from a list of results.
+def first(result, *results):
+    """Return the first result finish from a list of results.
 
-    If no task is finished yet it can raise SuspendTask.
+    If no one is finished yet - all of the results are placeholders - return
+    the first placeholder from the list.
     """
-    return min(_i_or_args(result, results), key=_order_key).wait()
+    return min(_i_or_args(result, results), key=_order_key)
 
 
-def wait_n(n, result, *results):
-    """Wait for first n tasks to finish and return their results in order.
+def finish_order(result, *results):
+    """Return the results in their finish order.
 
-    This is a generator yielding results in the order their tasks finished. If
-    more results are consumed from this generator than tasks finished it will
-    raise SuspendTask. This means that you can use it to access results as soon
-    as possible, even before all n tasks are finished.
-    """
-    i = _i_or_args(result, results)
-    if n == 1:
-        yield wait_first(i)
-        return
-    for result in sorted(i, key=_order_key)[:n]:
-        yield result.wait()
-
-
-def wait_all(result, *results):
-    """Wait for all the tasks to finish and return their results in order.
-
-    Works just like wait_n(len(x), x)
+    The results that aren't finished yet will be at the end with their relative
+    order preserved.
     """
     i = list(_i_or_args(result, results))
-    for result in wait_n(len(i), i):
-        yield result
+    return sorted(i, key=_order_key)
 
 
 def parallel_reduce(f, iterable):

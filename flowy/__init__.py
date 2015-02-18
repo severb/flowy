@@ -8,6 +8,5 @@ from flowy.base import parallel_reduce
 from flowy.base import restart
 from flowy.base import TaskError
 from flowy.base import TaskTimedout
-from flowy.base import wait_all
-from flowy.base import wait_first
-from flowy.base import wait_n
+from flowy.base import first
+from flowy.base import finish_order

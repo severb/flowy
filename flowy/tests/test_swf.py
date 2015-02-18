@@ -167,3 +167,48 @@ for i, case in enumerate(cases):
     t.__name__ = t_name = 'test_%s' % i
     setattr(g[test_class_name], t_name, t)
     del t
+
+
+class TestRegistration(unittest.TestCase):
+    def test_already_registered(self):
+        from flowy import SWFWorkflow, SWFWorkflowWorker
+        worker = SWFWorkflowWorker()
+        w = SWFWorkflow(name='T', version=1)
+        worker.register(w, lambda: 1)
+        self.assertRaises(
+            ValueError, lambda: worker.register(w, lambda: 1))
+
+    def test_digit_name(self):
+        from flowy import SWFWorkflow
+        w = SWFWorkflow(name='T', version=1)
+        self.assertRaises(
+            ValueError, lambda: w.conf_proxy('123', None))
+
+    def test_keyword_name(self):
+        from flowy import SWFWorkflow
+        w = SWFWorkflow(name='T', version=1)
+        self.assertRaises(
+            ValueError, lambda: w.conf_proxy('for', None))
+
+    def test_nonalnum_name(self):
+        from flowy import SWFWorkflow
+        w = SWFWorkflow(name='T', version=1)
+        self.assertRaises(
+            ValueError, lambda: w.conf_proxy('abc!123', None))
+
+    def test_duplicate_name(self):
+        from flowy import SWFWorkflow
+        w = SWFWorkflow(name='T', version=1)
+        w.conf_proxy('task', None)
+        self.assertRaises(
+            ValueError, lambda: w.conf_proxy('task', None))
+
+
+class TestScan(unittest.TestCase):
+    def test_scan(self):
+        from flowy import SWFWorkflowWorker
+        worker = SWFWorkflowWorker()
+        worker.scan()
+        assert ('NoTask', '1') in worker.registry
+        assert ('Closure', '1') in worker.registry
+        assert ('Named', '1') in worker.registry

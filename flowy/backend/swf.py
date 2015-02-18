@@ -446,7 +446,8 @@ class SWFActivityWorker(SWFWorker):
                        or not swf_response['taskToken']):
                     try:
                         swf_response = layer1.poll_for_activity_task(
-                            domain=domain, task_list=task_list)
+                            domain=domain, task_list=task_list,
+                            identity=identity)
                     except SWFResponseError:
                         # add a delay before retrying?
                         logger.exception('Error while polling for activities:')

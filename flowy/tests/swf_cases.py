@@ -28,6 +28,17 @@ WaitActivityWorkflow = SWFWorkflow(version=1)
 WaitActivityWorkflow.conf_activity('task', version=1)
 RestartWorkflow = SWFWorkflow(version=1)
 RestartWorkflow.conf_activity('task', version=1)
+PreRunWorkflow = SWFWorkflow(version=1)
+PreRunWorkflow.conf_activity('task', version=1)
+PreRunErrorWorkflow = SWFWorkflow(version=1)
+PreRunWaitWorkflow = SWFWorkflow(version=1)
+PreRunWaitWorkflow.conf_activity('task', version=1)
+DoubleDepWorkflow = SWFWorkflow(version=1)
+DoubleDepWorkflow.conf_activity('task', version=1)
+FirstWorkflow = SWFWorkflow(version=1)
+FirstWorkflow.conf_activity('task', version=1)
+First2Workflow = SWFWorkflow(version=1)
+First2Workflow.conf_activity('task', version=1)
 
 
 worker = SWFWorkflowWorker()
@@ -43,9 +54,18 @@ worker.register(SAWorkflowCustomTimers, SingleTask)
 worker.register(SAWorkflowCustomTimersW, SingleTask)
 worker.register(WaitActivityWorkflow, WaitTask)
 worker.register(RestartWorkflow, Restart)
+worker.register(PreRunWorkflow, PreRun)
+worker.register(PreRunErrorWorkflow, PreRunError)
+worker.register(PreRunWaitWorkflow, PreRunWait)
+worker.register(DoubleDepWorkflow, DoubleDep)
+worker.register(FirstWorkflow, First)
+worker.register(First2Workflow, First2)
 
 
 cases = [{
+    'name': 'NotFound',
+    'version': 1,
+}, {
     'name': 'NoTask',
     'version': 1,
     'input_args': [10],
@@ -409,5 +429,207 @@ cases = [{
     },
     'expected': {
         'fail': 'err!',
+    },
+}, {
+    'name': 'PreRun',
+    'version': 1,
+    'expected': {
+        'schedule': [
+            {
+                'type': 'activity',
+                'call_key': 'task-0-0',
+                'name': 'task',
+                'version': 1,
+            },
+        ],
+    },
+}, {
+    'name': 'PreRun',
+    'version': 1,
+    'results': {
+        'task-0-0': 1,
+    },
+    'expected': {
+        'schedule': [
+            {
+                'type': 'activity',
+                'call_key': 'task-1-0',
+                'name': 'task',
+                'version': 1,
+                'input_args': [1],
+            },
+        ],
+    },
+}, {
+    'name': 'PreRun',
+    'version': 1,
+    'errors': {
+        'task-0-0': 'err!',
+    },
+    'expected': {
+        'fail': 'err!',
+    },
+}, {
+    'name': 'PreRunError',
+    'version': 1,
+    'expected': {
+        'fail': 'err!',
+    },
+}, {
+    'name': 'PreRunWait',
+    'version': 1,
+    'running': [
+        'task-0-0',
+    ],
+    'expected': {
+        'schedule': [],
+    },
+}, {
+    'name': 'DoubleDep',
+    'version': 1,
+    'running': [
+        'task-0-0',
+    ],
+    'results': {
+        'task-1-0': 1,
+    },
+    'expected': {
+        'schedule': [],
+    },
+}, {
+    'name': 'DoubleDep',
+    'version': 1,
+    'running': [
+        'task-1-0',
+    ],
+    'results': {
+        'task-0-0': 1,
+    },
+    'expected': {
+        'schedule': [],
+    },
+}, {
+    'name': 'DoubleDep',
+    'version': 1,
+    'errors': {
+        'task-0-0': 'err1!',
+        'task-1-0': 'err2!',
+    },
+    'order': [
+        'task-0-0',
+        'task-1-0',
+    ],
+    'expected': {
+        'fail': 'err1!',
+    },
+}, {
+    'name': 'DoubleDep',
+    'version': 1,
+    'errors': {
+        'task-0-0': 'err1!',
+        'task-1-0': 'err2!',
+    },
+    'order': [
+        'task-1-0',
+        'task-0-0',
+    ],
+    'expected': {
+        'fail': 'err2!',
+    },
+}, {
+    'name': 'First',
+    'version': 1,
+    'results': {
+        'task-0-0': 1,
+        'task-1-0': 2,
+    },
+    'order': [
+        'task-0-0',
+        'task-1-0',
+    ],
+    'expected': {
+        'finish': 1,
+    },
+}, {
+    'name': 'First',
+    'version': 1,
+    'results': {
+        'task-0-0': 1,
+        'task-1-0': 2,
+    },
+    'order': [
+        'task-1-0',
+        'task-0-0',
+    ],
+    'expected': {
+        'finish': 2,
+    },
+}, {
+    'name': 'First',
+    'version': 1,
+    'results': {
+        'task-0-0': 1,
+    },
+    'errors': {
+        'task-1-0': 'err!',
+    },
+    'order': [
+        'task-1-0',
+        'task-0-0',
+    ],
+    'expected': {
+        'fail': 'err!',
+    },
+}, {
+    'name': 'First2',
+    'version': 1,
+    'results': {
+        'task-0-0': 1,
+        'task-1-0': 2,
+        'task-2-0': 3,
+        'task-3-0': 4,
+    },
+    'order': [
+        'task-0-0',
+        'task-3-0',
+        'task-1-0',
+        'task-2-0',
+    ],
+    'expected': {
+        'finish': [1, 4],
+    },
+}, {
+    'name': 'First2',
+    'version': 1,
+    'results': {
+        'task-0-0': 1,
+        'task-1-0': 2,
+    },
+    'errors': {
+        'task-2-0': 'err3!',
+        'task-3-0': 'err4!',
+    },
+    'order': [
+        'task-0-0',
+        'task-3-0',
+        'task-1-0',
+        'task-2-0',
+    ],
+    'expected': {
+        'fail': 'err4!',
+    },
+}, {
+    'name': 'First2',
+    'version': 1,
+    'results': {
+        'task-0-0': 1,
+    },
+    'running': [
+        'task-1-0',
+        'task-2-0',
+        'task-3-0',
+    ],
+    'expected': {
+        'schedule': [],
     },
 }]
