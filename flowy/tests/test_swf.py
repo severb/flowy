@@ -70,10 +70,11 @@ class DummyDecision(object):
         'task_list': None,
         'workflow_duration': None,
         'decision_duration': None,
+        'child_policy': None,
     }
 
     def schedule_workflow(self, call_key, name, version, input_data, task_list,
-                          workflow_duration, decision_duration):
+                          workflow_duration, decision_duration, child_policy):
         args, kwargs = json.loads(input_data)
         self.queued['schedule'].append({
             'type': 'workflow',
@@ -85,6 +86,7 @@ class DummyDecision(object):
             'task_list': task_list,
             'workflow_duration': workflow_duration,
             'decision_duration': decision_duration,
+            'child_policy': child_policy,
         })
 
     default_timer = {
@@ -99,7 +101,7 @@ class DummyDecision(object):
         })
 
     def assert_equals(self, expected):
-        if isinstance(expected, dict) and expected.get('schedule') != None:
+        if isinstance(expected, dict) and 'schedule' in expected:
             schedule = []
             for sched in expected['schedule']:
                 if sched['type'] == 'activity':
@@ -111,6 +113,12 @@ class DummyDecision(object):
                 else:
                     assert False, 'Invalid schedule type'
             expected = {'schedule': schedule}
+        if isinstance(expected, dict) and 'restart' in expected:
+            r = expected['restart']
+            expected['restart'] = {
+                'input_args': r.get('input_args', []),
+                'input_kwargs': r.get('input_kwargs', {})
+            }
         e = pprint.pformat(expected)
         r = pprint.pformat(self.result)
         m = "Expectation:\n%s\ndoesn't match result:\n%s" % (e, r)

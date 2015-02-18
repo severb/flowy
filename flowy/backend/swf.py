@@ -262,9 +262,8 @@ class SWFWorkflow(SWFConfigMixin, Workflow):
 
     def conf_workflow(self, dep_name, version, name=None, task_list=None,
                       workflow_duration=None, decision_duration=None,
-                      serialize_input=_serialize_input,
-                      deserialize_result=_deserialize_input,
-                      retry=(0, 0, 0)):
+                      child_policy=None, serialize_input=_serialize_input,
+                      deserialize_result=_deserialize_input, retry=(0, 0, 0)):
         """Same as conf_activity but for sub-workflows."""
         if name is None:
             name = dep_name
@@ -272,6 +271,7 @@ class SWFWorkflow(SWFConfigMixin, Workflow):
                                  task_list=task_list,
                                  workflow_duration=workflow_duration,
                                  decision_duration=decision_duration,
+                                 child_policy=child_policy,
                                  serialize_input=serialize_input,
                                  deserialize_result=deserialize_result,
                                  retry=retry)
@@ -501,7 +501,8 @@ class SWFWorkflowProxy(object):
     """Same as SWFActivityProxy but for sub-workflows."""
     def __init__(self, identity, name, version, task_list=None,
                  workflow_duration=None, decision_duration=None,
-                 retry=(0, 0, 0), serialize_input=_serialize_input,
+                 child_policy=None, retry=(0, 0, 0),
+                 serialize_input=_serialize_input,
                  deserialize_result=_deserialize_result):
         self.identity = identity
         self.name = name
@@ -509,6 +510,7 @@ class SWFWorkflowProxy(object):
         self.task_list = task_list
         self.workflow_duration = workflow_duration
         self.decision_duration = decision_duration
+        self.child_policy = child_policy
         self.retry = retry
         self.serialize_input = serialize_input
         self.deserialize_result = deserialize_result
@@ -661,7 +663,7 @@ class SWFWorkflowDecision(object):
             input=str(input_data))
 
     def schedule_workflow(self, call_key, name, version, input_data, task_list,
-                          workflow_duration, decision_duration):
+                          workflow_duration, decision_duration, child_policy):
         """Schedule a workflow execution."""
         call_key = _subworkflow_key(call_key)
         self.decisions.start_child_workflow_execution(
@@ -669,7 +671,8 @@ class SWFWorkflowDecision(object):
             task_start_to_close_timeout=_str_or_none(decision_duration),
             execution_start_to_close_timeout=_str_or_none(workflow_duration),
             task_list=_str_or_none(task_list),
-            input=str(input_data))
+            input=str(input_data),
+            child_policy=_cp_encode(child_policy))
 
 
 class SWFWorkflowTaskDecision(object):
@@ -699,7 +702,7 @@ class SWFWorkflowTaskDecision(object):
         self.decision.schedule_workflow(
             task_key, self.proxy.name, self.proxy.version, input_data,
             self.proxy.task_list, self.proxy.workflow_duration,
-            self.proxy.decision_duration)
+            self.proxy.decision_duration, self.proxy.child_policy)
 
 
 class SWFActivityTaskDecision(SWFWorkflowTaskDecision):

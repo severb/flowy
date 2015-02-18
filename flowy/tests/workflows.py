@@ -41,7 +41,7 @@ class UnhandledException(object):
         raise RuntimeError('err!')
 
 
-class SingleActivity(object):
+class SingleTask(object):
     def __init__(self, task):
         self.task = task
 
@@ -49,30 +49,21 @@ class SingleActivity(object):
         return self.task()
 
 
-class ThreeActivities(object):
+class WaitTask(object):
     def __init__(self, task):
         self.task = task
 
     def __call__(self):
         a = self.task()
+        a.wait()
         b = self.task(a)
-        return self.task(b)
-
-
-class Recurse(object):
-    def __init__(self, myself):
-        self.myself = myself
-
-    def __call__(self, recurse=True):
-        if recurse:
-            return self.myself(recurse=False)
-        else:
-            return 1
+        return b
 
 
 class Restart(object):
+    def __init__(self, task):
+        self.task = task
+
     def __call__(self, r=True):
-        if r:
-            return restart(r=False)
-        else:
-            return 1
+        a = self.task()
+        return restart(a, 2)

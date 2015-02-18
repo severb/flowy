@@ -362,7 +362,7 @@ def error(reason, order):
 
 
 def timeout(order):
-    return ResultProxy(TaskResult(TaskTimedout, order))
+    return ResultProxy(TaskResult(TaskTimedout('A task has timedout'), order))
 
 
 def placeholder():
