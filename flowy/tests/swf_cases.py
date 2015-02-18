@@ -16,6 +16,10 @@ ParallelWorkflowRL.conf_activity('task', version=1)
 UnhandledExceptionWorkflow = SWFWorkflow(version=1)
 SingleActivityWorkflow = SWFWorkflow(version=1)
 SingleActivityWorkflow.conf_activity('task', version=1)
+SAWorkflowCustomTimers = SWFWorkflow(name='SACustomTimers', version=1)
+SAWorkflowCustomTimers.conf_activity(
+    'task', version=1, heartbeat=10, schedule_to_start=11,
+    schedule_to_close=12, start_to_close=13, task_list='TL',)
 
 
 worker = SWFWorkflowWorker()
@@ -27,6 +31,7 @@ worker.register(ParallelWorkflow, Parallel)
 worker.register(ParallelWorkflowRL, Parallel)
 worker.register(UnhandledExceptionWorkflow, UnhandledException)
 worker.register(SingleActivityWorkflow, SingleActivity)
+worker.register(SAWorkflowCustomTimers, SingleActivity)
 
 
 cases = [{
@@ -234,5 +239,23 @@ cases = [{
     },
     'expected': {
         'fail': 'err!',
+    },
+}, {
+    'name': 'SACustomTimers',
+    'version': 1,
+    'expected': {
+        'schedule': [
+            {
+                'type': 'activity',
+                'call_key': 'task-0-0',
+                'name': 'task',
+                'version': 1,
+                'task_list': 'TL',
+                'schedule_to_start': 11,
+                'schedule_to_close': 12,
+                'start_to_close': 13,
+                'heartbeat': 10,
+            },
+        ],
     },
 }]
