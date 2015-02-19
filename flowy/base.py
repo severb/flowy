@@ -11,7 +11,7 @@ import venusian
 from lazy_object_proxy.slots import Proxy
 
 
-__all__ = 'restart TaskError TaskTimedout first finish_order parallel_reduce'.split()
+__all__ = 'restart TaskError TaskTimedout wait first finish_order parallel_reduce'.split()
 
 
 logger = logging.getLogger(__package__)
@@ -370,18 +370,25 @@ def placeholder():
     return ResultProxy(TaskResult())
 
 
-class ResultProxy(Proxy):
-    def wait(self):
-        """Wait for a task to complete.
+def wait(result):
+    """Wait for a task result to complete.
 
-        This method can raise 3 different types of exceptions:
-        * TaskError - if the task failed for whatever reason. This usually means
-          the task implementation raised an unhandled exception.
-        * TaskTimedout - If the task timed-out on all retry attemps.
-        * SuspendTask - This is an internal exception used by Flowy as control
-          flow and should not be handled by user code.
-        """
-        self.__wrapped__  # force the evaluation
+    If the argument is not a task result, this function has no effect.
+
+    This function can raise 3 different types of exceptions:
+    * TaskError - if the task failed for whatever reason. This usually means
+      the task implementation raised an unhandled exception.
+    * TaskTimedout - If the task timed-out on all retry attemps.
+    * SuspendTask - This is an internal exception used by Flowy as control
+      flow and should not be handled by user code.
+    """
+    if type(result) is ResultProxy:
+        result.__wrapped__  # force the evaluation
+
+
+class ResultProxy(Proxy):
+    """This is the TaskResult proxy."""
+    pass
 
 
 class TaskResult(object):
@@ -530,7 +537,7 @@ def _scan_args(args, kwargs):
     for result in args:
         if isinstance(result, ResultProxy):
             try:
-                result.wait()
+                wait(result)
             except SuspendTask:
                 return [], True
             except Exception:
@@ -538,7 +545,7 @@ def _scan_args(args, kwargs):
     for key, result in kwargs.items():
         if isinstance(result, ResultProxy):
             try:
-                result.wait()
+                wait(result)
             except SuspendTask:
                 return [], True
             except Exception:

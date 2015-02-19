@@ -1,4 +1,9 @@
-from flowy import restart, SWFWorkflow, first, finish_order, parallel_reduce
+from flowy import finish_order
+from flowy import first
+from flowy import parallel_reduce
+from flowy import restart
+from flowy import SWFWorkflow
+from flowy import wait
 
 
 w_no_name = SWFWorkflow(version=1)
@@ -62,7 +67,7 @@ class WaitTask(object):
 
     def __call__(self):
         a = self.task()
-        a.wait()
+        wait(a)
         b = self.task(a)
         return b
 
@@ -96,7 +101,7 @@ class PreRunError(object):
 class PreRunWait(object):
     def __init__(self, task):
         a = task()
-        a.wait()
+        wait(a)
         self.b = task(a)
 
     def __call__(self):
