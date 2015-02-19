@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import socket
+import sys
 import uuid
 from functools import partial
 
@@ -38,6 +39,14 @@ class JSONProxyEncoder(json.JSONEncoder):
         if is_result_proxy(obj):
             return obj.__wrapped__
         return json.JSONEncoder.default(self, obj)
+
+    # On py26 and pypy it gets even worse...
+    if sys.version_info[:2] == (2, 6):
+        def _iterencode(self, o, markers=None):
+            s = super(JSONProxyEncoder, self)
+            if is_result_proxy(o):
+                return s._iterencode(o.__wrapped__, markers)
+            return s._iterencode(o, markers)
 
 
 _serialize_input = lambda *args, **kwargs: json.dumps((args, kwargs),

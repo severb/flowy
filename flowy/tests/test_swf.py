@@ -223,5 +223,7 @@ class TestParallelReduce(unittest.TestCase):
     def test_one_element_iterable(self):
         from flowy import parallel_reduce
         f = lambda x, y: 1
-        self.assertEquals(12, parallel_reduce(f, [12]))
-        self.assertIs(12, parallel_reduce(f, [12]).__wrapped__)
+        x = object()
+        parallel_x = parallel_reduce(f, [x])
+        # python 2.6 doesn't have assertIs
+        assert x is parallel_x.__wrapped__

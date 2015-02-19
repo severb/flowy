@@ -344,7 +344,7 @@ class BoundProxy(object):
             try:
                 input_data = self.config.serialize_input(*args, **kwargs)
             except Exception as e:
-                logger.exception('Error while serializing the activity input:')
+                logger.exception('Error while serializing the task input:')
                 self.task_decision.fail(e)
                 break  # result = Placeholder
             self.task_decision.schedule(call_number, retry_number, delay,
