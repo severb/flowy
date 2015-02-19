@@ -146,7 +146,7 @@ for i, case in enumerate(cases):
             input_data = json.dumps([input_args, input_kwargs])
             decision = DummyDecision()
             results = case.get('results', {})
-            results = dict((k, str(v)) for k, v in results.items())
+            results = dict((k, json.dumps(v)) for k, v in results.items())
             order = (
                 list(case.get('results', {}).keys()) 
                 + list(case.get('errors', {}).keys())
@@ -212,3 +212,16 @@ class TestScan(unittest.TestCase):
         assert ('NoTask', '1') in worker.registry
         assert ('Closure', '1') in worker.registry
         assert ('Named', '1') in worker.registry
+
+
+class TestParallelReduce(unittest.TestCase):
+    def test_empty_iterable(self):
+        from flowy import parallel_reduce
+        f = lambda x, y: 1
+        self.assertRaises(ValueError, lambda: parallel_reduce(f, []))
+
+    def test_one_element_iterable(self):
+        from flowy import parallel_reduce
+        f = lambda x, y: 1
+        self.assertEquals(12, parallel_reduce(f, [12]))
+        self.assertIs(12, parallel_reduce(f, [12]).__wrapped__)

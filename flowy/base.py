@@ -463,10 +463,6 @@ def parallel_reduce(f, iterable):
     operations is always constant and equal to len(iterable) - 1 regardless of
     how the reduction graph looks like.
 
-    XXX: The order of the arguments can be preserved and the function
-    restrictions relaxed only to associativity by keeping track of result
-    creation order not only finish order.
-
     """
     results, non_results = [], []
     for x in iterable:
@@ -483,14 +479,15 @@ def parallel_reduce(f, iterable):
         except StopIteration:
             reminder = x
             if not results:  # len(iterable) == 1
-                if isinstance(x, ResultProxy):
+                if type(x) is ResultProxy:
                     return x
                 else:
                     # Wrap the value in a result for uniform interface
                     return result(x, -1)
     if not results:  # len(iterable) == 0
         raise ValueError('parallel_reduce() iterable cannot be empty')
-    heapq.heapify((r.__factory__, r) for r in results)
+    results = [(r.__factory__, r) for r in results]
+    heapq.heapify(results)
     return _parallel_reduce_recurse(f, results, reminder)
 
 
@@ -500,9 +497,9 @@ def _parallel_reduce_recurse(f, results, reminder=_sentinel):
         new_result = f(reminder, first)
         heapq.heappush(results, (new_result.__factory__, new_result))
         return _parallel_reduce_recurse(f, results)
-    x, _ = heapq.heappop(results)
+    _, x = heapq.heappop(results)
     try:
-        y, _ = heapq.heappop(results)
+        _, y = heapq.heappop(results)
     except IndexError:
         return x
     new_result = f(x, y)

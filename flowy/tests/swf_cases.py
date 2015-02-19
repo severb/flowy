@@ -39,6 +39,12 @@ FirstWorkflow = SWFWorkflow(version=1)
 FirstWorkflow.conf_activity('task', version=1)
 First2Workflow = SWFWorkflow(version=1)
 First2Workflow.conf_activity('task', version=1)
+ParallelReduceWorkflow = SWFWorkflow(version=1)
+ParallelReduceWorkflow.conf_activity('task', version=1)
+ParallelReduceWorkflow.conf_activity('red', version=1)
+ParallelReduceCombinedWorkflow = SWFWorkflow(version=1)
+ParallelReduceCombinedWorkflow.conf_activity('task', version=1)
+ParallelReduceCombinedWorkflow.conf_activity('red', version=1)
 
 
 worker = SWFWorkflowWorker()
@@ -60,6 +66,8 @@ worker.register(PreRunWaitWorkflow, PreRunWait)
 worker.register(DoubleDepWorkflow, DoubleDep)
 worker.register(FirstWorkflow, First)
 worker.register(First2Workflow, First2)
+worker.register(ParallelReduceWorkflow, ParallelReduce)
+worker.register(ParallelReduceCombinedWorkflow, ParallelReduceCombined)
 
 
 cases = [{
@@ -631,5 +639,185 @@ cases = [{
     ],
     'expected': {
         'schedule': [],
+    },
+}, {
+    'name': 'ParallelReduce',
+    'version': 1,
+    'running': [
+        'task-0-0',
+        'task-1-0',
+        'task-2-0',
+    ],
+    'expected': {
+        'schedule': [],
+    },
+}, {
+    'name': 'ParallelReduce',
+    'version': 1,
+    'results': {
+        'task-0-0': 1,
+    },
+    'running': [
+        'task-1-0',
+        'task-2-0',
+    ],
+    'expected': {
+        'schedule': [],
+    },
+}, {
+    'name': 'ParallelReduce',
+    'version': 1,
+    'results': {
+        'task-0-0': 1,
+        'task-1-0': 2,
+    },
+    'order': [
+        'task-0-0',
+        'task-1-0',
+    ],
+    'running': [
+        'task-2-0',
+    ],
+    'expected': {
+        'schedule': [
+            {
+                'type': 'activity',
+                'call_key': 'red-0-0',
+                'name': 'red',
+                'version': 1,
+                'input_args': [1, 2],
+            },
+        ],
+    },
+}, {
+    'name': 'ParallelReduce',
+    'version': 1,
+    'results': {
+        'task-0-0': 1,
+        'task-1-0': 2,
+    },
+    'order': [
+        'task-1-0',
+        'task-0-0',
+    ],
+    'running': [
+        'task-2-0',
+    ],
+    'expected': {
+        'schedule': [
+            {
+                'type': 'activity',
+                'call_key': 'red-0-0',
+                'name': 'red',
+                'version': 1,
+                'input_args': [2, 1],
+            },
+        ],
+    },
+}, {
+    'name': 'ParallelReduce',
+    'version': 1,
+    'results': {
+        'task-0-0': 1,
+        'task-1-0': 2,
+        'red-0-0': 3,
+        'task-2-0': 10,
+    },
+    'order': [
+        'task-1-0',
+        'task-0-0',
+        'red-0-0',
+        'task-2-0',
+    ],
+    'expected': {
+        'schedule': [
+            {
+                'type': 'activity',
+                'call_key': 'red-1-0',
+                'name': 'red',
+                'version': 1,
+                'input_args': [3, 10],
+            },
+        ],
+    },
+}, {
+    'name': 'ParallelReduce',
+    'version': 1,
+    'results': {
+        'task-0-0': 1,
+        'task-1-0': 2,
+        'red-0-0': 3,
+        'task-2-0': 10,
+        'red-1-0': 13,
+    },
+    'order': [
+        'task-1-0',
+        'task-0-0',
+        'red-0-0',
+        'task-2-0',
+        'red-1-0',
+    ],
+    'expected': {
+        'finish': 13,
+    },
+}, {
+    'name': 'ParallelReduceCombined',
+    'version': 1,
+    'expected': {
+        'schedule': [
+            {
+                'type': 'activity',
+                'call_key': 'task-0-0',
+                'name': 'task',
+                'version': 1,
+            },
+            {
+                'type': 'activity',
+                'call_key': 'red-0-0',
+                'name': 'red',
+                'version': 1,
+                'input_args': ['a', 'b'],
+            },
+        ],
+    },
+}, {
+    'name': 'ParallelReduceCombined',
+    'version': 1,
+    'results': {
+        'red-0-0': 'ab',
+    },
+    'running': [
+        'task-0-0',
+    ],
+    'expected': {
+        'schedule': [
+            {
+                'type': 'activity',
+                'call_key': 'red-1-0',
+                'name': 'red',
+                'version': 1,
+                'input_args': ['c', 'ab'],
+            },
+        ],
+    },
+}, {
+    'name': 'ParallelReduceCombined',
+    'version': 1,
+    'results': {
+        'task-0-0': 'xyz',
+    },
+    'running': [
+        'red-0-0',
+    ],
+    'expected': {
+        'schedule': [
+            {
+                'type': 'activity',
+                'call_key': 'red-1-0',
+                'name': 'red',
+                'version': 1,
+                'input_args': ['c', 'xyz'],
+            },
+        ],
     },
 }]

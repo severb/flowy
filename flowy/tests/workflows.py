@@ -1,4 +1,4 @@
-from flowy import restart, SWFWorkflow, first, finish_order
+from flowy import restart, SWFWorkflow, first, finish_order, parallel_reduce
 
 
 w_no_name = SWFWorkflow(version=1)
@@ -131,3 +131,25 @@ class First2(object):
     def __call__(self):
         a = finish_order([self.task() for _ in range(4)])
         return a[:2]
+
+
+class ParallelReduce(object):
+    def __init__(self, task, red):
+        self.task = task
+        self.red = red
+
+    def __call__(self):
+        a = self.task()
+        b = self.task()
+        c = self.task()
+        return parallel_reduce(self.red, (a, b, c))
+
+
+class ParallelReduceCombined(object):
+    def __init__(self, task, red):
+        self.task = task
+        self.red = red
+
+    def __call__(self):
+        a = self.task()
+        return parallel_reduce(self.red, (a, 'a', 'b', 'c'))
