@@ -325,6 +325,7 @@ class BoundProxy(object):
                 try:
                     value = self.config.deserialize_result(value)
                 except Exception as e:
+                    logger.exception('Error while deserializing the activity result:')
                     self.task_decision.fail(e)
                     break  # result = Placeholder
                 r = result(value, order)
@@ -343,6 +344,7 @@ class BoundProxy(object):
             try:
                 input_data = self.config.serialize_input(*args, **kwargs)
             except Exception as e:
+                logger.exception('Error while serializing the activity input:')
                 self.task_decision.fail(e)
                 break  # result = Placeholder
             self.task_decision.schedule(call_number, retry_number, delay,
