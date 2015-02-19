@@ -13,7 +13,7 @@ from boto.swf.layer1_decisions import Layer1Decisions
 
 from flowy.base import Activity
 from flowy.base import BoundProxy
-from flowy.base import ResultProxy
+from flowy.base import is_result_proxy
 from flowy.base import setup_default_logger
 from flowy.base import Worker
 from flowy.base import Workflow
@@ -35,7 +35,7 @@ class JSONProxyEncoder(json.JSONEncoder):
     # objects but the C implementation uses a stricter check that won't work on
     # proxy objects.
     def default(self, obj):
-        if isinstance(obj, ResultProxy):
+        if is_result_proxy(obj):
             return obj.__wrapped__
         return json.JSONEncoder.default(self, obj)
 

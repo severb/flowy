@@ -193,11 +193,12 @@ class Worker(object):
                     logger.exception('Error while running the task:')
                     decision.fail(e)
                 else:
-                    # Use type() instead of isinstance() to avoid the
-                    # evaluation of the ResultProxy if the result is a proxy.
-                    # This also fixes another issue, on python2 isinstance()
-                    # swallows any exception while python3 doesn't.
-                    if type(result) is _restart:
+                    # Can't use directly isinstance(result, _restart) because
+                    # if the result is a single result proxy it will be
+                    # evaluated. This also fixes another issue, on python2
+                    # isinstance() swallows any exception while python3
+                    # doesn't.
+                    if not is_result_proxy(result) and isinstance(result, _restart):
                         serialize_restart = getattr(
                             config, 'serialize_restart_input', _identity)
                         try:
@@ -382,13 +383,19 @@ def wait(result):
     * SuspendTask - This is an internal exception used by Flowy as control
       flow and should not be handled by user code.
     """
-    if type(result) is ResultProxy:
+    if is_result_proxy(result):
         result.__wrapped__  # force the evaluation
 
 
 class ResultProxy(Proxy):
     """This is the TaskResult proxy."""
     pass
+
+
+def is_result_proxy(obj):
+    # Use type() instead of isinstance() to avoid the evaluation of the
+    # ResultProxy if the object is indeed a proxy.
+    return type(obj) is ResultProxy
 
 
 class TaskResult(object):
@@ -473,7 +480,7 @@ def parallel_reduce(f, iterable):
     """
     results, non_results = [], []
     for x in iterable:
-        if isinstance(x, ResultProxy):
+        if is_result_proxy(x):
             results.append(x)
         else:
             non_results.append(x)
@@ -486,11 +493,8 @@ def parallel_reduce(f, iterable):
         except StopIteration:
             reminder = x
             if not results:  # len(iterable) == 1
-                if type(x) is ResultProxy:
-                    return x
-                else:
-                    # Wrap the value in a result for uniform interface
-                    return result(x, -1)
+                # Wrap the value in a result for uniform interface
+                return result(x, -1)
     if not results:  # len(iterable) == 0
         raise ValueError('parallel_reduce() iterable cannot be empty')
     results = [(r.__factory__, r) for r in results]
@@ -535,21 +539,19 @@ class TaskTimedout(TaskError):
 def _scan_args(args, kwargs):
     errs = []
     for result in args:
-        if isinstance(result, ResultProxy):
-            try:
-                wait(result)
-            except SuspendTask:
-                return [], True
-            except Exception:
-                errs.append(result)
+        try:
+            wait(result)
+        except SuspendTask:
+            return [], True
+        except Exception:
+            errs.append(result)
     for key, result in kwargs.items():
-        if isinstance(result, ResultProxy):
-            try:
-                wait(result)
-            except SuspendTask:
-                return [], True
-            except Exception:
-                errs.append(result)
+        try:
+            wait(result)
+        except SuspendTask:
+            return [], True
+        except Exception:
+            errs.append(result)
     return errs, False
 
 
