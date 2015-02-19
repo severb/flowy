@@ -2,6 +2,7 @@ import itertools
 import json
 import logging
 import os
+import platform
 import socket
 import sys
 import uuid
@@ -40,13 +41,21 @@ class JSONProxyEncoder(json.JSONEncoder):
             return obj.__wrapped__
         return json.JSONEncoder.default(self, obj)
 
-    # On py26 and pypy it gets even worse...
+    # On py26 things are a bit worse...
     if sys.version_info[:2] == (2, 6):
         def _iterencode(self, o, markers=None):
             s = super(JSONProxyEncoder, self)
             if is_result_proxy(o):
                 return s._iterencode(o.__wrapped__, markers)
             return s._iterencode(o, markers)
+
+    # pypy uses simplejson, and ...
+    if platform.python_implementation() == 'PyPy':
+        def _JSONEncoder__encode(self, o, markers, builder, _current_indent_level):
+            s = super(JSONProxyEncoder, self)
+            if is_result_proxy(o):
+                return s._JSONEncoder__encode(o.__wrapped__, markers, builder, _current_indent_level)
+            return s._JSONEncoder__encode(o, markers, builder, _current_indent_level)
 
 
 _serialize_input = lambda *args, **kwargs: json.dumps((args, kwargs),
