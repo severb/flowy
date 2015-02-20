@@ -459,7 +459,6 @@ def finish_order(result, *results):
         if is_result_proxy(r):
             rs.append(r)
         else:
-            print('aici', type(r))
             non_rs.append(r)
     return non_rs + sorted(rs, key=_order_key)
 
