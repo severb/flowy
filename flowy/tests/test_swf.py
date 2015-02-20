@@ -227,3 +227,59 @@ class TestParallelReduce(unittest.TestCase):
         parallel_x = parallel_reduce(f, [x])
         # python 2.6 doesn't have assertIs
         assert x is parallel_x.__wrapped__
+
+
+class TestFinishOrder(unittest.TestCase):
+    def test_non_results(self):
+        from flowy import finish_order
+        x = [1, 2, 3, 4, 5, 'a', 'b', 'c']
+        self.assertEquals(x, finish_order(x))
+
+    def test_mixed(self):
+        from flowy import finish_order
+        from flowy.base import result, error, timeout, placeholder
+        r = result(1, 1)
+        t = timeout(2)
+        e = error('err!', 3)
+        p = placeholder()
+        fo = finish_order([1, e, 2, p, 3, r, t])
+        self.assertEquals(fo[:3], [1, 2, 3])
+        self.assertEquals(fo[3].__factory__, r.__factory__)
+        self.assertEquals(fo[4].__factory__, t.__factory__)
+        self.assertEquals(fo[5].__factory__, e.__factory__)
+        self.assertEquals(fo[6].__factory__, p.__factory__)
+
+    def test_results(self):
+        from flowy import finish_order
+        from flowy.base import result, error, timeout, placeholder
+        r = result(1, 1)
+        t = timeout(2)
+        e = error('err!', 3)
+        p = placeholder()
+        fo = finish_order([e, p, r, t])
+        self.assertEquals(fo[0].__factory__, r.__factory__)
+        self.assertEquals(fo[1].__factory__, t.__factory__)
+        self.assertEquals(fo[2].__factory__, e.__factory__)
+        self.assertEquals(fo[3].__factory__, p.__factory__)
+
+    def test_first_non_results(self):
+        from flowy import first
+        x = [1, 2, 3, 4, 5, 'a', 'b', 'c']
+        self.assertEquals(1, first(x))
+
+    def test_first_mixed(self):
+        from flowy import first
+        from flowy.base import result, error, timeout, placeholder
+        r = result(1, 1)
+        t = timeout(2)
+        e = error('err!', 3)
+        p = placeholder()
+
+    def test_first_results(self):
+        from flowy import first
+        from flowy.base import result, error, timeout, placeholder
+        r = result(1, 1)
+        t = timeout(2)
+        e = error('err!', 3)
+        p = placeholder()
+        self.assertEquals(first([e, p, r, t]).__factory__, r.__factory__)
