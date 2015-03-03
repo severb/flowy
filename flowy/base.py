@@ -454,13 +454,13 @@ def finish_order(result, *results):
     order preserved.
     """
     rs = []
-    non_rs = []
     for r in _i_or_args(result, results):
         if is_result_proxy(r):
             rs.append(r)
         else:
-            non_rs.append(r)
-    return non_rs + sorted(rs, key=_order_key)
+            yield r
+    for r in sorted(rs, key=_order_key):
+        yield r
 
 
 def parallel_reduce(f, iterable):

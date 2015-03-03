@@ -135,7 +135,7 @@ class First2(object):
 
     def __call__(self):
         a = finish_order([self.task() for _ in range(4)])
-        return a[:2]
+        return next(a), next(a)
 
 
 class ParallelReduce(object):

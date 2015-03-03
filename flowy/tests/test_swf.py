@@ -233,7 +233,7 @@ class TestFinishOrder(unittest.TestCase):
     def test_non_results(self):
         from flowy import finish_order
         x = [1, 2, 3, 4, 5, 'a', 'b', 'c']
-        self.assertEquals(x, finish_order(x))
+        self.assertEquals(x, list(finish_order(x)))
 
     def test_mixed(self):
         from flowy import finish_order
@@ -242,7 +242,7 @@ class TestFinishOrder(unittest.TestCase):
         t = timeout(2)
         e = error('err!', 3)
         p = placeholder()
-        fo = finish_order([1, e, 2, p, 3, r, t])
+        fo = list(finish_order([1, e, 2, p, 3, r, t]))
         self.assertEquals(fo[:3], [1, 2, 3])
         self.assertEquals(fo[3].__factory__, r.__factory__)
         self.assertEquals(fo[4].__factory__, t.__factory__)
@@ -256,7 +256,7 @@ class TestFinishOrder(unittest.TestCase):
         t = timeout(2)
         e = error('err!', 3)
         p = placeholder()
-        fo = finish_order([e, p, r, t])
+        fo = list(finish_order([e, p, r, t]))
         self.assertEquals(fo[0].__factory__, r.__factory__)
         self.assertEquals(fo[1].__factory__, t.__factory__)
         self.assertEquals(fo[2].__factory__, e.__factory__)
