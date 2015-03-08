@@ -588,7 +588,7 @@ class SWFTaskExecutionHistory(object):
         """Compute the key and delegate to exec_history."""
         if fname not in ['is_running', 'is_timeout', 'is_error', 'has_result',
                          'result', 'order', 'error']:
-            return super(SWFTaskExecutionHistory, self).__getattr__(fname)
+            return getattr(super(SWFTaskExecutionHistory, self), fname)
 
         delegate_to = getattr(self.exec_history, fname)
 
