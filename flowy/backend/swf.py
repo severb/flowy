@@ -36,6 +36,11 @@ class JSONProxyEncoder(json.JSONEncoder):
     # The pure Python implementation uses isinstance() which work on proxy
     # objects but the C implementation uses a stricter check that won't work on
     # proxy objects.
+    def encode(self, o):
+        if is_result_proxy(o):
+            o = o.__wrapped__
+        return super(JSONProxyEncoder, self).encode(o)
+
     def default(self, obj):
         if is_result_proxy(obj):
             return obj.__wrapped__

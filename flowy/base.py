@@ -438,7 +438,13 @@ def first(result, *results):
     If no one is finished yet - all of the results are placeholders - return
     the first placeholder from the list.
     """
-    return min(_i_or_args(result, results), key=_order_key)
+    rs = []
+    for r in _i_or_args(result, results):
+        if is_result_proxy(r):
+            rs.append(r)
+        else:
+            return r
+    return min(rs, key=_order_key)
 
 
 def finish_order(result, *results):
@@ -447,8 +453,14 @@ def finish_order(result, *results):
     The results that aren't finished yet will be at the end with their relative
     order preserved.
     """
-    i = list(_i_or_args(result, results))
-    return sorted(i, key=_order_key)
+    rs = []
+    for r in _i_or_args(result, results):
+        if is_result_proxy(r):
+            rs.append(r)
+        else:
+            yield r
+    for r in sorted(rs, key=_order_key):
+        yield r
 
 
 def parallel_reduce(f, iterable):
