@@ -343,31 +343,3 @@ class LocalWorkflow(Workflow):
         w_executor = self.executor(max_workers=self.workflow_workers)
         wr = WorkflowRunner(self, w_executor, a_executor, args, kwargs)
         return wr.run()
-
-
-class TestWorkflow(object):
-    def __init__(self, x, y, me):
-        self.x = x
-        self.y = y
-        self.me = me
-
-    def __call__(self, for_x, for_y, recurse=True):
-        x_result = self.x(for_x)
-        y_result = self.y(for_y)
-        return x_result + y_result
-
-def x(n):
-    time.sleep(1)
-    return n
-
-def y(n):
-    raise ValueError('err!')
-
-from flowy.base import setup_default_logger
-setup_default_logger()
-
-w = LocalWorkflow(TestWorkflow)
-w.conf_activity('x', x)
-w.conf_activity('y', x)
-w.conf_workflow('me', w)
-print w.run(10, 20)
