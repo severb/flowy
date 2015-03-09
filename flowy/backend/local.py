@@ -16,10 +16,10 @@ from functools import partial
 from threading import Event
 from threading import RLock
 
-from flowy import TaskError
 from flowy.backend.swf import SWFTaskExecutionHistory as TaskHistory
 from flowy.base import _identity
 from flowy.base import BoundProxy
+from flowy.base import TaskError
 from flowy.base import Worker
 from flowy.base import Workflow
 
