@@ -3,6 +3,15 @@
 from setuptools import find_packages
 from setuptools import setup
 
+
+install_requires=['boto==2.33.0',
+                  'venusian>=1.0a8',
+                  'lazy_object_proxy==1.0.1']
+try:
+    import concurrent.futures
+except ImportError:
+    install_requires.append('futures')
+
 setup(
     name='flowy',
     version='0.4.dev0',
@@ -17,9 +26,7 @@ setup(
     include_package_data=True,
     zip_safe=False,
     setup_requires=['nose', 'setuptools_git', 'wheel'],
-    install_requires=['boto==2.33.0',
-                      'venusian>=1.0a8',
-                      'lazy_object_proxy==1.0.1'],
+    install_requires=install_requires,
     tests_require=['coverage'],
     test_suite="nose.collector",
     extras_require={'docs': ['sphinx', 'sphinx_rtd_theme']},
