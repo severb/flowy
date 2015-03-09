@@ -16,29 +16,22 @@ from functools import partial
 from threading import Event
 from threading import RLock
 
+from flowy import TaskError
 from flowy.backend.swf import SWFTaskExecutionHistory as TaskHistory
 from flowy.base import _identity
-from flowy.base import _serialize_input
 from flowy.base import BoundProxy
-from flowy.base import setup_default_logger
 from flowy.base import Worker
 from flowy.base import Workflow
 
-setup_default_logger()
-
 
 class WorkflowRunner(object):
-    def __init__(self, workflow, args=[], kwargs={}, workflow_executor=None,
-                 activity_executor=None, parent=None, w_id=None):
+    def __init__(self, workflow, workflow_executor, activity_executor, args=[],
+                 kwargs={}, parent=None, w_id=None):
         self.workflow = workflow
         self.args = args
         self.kwargs = kwargs
         self.workflow_executor = workflow_executor
-        if workflow_executor is None:
-            self.workflow_executor = ThreadPoolExecutor(max_workers=2)
         self.activity_executor = activity_executor
-        if activity_executor is None:
-            self.activity_executor = ThreadPoolExecutor(max_workers=8)
         self.parent = parent
         self.w_id = w_id
         self.running = set()
@@ -51,8 +44,9 @@ class WorkflowRunner(object):
         self.stop = Event()
 
     def child_runner(self, workflow, w_id, args, kwargs):
-        return WorkflowRunner(workflow, args, kwargs, self.workflow_executor,
-                              self.activity_executor, parent=self, w_id=w_id)
+        return WorkflowRunner(workflow, self.workflow_executor,
+                              self.activity_executor, args, kwargs,
+                              parent=self, w_id=w_id)
 
     def set_decision(self, decision):
         self.decision = decision
@@ -66,6 +60,10 @@ class WorkflowRunner(object):
         self.stop.wait()
         self.activity_executor.shutdown()
         self.workflow_executor.shutdown()
+        if hasattr(self, 'result'):
+            return self.result
+        if hasattr(self, 'exception'):
+            raise self.exception
 
     def complete_activity_and_reschedule_decision(self, task_id, result):
         with self.lock:
@@ -104,12 +102,14 @@ class WorkflowRunner(object):
             result = result.result()
         except Exception as e:
             if self.parent is None:
+                self.exception = TaskError(str(e))
                 self.stop.set()
             else:
                 self.parent.fail_subwf_and_reschedule_decision(self.w_id, e)
             return
         if result['type'] == 'finish':
             if self.parent is None:
+                self.result = result['result']
                 self.stop.set()
             else:
                 self.parent.complete_subwf_and_reschedule_decision(
@@ -117,6 +117,7 @@ class WorkflowRunner(object):
             return
         if result['type'] == 'fail':
             if self.parent is None:
+                self.exception = TaskError(result['reason'])
                 self.stop.set()
             else:
                 self.parent.fail_subwf_and_reschedule_decision(
@@ -253,7 +254,7 @@ class Decision(dict):
             'id': call_key,
             'args': input_data[0],
             'kwargs': input_data[1],
-            'f': f,})
+            'f': f})
 
 
 class ActivityDecision(object):
@@ -287,31 +288,37 @@ class WorkflowDecision(object):
 
 
 Serializer = namedtuple('Serializer', 'serialize_input deserialize_result')
-serializer = Serializer(_serialize_input, _identity)
+serializer = Serializer(lambda *args, **kwargs: (args, kwargs), _identity)
 
 
-def activity_proxy(identity, f):
-    def clos(decision, history):
+class ActivityProxy(object):
+    def __init__(self, identity, f):
+        self.identity = identity
+        self.f = f
+
+    def __call__(self, decision, history):
         return BoundProxy(
             serializer,
-            TaskHistory(history, identity),
-            ActivityDecision(decision, identity, f))
-    return clos
+            TaskHistory(history, self.identity),
+            ActivityDecision(decision, self.identity, self.f))
 
 
-def workflow_proxy(identity, f):
-    def clos(decision, history):
+class WorkflowProxy(object):
+    def __init__(self, identity, f):
+        self.identity = identity
+        self.f = f
+
+    def __call__(self, decision, history):
         return BoundProxy(
             serializer,
-            TaskHistory(history, identity),
-            WorkflowDecision(decision, identity, f))
-    return clos
+            TaskHistory(history, self.identity),
+            WorkflowDecision(decision, self.identity, self.f))
 
 
 class LocalWorkflow(Workflow):
 
     def __init__(self, w, activity_workers=8, workflow_workers=2,
-                 executor=ThreadPoolExecutor):
+                 executor=ProcessPoolExecutor):
         super(LocalWorkflow, self).__init__()
         self.activity_workers = activity_workers
         self.workflow_workers = workflow_workers
@@ -320,50 +327,47 @@ class LocalWorkflow(Workflow):
         self.worker.register(self, w)
 
     def conf_activity(self, dep_name, f):
-        self.conf_proxy(dep_name, activity_proxy(dep_name, f))
+        self.conf_proxy(dep_name, ActivityProxy(dep_name, f))
 
     def conf_workflow(self, dep_name, f):
-        self.conf_proxy(dep_name, workflow_proxy(dep_name, f))
+        self.conf_proxy(dep_name, WorkflowProxy(dep_name, f))
 
     def __call__(self, state, *args, **kwargs):
         d = Decision()
         input_data = serializer.serialize_input(*args, **kwargs)
         self.worker(self, input_data, d, state)
-        print 'State:', state
-        print 'Decisions:', d
         return d
 
     def run(self, *args, **kwargs):
         a_executor = self.executor(max_workers=self.activity_workers)
         w_executor = self.executor(max_workers=self.workflow_workers)
-        wr = WorkflowRunner(self, args, kwargs, workflow_executor=w_executor,
-                            activity_executor=a_executor)
+        wr = WorkflowRunner(self, w_executor, a_executor, args, kwargs)
         return wr.run()
 
 
-if __name__ == '__main__':
+class TestWorkflow(object):
+    def __init__(self, x, y, me):
+        self.x = x
+        self.y = y
+        self.me = me
 
-    class TestWorkflow(object):
-        def __init__(self, x, y, me):
-            self.x = x
-            self.y = y
-            self.me = me
+    def __call__(self, for_x, for_y, recurse=True):
+        x_result = self.x(for_x)
+        y_result = self.y(for_y)
+        return x_result + y_result
 
-        def __call__(self, for_x, for_y, recurse=True):
-            x_result = self.x(for_x)
-            y_result = self.y(for_y)
-            if recurse:
-                me_result = self.me(for_x, for_y, recurse=False)
-                return x_result + y_result + me_result
-            else:
-                return x_result + y_result
+def x(n):
+    time.sleep(1)
+    return n
 
-    def x(n):
-        time.sleep(1)
-        return n
+def y(n):
+    raise ValueError('err!')
 
-    w = LocalWorkflow(TestWorkflow)
-    w.conf_activity('x', x)
-    w.conf_activity('y', x)
-    w.conf_workflow('me', w)
-    w.run(10, 20)
+from flowy.base import setup_default_logger
+setup_default_logger()
+
+w = LocalWorkflow(TestWorkflow)
+w.conf_activity('x', x)
+w.conf_activity('y', x)
+w.conf_workflow('me', w)
+print w.run(10, 20)

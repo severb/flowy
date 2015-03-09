@@ -18,7 +18,6 @@ logger = logging.getLogger(__package__)
 
 
 _identity = lambda x: x
-_serialize_input = lambda *args, **kwargs: (args, kwargs)
 _sentinel = object()
 
 
@@ -27,16 +26,26 @@ class Activity(object):
 
     category = None
 
-    def __init__(self, deserialize_input=_identity,
-                 serialize_result=_identity):
+    def __init__(self, deserialize_input=None, serialize_result=None):
         """Initialize the activity config object.
 
         The deserialize_input/serialize_result callables are used to
         deserialize the initial input data and serialize the final result.
         By default they are the identity functions.
         """
-        self.deserialize_input = deserialize_input
-        self.serialize_result = serialize_result
+        # Use default methods for the serialization/deserialization instead of
+        # default argument values. This is needed for the local backend and
+        # pickle.
+        if deserialize_input is not None:
+            self.deserialize_input = deserialize_input
+        if serialize_result is not None:
+            self.serialize_result = serialize_result
+
+    def deserialize_input(self, input_data):
+        return input_data
+
+    def serialize_result(self, result):
+        return result
 
     def __call__(self, obj):
         """Associate an object to this config and make it discoverable.
@@ -72,9 +81,8 @@ class Activity(object):
 class Workflow(Activity):
     """A generic workflow configuration object with dependencies."""
 
-    def __init__(self, deserialize_input=_identity,
-                 serialize_result=_identity,
-                 serialize_restart_input=_serialize_input):
+    def __init__(self, deserialize_input=None, serialize_result=None,
+                 serialize_restart_input=None):
         """Initialize the workflow config object.
 
         The deserialize_input, serialize_result and serialize_restart_input
@@ -82,8 +90,12 @@ class Workflow(Activity):
         final result and serialize the restart arguments.
         """
         super(Workflow, self).__init__(deserialize_input, serialize_result)
-        self.serialize_restart_input = serialize_restart_input
+        if serialize_restart_input is not None:
+            self.serialize_restart_input = serialize_restart_input
         self.proxy_factory_registry = {}
+
+    def serialize_restart_input(self, *args, **kwargs):
+        return (args, kwargs)
 
     def _check_dep(self, dep_name):
         """Check if dep_name is a unique valid identifier name."""
