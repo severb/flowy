@@ -3,14 +3,7 @@ try:
 except ImportError:
     from futures import ThreadPoolExecutor, ProcessPoolExecutor
 
-try:
-    from queue import Queue
-except ImportError:
-    from Queue import Queue
-
 import json
-import random
-import threading
 import time
 from collections import namedtuple
 from functools import partial
