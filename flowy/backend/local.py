@@ -8,6 +8,7 @@ try:
 except ImportError:
     from Queue import Queue
 
+import json
 import random
 import threading
 import time
@@ -17,6 +18,7 @@ from threading import Event
 from threading import RLock
 
 from flowy.backend.swf import SWFTaskExecutionHistory as TaskHistory
+from flowy.backend.swf import JSONProxyEncoder
 from flowy.base import _identity
 from flowy.base import BoundProxy
 from flowy.base import TaskError
@@ -288,7 +290,15 @@ class WorkflowDecision(object):
 
 
 Serializer = namedtuple('Serializer', 'serialize_input deserialize_result')
-serializer = Serializer(lambda *args, **kwargs: (args, kwargs), _identity)
+
+def serialize_input(*args, **kwargs):
+    r = (args, kwargs)
+    # force the encoding only to walk the data structure and trigger any
+    # errors or suspend tasks
+    json.dumps(r, cls=JSONProxyEncoder)
+    return r
+
+serializer = Serializer(serialize_input, _identity)
 
 
 class ActivityProxy(object):
@@ -325,6 +335,12 @@ class LocalWorkflow(Workflow):
         self.executor = executor
         self.worker = Worker()
         self.worker.register(self, w)
+
+    def serialize_result(self, result):
+        # force the encoding only to walk the data structure and trigger any
+        # errors or suspend tasks
+        json.dumps(result, cls=JSONProxyEncoder)
+        return result
 
     def conf_activity(self, dep_name, f):
         self.conf_proxy(dep_name, ActivityProxy(dep_name, f))
