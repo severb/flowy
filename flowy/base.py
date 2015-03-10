@@ -14,7 +14,7 @@ from lazy_object_proxy.slots import Proxy
 __all__ = 'restart TaskError TaskTimedout wait first finish_order parallel_reduce'.split()
 
 
-logger = logging.getLogger(__package__)
+logger = logging.getLogger(__name__.split('.', 1)[0])
 
 
 _identity = lambda x: x

@@ -24,7 +24,7 @@ from flowy.base import Workflow
 __all__ = 'SWFWorkflow SWFWorkflowWorker SWFActivity SWFActivityWorker SWFWorkflowStarter'.split()
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.split('.', 1)[0])
 
 
 _CHILD_POLICY = ['TERMINATE', 'REQUEST_CANCEL', 'ABANDON', None]
