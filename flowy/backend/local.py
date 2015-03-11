@@ -53,8 +53,8 @@ class WorkflowRunner(object):
             self.set_decision(f)
             f.add_done_callback(self.schedule_tasks)
         self.stop.wait()
-        self.activity_executor.shutdown()
-        self.workflow_executor.shutdown()
+        self.activity_executor.shutdown(wait=False)
+        self.workflow_executor.shutdown(wait=False)
         if hasattr(self, 'result'):
             return self.result
         if hasattr(self, 'exception'):
@@ -82,11 +82,14 @@ class WorkflowRunner(object):
         def submit_next_decision(result):
             with self.lock:
                 self.queued = False
-                f = self.workflow_executor.submit(self.workflow,
-                                                  self.ro_state(),
-                                                  *self.args, **self.kwargs)
-                f.add_done_callback(self.schedule_tasks)
-                self.decision = f
+                try:
+                    f = self.workflow_executor.submit(self.workflow,
+                                                      self.ro_state(),
+                                                      *self.args, **self.kwargs)
+                    f.add_done_callback(self.schedule_tasks)
+                    self.decision = f
+                except RuntimeError:
+                    pass # The executor must be closed
         with self.lock:
             if not self.queued:
                 self.queued = True
@@ -125,17 +128,23 @@ class WorkflowRunner(object):
             for w in result.get('workflows', []):
                 self.set_running(w['id'])
         for a in result.get('activities', []):
-            f = self.activity_executor.submit(a['f'], *a['args'],
-                                              **a['kwargs'])
-            f.add_done_callback(partial(
-                self.complete_activity_and_reschedule_decision, a['id']))
+            try:
+                f = self.activity_executor.submit(a['f'], *a['args'],
+                                                  **a['kwargs'])
+                f.add_done_callback(partial(
+                    self.complete_activity_and_reschedule_decision, a['id']))
+            except RuntimeError:
+                pass # The executor must be closed
         for w in result.get('workflows', []):
-            child_runner = self.child_runner(w['f'], w['id'], w['args'],
-                                             w['kwargs'])
-            f = self.workflow_executor.submit(w['f'], child_runner.ro_state(),
-                                              *w['args'], **w['kwargs'])
-            child_runner.set_decision(f)
-            f.add_done_callback(child_runner.schedule_tasks)
+            try:
+                child_runner = self.child_runner(w['f'], w['id'], w['args'],
+                                                 w['kwargs'])
+                f = self.workflow_executor.submit(
+                    w['f'], child_runner.ro_state(), *w['args'], **w['kwargs'])
+                child_runner.set_decision(f)
+                f.add_done_callback(child_runner.schedule_tasks)
+            except RuntimeError:
+                pass # The executor must be closed
 
     def set_running(self, call_key):
         with self.lock:
