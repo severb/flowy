@@ -483,16 +483,17 @@ def parallel_reduce(f, iterable):
     The reduction will start as soon as two results are available, regardless
     of their "position". For example, the following reduction is possible:
 
-    O--------------\
-                    O----\
-    O--------------/      \
-    O--------\             \
-              O-----\       O
-    O--------/       \     /
-    O----\            O---/
-          O-----\    /
-    O----/       O--/
-    O-----------/
+     5 ----1-----|
+    15           --------------4----------|
+    15           |                        -------------12|
+    15           |                        |              -------------17|
+  R 15           |                        |              |              -------------21
+    15 ----------|---2-----|              |              |              |
+    15           |         --------------8|              |              |
+    10 ---------3|         |                             |              |
+    60 --------------------|-----------------------------|--------4-----|
+    50 --------------------|----------------------------5|
+    20 -------------------6|
 
     The iterable must have at least one element, otherwise a ValueError will be
     raised. Note that there is no initializer as the order of the operations
