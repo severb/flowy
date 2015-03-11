@@ -31,16 +31,16 @@ class Sequential(object):
     10 ---------1|
      5           ----2|
     15                --------------3|
-    20                               -------------------4
+  R 20                               -------------------4
     Duration: 50
     """
     def __init__(self, a):
         self.a = a
 
-    def __call__(self, n=4):
+    def __call__(self):
         r = 0
-        for sleep in [1.0, 0.5, 1.5, 2.0]:
-            r = self.a(sleep=sleep, result=r+1)
+        for identity, sleep in enumerate([1.0, 0.5, 1.5, 2.0], 1):
+            r = self.a(sleep=sleep, result=r+1, identity=identity)
         return r
 
 class ParallelWait(object):
@@ -57,7 +57,7 @@ class ParallelWait(object):
     def __init__(self, a):
         self.a = a
 
-    def __call__(self, n=4):
+    def __call__(self):
         results = []
         for identity, sleep in enumerate([1.0, 0.5, 1.5, 2.0], 1):
             results.append(self.a(identity=identity, sleep=sleep, result=identity))
@@ -79,7 +79,7 @@ class ParallelSum(object):
     def __init__(self, a):
         self.a = a
 
-    def __call__(self, n=4):
+    def __call__(self):
         results = []
         for identity, sleep in enumerate([1.0, 0.5, 1.5, 2.0], 1):
             results.append(self.a(identity=identity, sleep=sleep, result=identity))
@@ -154,7 +154,7 @@ class NaiveMapReduce(object):
     def __init__(self, a):
         self.a = a
 
-    def __call__(self, n=4):
+    def __call__(self):
         reduce_f = lambda x, y: self.a(sleep=1.5, identity='reduce %s %s' % (x, y), result=x + y)
         map_f = lambda sleep, result: self.a(sleep=sleep, result=result, identity='map %s' % result)
         results = map(map_f, [0.5, 1.5, 1.0, 6.0, 5.0, 2.0], range(1, 7))
@@ -183,7 +183,7 @@ class FinishOrderMapReduce(object):
     def __init__(self, a):
         self.a = a
 
-    def __call__(self, n=4):
+    def __call__(self):
         reduce_f = lambda x, y: self.a(sleep=1.5, identity='reduce %s %s' % (x, y), result=x + y)
         map_f = lambda sleep, result: self.a(sleep=sleep, result=result, identity='map %s' % result)
         results = map(map_f, [0.5, 1.5, 1.0, 6.0, 5.0, 2.0], range(1, 7))
@@ -212,7 +212,7 @@ class ParallelMapReduce(object):
     def __init__(self, a):
         self.a = a
 
-    def __call__(self, n=4):
+    def __call__(self):
         reduce_f = lambda x, y: self.a(sleep=1.5, identity='reduce %s %s' % (x, y), result=x + y)
         map_f = lambda sleep, result: self.a(sleep=sleep, result=result, identity='map %s' % result)
         results = map(map_f, [0.5, 1.5, 1.0, 6.0, 5.0, 2.0], range(1, 7))
