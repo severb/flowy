@@ -1,7 +1,7 @@
 try:
-    from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+    from concurrent.futures import ProcessPoolExecutor
 except ImportError:
-    from futures import ThreadPoolExecutor, ProcessPoolExecutor
+    from futures import ProcessPoolExecutor
 
 import json
 import time
