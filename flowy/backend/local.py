@@ -85,7 +85,8 @@ class WorkflowRunner(object):
                 try:
                     f = self.workflow_executor.submit(self.workflow,
                                                       self.ro_state(),
-                                                      *self.args, **self.kwargs)
+                                                      *self.args,
+                                                      **self.kwargs)
                     f.add_done_callback(self.schedule_tasks)
                     self.decision = f
                 except RuntimeError:
