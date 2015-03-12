@@ -23,6 +23,5 @@
 Flowy is an open source project backed by |3PG|_
 
 
-.. |3PG| image:: http://www.3pillarglobal.com/wp-content/themes/base/library/images/logo_3pg.png
-    :height: 25px
+.. |3PG| image:: http://api.imgble.com/http://www.3pillarglobal.com/wp-content/themes/base/library/images/logo_3pg.png//25/png
 .. _3PG: http://3pillarglobal.com/
