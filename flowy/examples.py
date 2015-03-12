@@ -22,6 +22,8 @@ def activity(x=None, y=None, identity=None, result=None, sleep=None):
     print('Start activity (sleep %fs): %s' % (sleep, identity))
     time.sleep(sleep)
     print('Finish activity (sleep %fs): %s' % (sleep, identity))
+    if result == 'random':
+        return random.random()
     return result
 
 
@@ -131,6 +133,24 @@ class WaitFirstTwo(object):
         # wait(next(f_o))
         # wait(next(f_o))
 
+
+class Conditional(object):
+    """Start an activity conditioned by the result of a previous activity.
+
+  R  0           1
+    10 ---------?|
+  R 10           ---------2
+
+    Duration: 10, 20
+    """
+    def __init__(self, a):
+        self.a = a
+
+    def __call__(self):
+        x = self.a(result='random', identity=1, sleep=1.0)
+        if x > 0.5:
+            return self.a(identity='in if', result=2, sleep=1.0)
+        return 1
 
 
 class NaiveMapReduce(object):
