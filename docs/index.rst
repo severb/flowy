@@ -47,6 +47,9 @@ example running on different backends.
 .. include:: roadmap.rst
 
 
+Flowy is an open source project backed by |3PG|_
+
+
 .. toctree::
     :maxdepth: 2
     :hidden:
@@ -68,3 +71,6 @@ example running on different backends.
 .. _Flowy: http://github.com/severb/flowy/
 .. _Amazon's SWF: http://aws.amazon.com/swf/
 .. _pip: http://www.pip-installer.org/
+.. |3PG| image:: http://www.3pillarglobal.com/wp-content/themes/base/library/images/logo_3pg.png
+    :height: 25px
+.. _3PG: http://3pillarglobal.com/
