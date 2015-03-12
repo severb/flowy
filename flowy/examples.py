@@ -219,8 +219,7 @@ class ParallelMapReduce(object):
         return parallel_reduce(reduce_f, results)
 
 
-if __name__ == '__main__':
-
+def main():
     def workflow(workflow_class):
         try:
             return globals()[workflow_class]
@@ -248,3 +247,7 @@ if __name__ == '__main__':
     if args.timeit:
         print('Timed at:', time.time() - start)
     print('Result:', result)
+
+
+if __name__ == '__main__':
+    main()

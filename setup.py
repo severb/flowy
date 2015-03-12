@@ -32,7 +32,8 @@ setup(
     extras_require={'docs': ['sphinx', 'sphinx_rtd_theme']},
     entry_points={
         "console_scripts": [
-            "flowy = flowy.__main__:main"
+            "flowy = flowy.__main__:main",
+            "flowyexamples = flowy.examples:main",
         ]
     },
     classifiers = ["Development Status :: 5 - Production/Stable",
