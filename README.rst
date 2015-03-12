@@ -18,3 +18,10 @@
 
 .. image:: https://pypip.in/format/flowy/badge.png
    :target: https://pypi.python.org/pypi/flowy/
+
+
+Flowy is an open source project backed by |3PG|_
+
+
+.. |3PG| image:: http://www.3pillarglobal.com/wp-content/themes/base/library/images/logo_3pg.png
+.. _3PG: http://3pillarglobal.com/
