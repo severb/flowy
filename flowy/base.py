@@ -590,25 +590,12 @@ def restart(*args, **kwargs):
 
 def setup_default_logger():
     """Configure the default logger for Flowy."""
-    logging.config.dictConfig({
-        'version': 1,
-        'disable_existing_loggers': False,
-        'formatters': {
-            'simple': {
-                'format': '%(asctime)s %(levelname)s\t%(name)s: %(message)s'
-            }},
-        'handlers': {
-            'console': {
-                'class': 'logging.StreamHandler',
-                'formatter': 'simple'
-            }},
-        'loggers': {
-            'flowy': {
-                'handlers': ['console'],
-                'popagate': False,
-                'level': 'INFO',
-            }}
-    })
+    handler = logging.StreamHandler()
+    handler.setFormatter(
+        logging.Formatter('%(asctime)s %(levelname)s\t%(name)s: %(message)s'))
+    logger.addHandler(handler)
+    logger.setLevel('INFO')
+    logger.propagate = False
 
 
 # Stolen from Pyramid
