@@ -5,6 +5,7 @@ import logging
 import sys
 from collections import namedtuple
 from functools import partial
+from itertools import chain
 from keyword import iskeyword
 
 import venusian
@@ -475,7 +476,7 @@ def finish_order(result, *results):
         yield r
 
 
-def parallel_reduce(f, iterable):
+def parallel_reduce(f, iterable, initializer=_sentinel):
     """Like reduce() but optimized to maximize parallel execution.
 
     The reduce function must be associative and commutative.
@@ -505,6 +506,8 @@ def parallel_reduce(f, iterable):
     how the reduction graph looks like.
 
     """
+    if initializer is not _sentinel:
+        iterable = chain([initializer], iterable)
     results, non_results = [], []
     for x in iterable:
         if is_result_proxy(x):
@@ -523,10 +526,14 @@ def parallel_reduce(f, iterable):
                 # Wrap the value in a result for uniform interface
                 return result(x, -1)
     if not results:  # len(iterable) == 0
-        raise ValueError('parallel_reduce() iterable cannot be empty')
-    results = [(r.__factory__, r) for r in results]
-    heapq.heapify(results)
-    return _parallel_reduce_recurse(f, results, reminder)
+        raise ValueError('parallel_reduce() of empty sequence with no initial value')
+    if is_result_proxy(results[0]):
+        results = [(r.__factory__, r) for r in results]
+        heapq.heapify(results)
+        return _parallel_reduce_recurse(f, results, reminder)
+    else:
+        # Looks like we don't use a task for reduction, fallback on reduce
+        return reduce(f, results)
 
 
 def _parallel_reduce_recurse(f, results, reminder=_sentinel):
