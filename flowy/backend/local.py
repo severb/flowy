@@ -34,9 +34,10 @@ class WorkflowRunner(object):
         self.errors = dict()
         self.finish_order = []
         self.lock = RLock()
-        self.decision = None
-        self.queued = False
         self.stop = Event()
+        self.will_restart = True
+        self.history_updated = False
+
 
     def child_runner(self, workflow, w_id, args, kwargs):
         return WorkflowRunner(workflow, self.workflow_executor,
@@ -47,11 +48,7 @@ class WorkflowRunner(object):
         self.decision = decision
 
     def run(self):
-        with self.lock:
-            f = self.workflow_executor.submit(self.workflow, self.ro_state(),
-                                              *self.args, **self.kwargs)
-            self.set_decision(f)
-            f.add_done_callback(self.schedule_tasks)
+        self.reschedule_decision()
         self.stop.wait()
         self.activity_executor.shutdown(wait=False)
         self.workflow_executor.shutdown(wait=False)
@@ -60,41 +57,52 @@ class WorkflowRunner(object):
         if hasattr(self, 'exception'):
             raise self.exception
 
+    def reschedule_if_history_updated(self):
+        with self.lock:
+            if self.history_updated:
+                self.history_updated = False
+                self.reschedule_decision()
+            else:
+                self.will_restart = False
+
+    def update_history_or_reschedule(self):
+        with self.lock:
+            if self.will_restart:
+                self.history_updated = True
+            else:
+                self.history_updated = False
+                self.will_restart = True
+                self.reschedule_decision()
+
     def complete_activity_and_reschedule_decision(self, task_id, result):
         with self.lock:
             try:
-                self.set_result(task_id, result.result())
+                r = result.result()
             except Exception as e:
                 self.set_error(task_id, str(e))
-            self.reschedule_decision()
+            self.set_result(task_id, r)
+            self.update_history_or_reschedule()
 
     def fail_subwf_and_reschedule_decision(self, task_id, reason):
         with self.lock:
             self.set_error(task_id, str(reason))
-            self.reschedule_decision()
+            self.update_history_or_reschedule()
 
     def complete_subwf_and_reschedule_decision(self, task_id, result):
         with self.lock:
             self.set_result(task_id, result)
-            self.reschedule_decision()
+            self.update_history_or_reschedule()
 
     def reschedule_decision(self):
-        def submit_next_decision(result):
-            with self.lock:
-                self.queued = False
-                try:
-                    f = self.workflow_executor.submit(self.workflow,
-                                                      self.ro_state(),
-                                                      *self.args,
-                                                      **self.kwargs)
-                    f.add_done_callback(self.schedule_tasks)
-                    self.decision = f
-                except RuntimeError:
-                    pass # The executor must be closed
         with self.lock:
-            if not self.queued:
-                self.queued = True
-                self.decision.add_done_callback(submit_next_decision)
+            try:
+                f = self.workflow_executor.submit(self.workflow,
+                                                  self.ro_state(),
+                                                  *self.args,
+                                                  **self.kwargs)
+            except RuntimeError:
+                return # The executor must be closed
+            f.add_done_callback(partial(self.schedule_tasks))
 
     def schedule_tasks(self, result):
         try:
@@ -123,29 +131,28 @@ class WorkflowRunner(object):
                     self.w_id, result['reason'])
             return
         assert result['type'] == 'schedule'
-        with self.lock:  # XXX: this may not be required
+        with self.lock:
             for a in result.get('activities', []):
                 self.set_running(a['id'])
             for w in result.get('workflows', []):
                 self.set_running(w['id'])
-        for a in result.get('activities', []):
-            try:
-                f = self.activity_executor.submit(a['f'], *a['args'],
-                                                  **a['kwargs'])
-                f.add_done_callback(partial(
-                    self.complete_activity_and_reschedule_decision, a['id']))
-            except RuntimeError:
-                pass # The executor must be closed
-        for w in result.get('workflows', []):
-            try:
-                child_runner = self.child_runner(w['f'], w['id'], w['args'],
-                                                 w['kwargs'])
-                f = self.workflow_executor.submit(
-                    w['f'], child_runner.ro_state(), *w['args'], **w['kwargs'])
-                child_runner.set_decision(f)
-                f.add_done_callback(child_runner.schedule_tasks)
-            except RuntimeError:
-                pass # The executor must be closed
+            for a in result.get('activities', []):
+                try:
+                    f = self.activity_executor.submit(a['f'], *a['args'],
+                                                      **a['kwargs'])
+                    f.add_done_callback(partial(
+                        self.complete_activity_and_reschedule_decision,
+                        a['id']))
+                except RuntimeError:
+                    pass # The executor must be closed
+            for w in result.get('workflows', []):
+                try:
+                    child_runner = self.child_runner(w['f'], w['id'],
+                                                     w['args'], w['kwargs'])
+                    child_runner.reschedule_decision()
+                except RuntimeError:
+                    pass # The executor must be closed
+            self.reschedule_if_history_updated()
 
     def set_running(self, call_key):
         with self.lock:
