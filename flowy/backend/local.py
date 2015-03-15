@@ -47,11 +47,11 @@ class WorkflowRunner(object):
     def set_decision(self, decision):
         self.decision = decision
 
-    def run(self):
+    def run(self, wait=False):
         self.reschedule_decision()
         self.stop.wait()
-        self.activity_executor.shutdown(wait=False)
-        self.workflow_executor.shutdown(wait=False)
+        self.activity_executor.shutdown(wait=wait)
+        self.workflow_executor.shutdown(wait=wait)
         if hasattr(self, 'result'):
             return self.result
         if hasattr(self, 'exception'):
@@ -365,7 +365,8 @@ class LocalWorkflow(Workflow):
         return d
 
     def run(self, *args, **kwargs):
+        wait = kwargs.pop('_wait', False)
         a_executor = self.executor(max_workers=self.activity_workers)
         w_executor = self.executor(max_workers=self.workflow_workers)
         wr = WorkflowRunner(self, w_executor, a_executor, args, kwargs)
-        return wr.run()
+        return wr.run(wait=wait)
