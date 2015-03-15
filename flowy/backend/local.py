@@ -20,11 +20,10 @@ from flowy.base import Workflow
 
 
 class WorkflowRunner(object):
-    def __init__(self, workflow, workflow_executor, activity_executor, args=[],
-                 kwargs={}, parent=None, w_id=None):
+    def __init__(self, workflow, workflow_executor, activity_executor,
+                 input_data, parent=None, w_id=None):
         self.workflow = workflow
-        self.args = args
-        self.kwargs = kwargs
+        self.input_data = input_data
         self.workflow_executor = workflow_executor
         self.activity_executor = activity_executor
         self.parent = parent
@@ -39,9 +38,9 @@ class WorkflowRunner(object):
         self.history_updated = False
 
 
-    def child_runner(self, workflow, w_id, args, kwargs):
+    def child_runner(self, workflow, w_id, input_data):
         return WorkflowRunner(workflow, self.workflow_executor,
-                              self.activity_executor, args, kwargs,
+                              self.activity_executor, input_data,
                               parent=self, w_id=w_id)
 
     def set_decision(self, decision):
@@ -80,7 +79,7 @@ class WorkflowRunner(object):
                 r = result.result()
             except Exception as e:
                 self.set_error(task_id, str(e))
-            self.set_result(task_id, r)
+            self.set_result(task_id, json.dumps(r))
             self.update_history_or_reschedule()
 
     def fail_subwf_and_reschedule_decision(self, task_id, reason):
@@ -98,8 +97,7 @@ class WorkflowRunner(object):
             try:
                 f = self.workflow_executor.submit(self.workflow,
                                                   self.ro_state(),
-                                                  *self.args,
-                                                  **self.kwargs)
+                                                  self.input_data)
             except RuntimeError:
                 return # The executor must be closed
             f.add_done_callback(partial(self.schedule_tasks))
@@ -116,7 +114,7 @@ class WorkflowRunner(object):
             return
         if result['type'] == 'finish':
             if self.parent is None:
-                self.result = result['result']
+                self.result = json.loads(result['result'])
                 self.stop.set()
             else:
                 self.parent.complete_subwf_and_reschedule_decision(
@@ -138,8 +136,8 @@ class WorkflowRunner(object):
                 self.set_running(w['id'])
             for a in result.get('activities', []):
                 try:
-                    f = self.activity_executor.submit(a['f'], *a['args'],
-                                                      **a['kwargs'])
+                    args, kwargs = json.loads(a['input_data'])
+                    f = self.activity_executor.submit(a['f'], *args, **kwargs)
                     f.add_done_callback(partial(
                         self.complete_activity_and_reschedule_decision,
                         a['id']))
@@ -148,7 +146,7 @@ class WorkflowRunner(object):
             for w in result.get('workflows', []):
                 try:
                     child_runner = self.child_runner(w['f'], w['id'],
-                                                     w['args'], w['kwargs'])
+                                                     w['input_data'])
                     child_runner.reschedule_decision()
                 except RuntimeError:
                     pass # The executor must be closed
@@ -239,7 +237,7 @@ class Decision(dict):
             return
         self.clear()
         self['type'] = 'restart'
-        self['args'], self['kwargs'] = input_data
+        self['input_data'] = input_data
         self.closed = True
 
     def finish(self, result):
@@ -255,8 +253,7 @@ class Decision(dict):
             return
         self['activities'].append({
             'id': call_key,
-            'args': input_data[0],
-            'kwargs': input_data[1],
+            'input_data': input_data,
             'f': f})
 
     def schedule_workflow(self, call_key, input_data, f):
@@ -264,8 +261,7 @@ class Decision(dict):
             return
         self['workflows'].append({
             'id': call_key,
-            'args': input_data[0],
-            'kwargs': input_data[1],
+            'input_data': input_data,
             'f': f})
 
 
@@ -303,12 +299,13 @@ Serializer = namedtuple('Serializer', 'serialize_input deserialize_result')
 
 def serialize_input(*args, **kwargs):
     r = (args, kwargs)
-    # force the encoding only to walk the data structure and trigger any
-    # errors or suspend tasks
-    json.dumps(r, cls=JSONProxyEncoder)
-    return r
+    # Force the encoding only to walk the data structure and trigger any
+    # errors or suspend tasks.
+    # On py3 the proxy objects can't be pickled correctly, this fixes that
+    # problem too.
+    return json.dumps(r, cls=JSONProxyEncoder)
 
-serializer = Serializer(serialize_input, _identity)
+serializer = Serializer(serialize_input, json.loads)
 
 
 class ActivityProxy(object):
@@ -347,10 +344,14 @@ class LocalWorkflow(Workflow):
         self.worker.register(self, w)
 
     def serialize_result(self, result):
-        # force the encoding only to walk the data structure and trigger any
-        # errors or suspend tasks
-        json.dumps(result, cls=JSONProxyEncoder)
-        return result
+        # See serialize_input for an explanation on why use json here.
+        return json.dumps(result, cls=JSONProxyEncoder)
+
+    def deserialize_input(self, input_data):
+        return json.loads(input_data)
+
+    def serialize_restart_input(self, *args, **kwargs):
+        return serialize_input(*args, **kwargs)
 
     def conf_activity(self, dep_name, f):
         self.conf_proxy(dep_name, ActivityProxy(dep_name, f))
@@ -358,9 +359,8 @@ class LocalWorkflow(Workflow):
     def conf_workflow(self, dep_name, f):
         self.conf_proxy(dep_name, WorkflowProxy(dep_name, f))
 
-    def __call__(self, state, *args, **kwargs):
+    def __call__(self, state, input_data):
         d = Decision()
-        input_data = serializer.serialize_input(*args, **kwargs)
         self.worker(self, input_data, d, state)
         return d
 
@@ -368,5 +368,6 @@ class LocalWorkflow(Workflow):
         wait = kwargs.pop('_wait', False)
         a_executor = self.executor(max_workers=self.activity_workers)
         w_executor = self.executor(max_workers=self.workflow_workers)
-        wr = WorkflowRunner(self, w_executor, a_executor, args, kwargs)
+        input_data = serializer.serialize_input(*args, **kwargs)
+        wr = WorkflowRunner(self, w_executor, a_executor, input_data)
         return wr.run(wait=wait)
