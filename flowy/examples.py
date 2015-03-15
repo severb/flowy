@@ -9,11 +9,6 @@ from flowy import finish_order, first, LocalWorkflow, parallel_reduce, wait
 from flowy.base import setup_default_logger
 
 
-# logging, the basicConfig is for futures, setup_default_logger is for flowy
-logging.basicConfig()
-setup_default_logger()
-
-
 def activity(x=None, y=None, identity=None, result=None, sleep=None):
     """Simulate an activity that actually does something."""
     # x and y are needed only so we can fake passing arguments ot this activity
@@ -240,6 +235,10 @@ class ParallelMapReduce(object):
 
 
 def main():
+    # logging, the basicConfig is for futures, setup_default_logger is for flowy
+    logging.basicConfig()
+    setup_default_logger()
+
     def workflow(workflow_class):
         try:
             return globals()[workflow_class]
