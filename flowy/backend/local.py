@@ -23,11 +23,10 @@ from flowy.base import Workflow
 
 
 class WorkflowRunner(object):
-    def __init__(self, workflow, workflow_executor, activity_executor, args=[],
-                 kwargs={}, parent=None, w_id=None):
+    def __init__(self, workflow, workflow_executor, activity_executor,
+                 input_data, parent=None, w_id=None):
         self.workflow = workflow
-        self.args = args
-        self.kwargs = kwargs
+        self.input_data = input_data
         self.workflow_executor = workflow_executor
         self.activity_executor = activity_executor
         self.parent = parent
@@ -37,67 +36,74 @@ class WorkflowRunner(object):
         self.errors = dict()
         self.finish_order = []
         self.lock = RLock()
-        self.decision = None
-        self.queued = False
         self.stop = Event()
+        self.will_restart = True
+        self.history_updated = False
 
-    def child_runner(self, workflow, w_id, args, kwargs):
+
+    def child_runner(self, workflow, w_id, input_data):
         return WorkflowRunner(workflow, self.workflow_executor,
-                              self.activity_executor, args, kwargs,
+                              self.activity_executor, input_data,
                               parent=self, w_id=w_id)
 
     def set_decision(self, decision):
         self.decision = decision
 
-    def run(self):
-        with self.lock:
-            f = self.workflow_executor.submit(self.workflow, self.ro_state(),
-                                              *self.args, **self.kwargs)
-            self.set_decision(f)
-            f.add_done_callback(self.schedule_tasks)
+    def run(self, wait=False):
+        self.reschedule_decision()
         self.stop.wait()
-        self.activity_executor.shutdown(wait=False)
-        self.workflow_executor.shutdown(wait=False)
+        self.activity_executor.shutdown(wait=wait)
+        self.workflow_executor.shutdown(wait=wait)
         if hasattr(self, 'result'):
             return self.result
         if hasattr(self, 'exception'):
             raise self.exception
 
+    def reschedule_if_history_updated(self):
+        with self.lock:
+            if self.history_updated:
+                self.history_updated = False
+                self.reschedule_decision()
+            else:
+                self.will_restart = False
+
+    def update_history_or_reschedule(self):
+        with self.lock:
+            if self.will_restart:
+                self.history_updated = True
+            else:
+                self.history_updated = False
+                self.will_restart = True
+                self.reschedule_decision()
+
     def complete_activity_and_reschedule_decision(self, task_id, result):
         with self.lock:
             try:
-                self.set_result(task_id, result.result())
+                r = result.result()
             except Exception as e:
                 self.set_error(task_id, str(e))
-            self.reschedule_decision()
+            self.set_result(task_id, json.dumps(r))
+            self.update_history_or_reschedule()
 
     def fail_subwf_and_reschedule_decision(self, task_id, reason):
         with self.lock:
             self.set_error(task_id, str(reason))
-            self.reschedule_decision()
+            self.update_history_or_reschedule()
 
     def complete_subwf_and_reschedule_decision(self, task_id, result):
         with self.lock:
             self.set_result(task_id, result)
-            self.reschedule_decision()
+            self.update_history_or_reschedule()
 
     def reschedule_decision(self):
-        def submit_next_decision(result):
-            with self.lock:
-                self.queued = False
-                try:
-                    f = self.workflow_executor.submit(self.workflow,
-                                                      self.ro_state(),
-                                                      *self.args,
-                                                      **self.kwargs)
-                    f.add_done_callback(self.schedule_tasks)
-                    self.decision = f
-                except RuntimeError:
-                    pass # The executor must be closed
         with self.lock:
-            if not self.queued:
-                self.queued = True
-                self.decision.add_done_callback(submit_next_decision)
+            try:
+                f = self.workflow_executor.submit(self.workflow,
+                                                  self.ro_state(),
+                                                  self.input_data)
+            except RuntimeError:
+                return # The executor must be closed
+            f.add_done_callback(partial(self.schedule_tasks))
 
     def schedule_tasks(self, result):
         try:
@@ -111,7 +117,7 @@ class WorkflowRunner(object):
             return
         if result['type'] == 'finish':
             if self.parent is None:
-                self.result = result['result']
+                self.result = json.loads(result['result'])
                 self.stop.set()
             else:
                 self.parent.complete_subwf_and_reschedule_decision(
@@ -126,29 +132,28 @@ class WorkflowRunner(object):
                     self.w_id, result['reason'])
             return
         assert result['type'] == 'schedule'
-        with self.lock:  # XXX: this may not be required
+        with self.lock:
             for a in result.get('activities', []):
                 self.set_running(a['id'])
             for w in result.get('workflows', []):
                 self.set_running(w['id'])
-        for a in result.get('activities', []):
-            try:
-                f = self.activity_executor.submit(a['f'], *a['args'],
-                                                  **a['kwargs'])
-                f.add_done_callback(partial(
-                    self.complete_activity_and_reschedule_decision, a['id']))
-            except RuntimeError:
-                pass # The executor must be closed
-        for w in result.get('workflows', []):
-            try:
-                child_runner = self.child_runner(w['f'], w['id'], w['args'],
-                                                 w['kwargs'])
-                f = self.workflow_executor.submit(
-                    w['f'], child_runner.ro_state(), *w['args'], **w['kwargs'])
-                child_runner.set_decision(f)
-                f.add_done_callback(child_runner.schedule_tasks)
-            except RuntimeError:
-                pass # The executor must be closed
+            for a in result.get('activities', []):
+                try:
+                    args, kwargs = json.loads(a['input_data'])
+                    f = self.activity_executor.submit(a['f'], *args, **kwargs)
+                    f.add_done_callback(partial(
+                        self.complete_activity_and_reschedule_decision,
+                        a['id']))
+                except RuntimeError:
+                    pass # The executor must be closed
+            for w in result.get('workflows', []):
+                try:
+                    child_runner = self.child_runner(w['f'], w['id'],
+                                                     w['input_data'])
+                    child_runner.reschedule_decision()
+                except RuntimeError:
+                    pass # The executor must be closed
+            self.reschedule_if_history_updated()
 
     def set_running(self, call_key):
         with self.lock:
@@ -235,7 +240,7 @@ class Decision(dict):
             return
         self.clear()
         self['type'] = 'restart'
-        self['args'], self['kwargs'] = input_data
+        self['input_data'] = input_data
         self.closed = True
 
     def finish(self, result):
@@ -251,8 +256,7 @@ class Decision(dict):
             return
         self['activities'].append({
             'id': call_key,
-            'args': input_data[0],
-            'kwargs': input_data[1],
+            'input_data': input_data,
             'f': f})
 
     def schedule_workflow(self, call_key, input_data, f):
@@ -260,8 +264,7 @@ class Decision(dict):
             return
         self['workflows'].append({
             'id': call_key,
-            'args': input_data[0],
-            'kwargs': input_data[1],
+            'input_data': input_data,
             'f': f})
 
 
@@ -299,12 +302,13 @@ Serializer = namedtuple('Serializer', 'serialize_input deserialize_result')
 
 def serialize_input(*args, **kwargs):
     r = (args, kwargs)
-    # force the encoding only to walk the data structure and trigger any
-    # errors or suspend tasks
-    json.dumps(r, cls=JSONProxyEncoder)
-    return r
+    # Force the encoding only to walk the data structure and trigger any
+    # errors or suspend tasks.
+    # On py3 the proxy objects can't be pickled correctly, this fixes that
+    # problem too.
+    return json.dumps(r, cls=JSONProxyEncoder)
 
-serializer = Serializer(serialize_input, _identity)
+serializer = Serializer(serialize_input, json.loads)
 
 
 class ActivityProxy(object):
@@ -347,10 +351,14 @@ class LocalWorkflow(Workflow):
         self.worker.register(self, w)
 
     def serialize_result(self, result):
-        # force the encoding only to walk the data structure and trigger any
-        # errors or suspend tasks
-        json.dumps(result, cls=JSONProxyEncoder)
-        return result
+        # See serialize_input for an explanation on why use json here.
+        return json.dumps(result, cls=JSONProxyEncoder)
+
+    def deserialize_input(self, input_data):
+        return json.loads(input_data)
+
+    def serialize_restart_input(self, *args, **kwargs):
+        return serialize_input(*args, **kwargs)
 
     def conf_activity(self, dep_name, f):
         self.conf_proxy(dep_name, ActivityProxy(dep_name, f))
@@ -358,15 +366,16 @@ class LocalWorkflow(Workflow):
     def conf_workflow(self, dep_name, f):
         self.conf_proxy(dep_name, WorkflowProxy(dep_name, f))
 
-    def __call__(self, state, *args, **kwargs):
+    def __call__(self, state, input_data):
         d = Decision()
-        input_data = serializer.serialize_input(*args, **kwargs)
         graph = AGraph(directed=True)
         self.worker(self, input_data, d, state, graph)
         return d
 
     def run(self, *args, **kwargs):
+        wait = kwargs.pop('_wait', False)
         a_executor = self.executor(max_workers=self.activity_workers)
         w_executor = self.executor(max_workers=self.workflow_workers)
-        wr = WorkflowRunner(self, w_executor, a_executor, args, kwargs)
-        return wr.run()
+        input_data = serializer.serialize_input(*args, **kwargs)
+        wr = WorkflowRunner(self, w_executor, a_executor, input_data)
+        return wr.run(wait=wait)
