@@ -370,6 +370,38 @@ class BoundProxy(object):
         return r
 
 
+class DotTraceBoundProxy(BoundProxy):
+    def __init__(self, graph, trace_name, *args, **kwargs):
+        super (DotTraceBoundProxy, self).__init__(*args, **kwargs)
+        self.trace_name = trace_name
+        self.graph = graph
+
+    def __call__(self, *args, **kwargs):
+        node_id = "%s-%s" % (self.trace_name, self.call_number + 1)
+        node_label = self.trace_name
+        self.graph.add_node(node_id, label=node_label)
+
+        deps = []
+        deps_ids = set()
+        for a in args:
+            if is_result_proxy(a):
+                if id(a) not in deps_ids:
+                    deps.append(a)
+                    deps_ids.add(id(a))
+        for k in kwargs.values():
+            if is_result_proxy(k):
+                if id(k) not in deps_ids:
+                    deps.append(k)
+                    deps_ids.add(id(k))
+
+        for dep in deps:
+            self.graph.add_edge(dep.__factory__.node_id, node_id)
+
+        r = super(DotTraceBoundProxy, self).__call__(*args, **kwargs)
+        r.__factory__.node_id = node_id
+        return r
+
+
 def result(value, order):
     return ResultProxy(TaskResult(value, order))
 

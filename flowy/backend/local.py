@@ -10,10 +10,13 @@ from functools import partial
 from threading import Event
 from threading import RLock
 
+from pygraphviz import AGraph
+
 from flowy.backend.swf import SWFTaskExecutionHistory as TaskHistory
 from flowy.backend.swf import JSONProxyEncoder
 from flowy.base import _identity
 from flowy.base import BoundProxy
+from flowy.base import DotTraceBoundProxy
 from flowy.base import TaskError
 from flowy.base import Worker
 from flowy.base import Workflow
@@ -309,8 +312,10 @@ class ActivityProxy(object):
         self.identity = identity
         self.f = f
 
-    def __call__(self, decision, history):
-        return BoundProxy(
+    def __call__(self, decision, history, graph):
+        return DotTraceBoundProxy(
+            graph,
+            self.identity,
             serializer,
             TaskHistory(history, self.identity),
             ActivityDecision(decision, self.identity, self.f))
@@ -321,8 +326,10 @@ class WorkflowProxy(object):
         self.identity = identity
         self.f = f
 
-    def __call__(self, decision, history):
-        return BoundProxy(
+    def __call__(self, decision, history, graph):
+        return DotTraceBoundProxy(
+            graph,
+            self.identity,
             serializer,
             TaskHistory(history, self.identity),
             WorkflowDecision(decision, self.identity, self.f))
@@ -354,7 +361,8 @@ class LocalWorkflow(Workflow):
     def __call__(self, state, *args, **kwargs):
         d = Decision()
         input_data = serializer.serialize_input(*args, **kwargs)
-        self.worker(self, input_data, d, state)
+        graph = AGraph(directed=True)
+        self.worker(self, input_data, d, state, graph)
         return d
 
     def run(self, *args, **kwargs):
