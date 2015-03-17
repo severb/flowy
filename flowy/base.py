@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import heapq
 import logging
+import repr as r
 import sys
 from collections import namedtuple
 from functools import partial
@@ -10,6 +11,7 @@ from keyword import iskeyword
 
 import venusian
 from lazy_object_proxy.slots import Proxy
+import pygraphviz as pgv
 
 
 __all__ = 'restart TaskError TaskTimedout wait first finish_order parallel_reduce'.split()
@@ -370,23 +372,23 @@ class BoundProxy(object):
         return r
 
 
-class DotTraceBoundProxy(BoundProxy):
-    def __init__(self, graph, trace_name, *args, **kwargs):
-        super (DotTraceBoundProxy, self).__init__(*args, **kwargs)
+class TracingBoundProxy(BoundProxy):
+    def __init__(self, tracer, trace_name, *args, **kwargs):
+        super (TracingBoundProxy, self).__init__(*args, **kwargs)
         self.trace_name = trace_name
-        self.graph = graph
+        self.tracer = tracer
 
     def __call__(self, *args, **kwargs):
-
-        r = super(DotTraceBoundProxy, self).__call__(*args, **kwargs)
-
+        r = super(TracingBoundProxy, self).__call__(*args, **kwargs)
+        assert is_result_proxy(r)
         node_id = "%s-%s" % (self.trace_name, self.call_number)
-        r.__factory__.node_id = node_id
-        self.graph.add_node(node_id, label=self.trace_name)
-#         order_id = "order-%s" % r.__factory__.order
-#         self.graph.add_node(order_id, label=order_id)
-#         self.graph.add_subgraph([node_id, order_id], rank='same')
-
+        factory = r.__factory__
+        assert not factory.is_placeholder()
+        factory.node_id = node_id
+        if factory.is_error():
+            self.tracer.register_error(node_id, self.trace_name)
+        else:
+            self.tracer.register_result(node_id, self.trace_name)
         deps = []
         deps_ids = set()
         for a in args:
@@ -399,12 +401,137 @@ class DotTraceBoundProxy(BoundProxy):
                 if id(k) not in deps_ids:
                     deps.append(k)
                     deps_ids.add(id(k))
-
-        import repr
         for dep in deps:
-            self.graph.add_edge(dep.__factory__.node_id, node_id, style="", label=repr.repr(dep))
-
+            self.tracer.add_dependency(node_id, dep.__factory__.node_id)
         return r
+
+
+class ExecutionTracer(object):
+    def __init__(self):
+        self.levels = []
+        self.current_schedule = []
+        self.timeouts = {}
+        self.results = {}
+        self.errors = {}
+        self.activities = set()
+        self.deps = {}
+        self.nodes = {}
+
+    def schedule_activity(self, node_id, name):
+        assert node_id not in self.nodes
+        self.nodes[node_id] = name
+        self.current_schedule.append(node_id)
+        self.timeouts[node_id] = 0
+        self.activities.add(node_id)
+
+    def schedule_workflow(self, node_id, name):
+        assert node_id not in self.nodes
+        self.nodes[node_id] = name
+        self.current_schedule.append(node_id)
+        self.timeouts[node_id] = 0
+
+    def flush_scheduled(self):
+        self.levels.append(self.current_schedule)
+        self.current_schedule = []
+
+    def result(self, node_id, result):
+        assert node_id in self.nodes
+        assert node_id not in self.levels
+        self.levels.append(node_id)
+        self.results[node_id] = result
+
+    def error(self, node_id, reason):
+        assert node_id in self.nodes
+        assert node_id not in self.levels
+        self.levels.append(node_id)
+        self.errors[node_id] = reason
+        self.results[node_id] = reason
+
+    def timeout(self, node_id):
+        assert node_id in self.nodes
+        assert node_id not in self.results or node_id not in self.errors
+        self.timeouts[node_id] += 1
+
+    def add_dependency(self, from_node, to_node):
+        """ node_id -> node_id """
+        assert from_node in self.nodes
+        assert to_node in self.nodes
+        assert from_node in self.results or from_node in self.errors
+        self.deps.setdefault(from_node, []).append(to_node)
+
+    def hanging_nodes(self):
+        hanging = []
+        for node_id in self.nodes:
+            if node_id not in self.results or node_id not in self.errors:
+                hanging.append(node_id)
+        return hanging
+
+    def as_dot(self):
+        graph = pgv.AGraph(directed=True, strict=False)
+        for node_id, node_name in self.nodes.items():
+            shape = 'box'
+            if node_id in self.activities:
+                shape = 'ellipse'
+            finish_id = 'finish-%s' % node_id
+            color, fontcolor = 'black', 'black'
+            if node_id in self.errors:
+                color, fontcolor = 'red', 'red'
+            graph.add_node(node_id, label=self.nodes[node_id], shape=shape,
+                           width=0.8, color=color, fontcolor=fontcolor)
+            if node_id in self.results or node_id in self.errors:
+                if node_id in self.errors:
+                    rlabel = str(self.errors[node_id])
+                else:
+                    rlabel = r.repr(self.results[node_id])
+                graph.add_node(finish_id, label='', shape='point', width=0.1,
+                               color=color)
+                graph.add_edge(node_id, finish_id, arrowhead='none',
+                               penwidth=3, fontsize=8, color=color,
+                               fontcolor=fontcolor, label='  ' + rlabel)
+            else:
+                graph.add_node(finish_id, label='', shape='point', width=0.1,
+                               style='invis')
+                graph.add_edge(node_id, finish_id, style='dotted',
+                               arrowhead='none')
+
+        levels = ['l%s' % i for i in range(len(self.levels))]
+        for l in levels:
+            graph.add_node(l, shape='point', label='', width=0.1,
+                           style='invis')
+        if levels:
+            start = levels[0]
+            for l in levels[1:]:
+                graph.add_edge(start, l, style='invis')
+                start = l
+
+        for l_id, l in zip(levels, self.levels):
+            if isinstance(l, list):
+                graph.add_subgraph([l_id] + l, rank='same')
+            else:
+                graph.add_subgraph([l_id, 'finish-%s' % l], rank='same')
+
+        hanging = []
+        for node_id in self.nodes:
+            if not (node_id in self.results or node_id in self.errors):
+                hanging.append('finish-%s' % node_id)
+
+        if hanging:
+            graph.add_subgraph([l_id] + hanging, rank='same')
+
+        color = 'black'
+        for from_node, to_nodes in self.deps.items():
+            if from_node in self.errors:
+                color = 'red'
+            for to_node in to_nodes:
+                graph.add_edge('finish-%s' % from_node, to_node, color=color)
+
+        for node_id in self.nodes:
+            retries = self.timeouts[node_id]
+            if retries:
+                graph.add_edge(node_id, node_id, label=' %s' % retries,
+                               color='orange', fontcolor='orange', fontsize=8)
+
+        return str(graph)
 
 
 def result(value, order):
@@ -468,11 +595,17 @@ class TaskResult(object):
 
     def __call__(self):
         self.called = True
-        if self.value is _sentinel:  # Placeholder
+        if self.is_placeholder():
             raise SuspendTask
-        if isinstance(self.value, Exception):
+        if self.is_error():
             raise self.value
         return self.value
+
+    def is_error(self):
+        return isinstance(self.value, Exception)
+
+    def is_placeholder(self):
+        return self.value is _sentinel
 
     def __del__(self):
         if not self.called and isinstance(self.value, Exception):

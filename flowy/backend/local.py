@@ -10,13 +10,10 @@ from functools import partial
 from threading import Event
 from threading import RLock
 
-from pygraphviz import AGraph
-
 from flowy.backend.swf import SWFTaskExecutionHistory as TaskHistory
 from flowy.backend.swf import JSONProxyEncoder
 from flowy.base import _identity
 from flowy.base import BoundProxy
-from flowy.base import DotTraceBoundProxy
 from flowy.base import TaskError
 from flowy.base import Worker
 from flowy.base import Workflow
@@ -316,15 +313,8 @@ class ActivityProxy(object):
         self.identity = identity
         self.f = f
 
-    def __call__(self, decision, history, graph=None):
-        if graph is None:
-            return BoundProxy(
-                serializer,
-                TaskHistory(history, self.identity),
-                ActivityDecision(decision, self.identity, self.f))
-        return DotTraceBoundProxy(
-            graph,
-            self.identity,
+    def __call__(self, decision, history):
+        return BoundProxy(
             serializer,
             TaskHistory(history, self.identity),
             ActivityDecision(decision, self.identity, self.f))
@@ -335,15 +325,8 @@ class WorkflowProxy(object):
         self.identity = identity
         self.f = f
 
-    def __call__(self, decision, history, graph=None):
-        if graph is None:
-            return BoundProxy(
-                serializer,
-                TaskHistory(history, self.identity),
-                WorkflowDecision(decision, self.identity, self.f))
-        return DotTraceBoundProxy(
-            graph,
-            self.identity,
+    def __call__(self, decision, history):
+        return BoundProxy(
             serializer,
             TaskHistory(history, self.identity),
             WorkflowDecision(decision, self.identity, self.f))
@@ -379,15 +362,7 @@ class LocalWorkflow(Workflow):
     def __call__(self, state, input_data):
         d = Decision()
         self.worker(self, input_data, d, state)
-        if not d['type'] == 'schedule':
-            self.trace_dot(state, input_data)
         return d
-
-    def trace_dot(self, state, input_data):
-        d = Decision()
-        graph = AGraph()
-        self.worker(self, input_data, d, state, graph)
-        print graph
 
     def run(self, *args, **kwargs):
         wait = kwargs.pop('_wait', False)
