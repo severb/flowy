@@ -518,8 +518,8 @@ class ExecutionTracer(object):
         if hanging:
             graph.add_subgraph([l_id] + hanging, rank='same')
 
-        color = 'black'
         for from_node, to_nodes in self.deps.items():
+            color = 'black'
             if from_node in self.errors:
                 color = 'red'
             for to_node in to_nodes:
