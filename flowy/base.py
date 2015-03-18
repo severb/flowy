@@ -352,7 +352,7 @@ class BoundProxy(object):
                 break
             errors, placeholders = _scan_args(args, kwargs)
             if errors:
-                r = first(errors)
+                r = copy_result_proxy(first(errors))
                 break
             if placeholders:
                 break  # result = Placeholder
@@ -379,16 +379,13 @@ class TracingBoundProxy(BoundProxy):
         self.tracer = tracer
 
     def __call__(self, *args, **kwargs):
+        node_id = "%s-%s" % (self.trace_name, self.call_number)
         r = super(TracingBoundProxy, self).__call__(*args, **kwargs)
         assert is_result_proxy(r)
-        node_id = "%s-%s" % (self.trace_name, self.call_number)
         factory = r.__factory__
-        assert not factory.is_placeholder()
         factory.node_id = node_id
-        if factory.is_error():
-            self.tracer.register_error(node_id, self.trace_name)
-        else:
-            self.tracer.register_result(node_id, self.trace_name)
+        if factory.is_placeholder():
+            return r
         deps = []
         deps_ids = set()
         for a in args:
@@ -401,21 +398,41 @@ class TracingBoundProxy(BoundProxy):
                 if id(k) not in deps_ids:
                     deps.append(k)
                     deps_ids.add(id(k))
+        errors, _ = _scan_args(args, kwargs)
+        if errors:
+            self.tracer.schedule_activity(node_id, self.trace_name)
+            self.tracer.flush_scheduled()
+            error_factory = first(errors).__factory__
+            self.tracer.error(node_id, str(error_factory.value))
         for dep in deps:
-            self.tracer.add_dependency(node_id, dep.__factory__.node_id)
+            self.tracer.add_dependency(dep.__factory__.node_id, node_id)
         return r
 
 
 class ExecutionTracer(object):
-    def __init__(self):
-        self.levels = []
-        self.current_schedule = []
-        self.timeouts = {}
-        self.results = {}
-        self.errors = {}
-        self.activities = set()
-        self.deps = {}
-        self.nodes = {}
+    def __init__(self, levels=None, current_schedule=None, timeouts=None,
+                 results=None, errors=None, activities=None, deps=None,
+                 nodes=None):
+        self.levels = levels or []
+        self.current_schedule = current_schedule or []
+        self.timeouts = timeouts or {}
+        self.results = results or{}
+        self.errors = errors or {}
+        self.activities = activities or set()
+        self.deps = deps or {}
+        self.nodes = nodes or {}
+
+    def copy(self):
+        return ExecutionTracer(
+            list(self.levels),
+            list(self.current_schedule),
+            dict(self.timeouts),
+            dict(self.results),
+            dict(self.errors),
+            set(self.activities),
+            dict(self.deps),
+            dict(self.nodes)
+        )
 
     def schedule_activity(self, node_id, name):
         assert node_id not in self.nodes
@@ -445,7 +462,6 @@ class ExecutionTracer(object):
         assert node_id not in self.levels
         self.levels.append(node_id)
         self.errors[node_id] = reason
-        self.results[node_id] = reason
 
     def timeout(self, node_id):
         assert node_id in self.nodes
@@ -456,18 +472,12 @@ class ExecutionTracer(object):
         """ node_id -> node_id """
         assert from_node in self.nodes
         assert to_node in self.nodes
-        assert from_node in self.results or from_node in self.errors
         self.deps.setdefault(from_node, []).append(to_node)
-
-    def hanging_nodes(self):
-        hanging = []
-        for node_id in self.nodes:
-            if node_id not in self.results or node_id not in self.errors:
-                hanging.append(node_id)
-        return hanging
 
     def as_dot(self):
         graph = pgv.AGraph(directed=True, strict=False)
+
+        hanging = set()
         for node_id, node_name in self.nodes.items():
             shape = 'box'
             if node_id in self.activities:
@@ -476,8 +486,8 @@ class ExecutionTracer(object):
             color, fontcolor = 'black', 'black'
             if node_id in self.errors:
                 color, fontcolor = 'red', 'red'
-            graph.add_node(node_id, label=self.nodes[node_id], shape=shape,
-                           width=0.8, color=color, fontcolor=fontcolor)
+            graph.add_node(node_id, label=node_name, shape=shape, width=0.8,
+                           color=color, fontcolor=fontcolor)
             if node_id in self.results or node_id in self.errors:
                 if node_id in self.errors:
                     rlabel = str(self.errors[node_id])
@@ -489,10 +499,7 @@ class ExecutionTracer(object):
                                penwidth=3, fontsize=8, color=color,
                                fontcolor=fontcolor, label='  ' + rlabel)
             else:
-                graph.add_node(finish_id, label='', shape='point', width=0.1,
-                               style='invis')
-                graph.add_edge(node_id, finish_id, style='dotted',
-                               arrowhead='none')
+                hanging.add(node_id)
 
         levels = ['l%s' % i for i in range(len(self.levels))]
         for l in levels:
@@ -510,20 +517,31 @@ class ExecutionTracer(object):
             else:
                 graph.add_subgraph([l_id, 'finish-%s' % l], rank='same')
 
-        hanging = []
-        for node_id in self.nodes:
-            if not (node_id in self.results or node_id in self.errors):
-                hanging.append('finish-%s' % node_id)
-
-        if hanging:
-            graph.add_subgraph([l_id] + hanging, rank='same')
-
         for from_node, to_nodes in self.deps.items():
+            if from_node in hanging:
+                hanging.remove(from_node)
             color = 'black'
+            style = ''
             if from_node in self.errors:
                 color = 'red'
+                from_node = 'finish-%s' % from_node
+            elif from_node in self.results:
+                from_node = 'finish-%s' % from_node
+            else:
+                style = 'dotted'
             for to_node in to_nodes:
-                graph.add_edge('finish-%s' % from_node, to_node, color=color)
+                graph.add_edge(from_node, to_node, color=color, style=style)
+
+        if hanging:
+            for node_id in hanging:
+                finish_id = 'finish-%s' % node_id
+                graph.add_node(finish_id, label='', shape='point', width=0.1,
+                               style='invis')
+                graph.add_edge(node_id, finish_id, style='dotted',
+                               arrowhead='none')
+            # l_id is the last level here
+            graph.add_subgraph([l_id] + ['finish-%s' % h for h in hanging],
+                               rank='same')
 
         for node_id in self.nodes:
             retries = self.timeouts[node_id]
@@ -548,6 +566,12 @@ def timeout(order):
 
 def placeholder():
     return ResultProxy(TaskResult())
+
+
+def copy_result_proxy(rp):
+    assert is_result_proxy(rp)
+    factory = rp.__factory__
+    return ResultProxy(TaskResult(factory.value, factory.order))
 
 
 def wait(result):

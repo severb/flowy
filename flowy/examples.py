@@ -9,7 +9,7 @@ from flowy import finish_order, first, LocalWorkflow, parallel_reduce, wait
 from flowy.base import setup_default_logger
 
 
-def activity(x=None, y=None, identity=None, result=None, sleep=None):
+def activity(x=None, y=None, identity=None, result=None, sleep=None, err=None):
     """Simulate an activity that actually does something."""
     # x and y are needed only so we can fake passing arguments ot this activity
     if sleep is None:
@@ -17,6 +17,8 @@ def activity(x=None, y=None, identity=None, result=None, sleep=None):
     print('Start activity (sleep %fs): %s' % (sleep, identity))
     time.sleep(sleep)
     print('Finish activity (sleep %fs): %s' % (sleep, identity))
+    if err is not None:
+        raise RuntimeError(err)
     if result == 'random':
         return random.random()
     return result
@@ -37,7 +39,7 @@ class Sequential(object):
     def __call__(self):
         r = 0
         for identity, sleep in enumerate([1.0, 0.5, 1.5, 2.0], 1):
-            r = self.a(sleep=sleep, result=r+1, identity=identity)
+            r = self.a(sleep=sleep, result=r, identity=identity)
         return r
 
 class ParallelWait(object):
@@ -170,7 +172,7 @@ class NaiveMapReduce(object):
         self.a = a
 
     def __call__(self):
-        reduce_f = lambda x, y: self.a(sleep=1.5, identity='reduce %s %s' % (x, y), result=x + y)
+        reduce_f = lambda x, y: self.a(x, y, sleep=1.5, identity='reduce %s %s' % (x, y), result=x + y)
         map_f = lambda sleep, result: self.a(sleep=sleep, result=result, identity='map %s' % result)
         results = map(map_f, [0.5, 1.5, 1.0, 6.0, 5.0, 2.0], range(1, 7))
         return reduce(reduce_f, results)
@@ -199,7 +201,7 @@ class FinishOrderMapReduce(object):
         self.a = a
 
     def __call__(self):
-        reduce_f = lambda x, y: self.a(sleep=1.5, identity='reduce %s %s' % (x, y), result=x + y)
+        reduce_f = lambda x, y: self.a(x, y, sleep=1.5, identity='reduce %s %s' % (x, y), result=x + y)
         map_f = lambda sleep, result: self.a(sleep=sleep, result=result, identity='map %s' % result)
         results = map(map_f, [0.5, 1.5, 1.0, 6.0, 5.0, 2.0], range(1, 7))
         return reduce(reduce_f, finish_order(results))
@@ -228,9 +230,10 @@ class ParallelMapReduce(object):
         self.a = a
 
     def __call__(self):
-        reduce_f = lambda x, y: self.a(sleep=1.5, identity='reduce %s %s' % (x, y), result=x + y)
+        reduce_f = lambda x, y: self.a(x, y, sleep=1.5, identity='reduce', result=100)
         map_f = lambda sleep, result: self.a(sleep=sleep, result=result, identity='map %s' % result)
         results = map(map_f, [0.5, 1.5, 1.0, 6.0, 5.0, 2.0], range(1, 7))
+        results.append(self.a(err='errtest', sleep=0))
         return parallel_reduce(reduce_f, results)
 
 

@@ -14,14 +14,16 @@ from flowy.backend.swf import SWFTaskExecutionHistory as TaskHistory
 from flowy.backend.swf import JSONProxyEncoder
 from flowy.base import _identity
 from flowy.base import BoundProxy
+from flowy.base import TracingBoundProxy
 from flowy.base import TaskError
 from flowy.base import Worker
 from flowy.base import Workflow
+from flowy.base import ExecutionTracer
 
 
 class WorkflowRunner(object):
     def __init__(self, workflow, workflow_executor, activity_executor,
-                 input_data, parent=None, w_id=None):
+                 input_data, parent=None, w_id=None, tracer=None):
         self.workflow = workflow
         self.input_data = input_data
         self.workflow_executor = workflow_executor
@@ -36,7 +38,7 @@ class WorkflowRunner(object):
         self.stop = Event()
         self.will_restart = True
         self.history_updated = False
-
+        self.tracer = tracer
 
     def child_runner(self, workflow, w_id, input_data):
         return WorkflowRunner(workflow, self.workflow_executor,
@@ -79,7 +81,8 @@ class WorkflowRunner(object):
                 r = result.result()
             except Exception as e:
                 self.set_error(task_id, str(e))
-            self.set_result(task_id, json.dumps(r))
+            else:
+                self.set_result(task_id, json.dumps(r))
             self.update_history_or_reschedule()
 
     def fail_subwf_and_reschedule_decision(self, task_id, reason):
@@ -95,9 +98,13 @@ class WorkflowRunner(object):
     def reschedule_decision(self):
         with self.lock:
             try:
+                tracer = None
+                if self.tracer is not None:
+                    tracer = self.tracer.copy()
                 f = self.workflow_executor.submit(self.workflow,
                                                   self.ro_state(),
-                                                  self.input_data)
+                                                  self.input_data,
+                                                  tracer)
             except RuntimeError:
                 return # The executor must be closed
             f.add_done_callback(partial(self.schedule_tasks))
@@ -132,8 +139,11 @@ class WorkflowRunner(object):
         with self.lock:
             for a in result.get('activities', []):
                 self.set_running(a['id'])
+                self.trace_activity(a)
             for w in result.get('workflows', []):
                 self.set_running(w['id'])
+                self.trace_workflow(w)
+            self.trace_flush()
             for a in result.get('activities', []):
                 try:
                     args, kwargs = json.loads(a['input_data'])
@@ -152,6 +162,41 @@ class WorkflowRunner(object):
                     pass # The executor must be closed
             self.reschedule_if_history_updated()
 
+    def trace_activity(self, a):
+        if self.tracer is None:
+            return
+        name, call_n, retry_n = a['id'].split('-')
+        node_id = '%s-%s' % (name, call_n)
+        assert not int(retry_n)
+        self.tracer.schedule_activity(node_id, name)
+
+    def trace_workflow(self, w):
+        if self.tracer is None:
+            return
+        name, call_n, retry_n = w['id'].split('-')
+        node_id = '%s-%s' % (name, call_n)
+        assert not int(retry_n)
+        self.tracer.schedule_workflow(node_id, name)
+
+    def trace_flush(self):
+        if self.tracer is None:
+            return
+        self.tracer.flush_scheduled()
+
+    def trace_result(self, task_id, result):
+        name, call_n, _ = task_id.split('-')
+        node_id = '%s-%s' % (name, call_n)
+        if self.tracer is None:
+            return
+        self.tracer.result(node_id, result)
+
+    def trace_error(self, task_id, reason):
+        name, call_n, _ = task_id.split('-')
+        node_id = '%s-%s' % (name, call_n)
+        if self.tracer is None:
+            return
+        self.tracer.error(node_id, reason)
+
     def set_running(self, call_key):
         with self.lock:
             self.running.add(call_key)
@@ -161,12 +206,14 @@ class WorkflowRunner(object):
             self.running.remove(call_key)
             self.results[call_key] = result
             self.finish_order.append(call_key)
+            self.trace_result(call_key, result)
 
     def set_error(self, call_key, reason):
         with self.lock:
             self.running.remove(call_key)
             self.errors[call_key] = reason
             self.finish_order.append(call_key)
+            self.trace_error(call_key, reason)
 
     def ro_state(self):
         with self.lock:
@@ -313,8 +360,15 @@ class ActivityProxy(object):
         self.identity = identity
         self.f = f
 
-    def __call__(self, decision, history):
-        return BoundProxy(
+    def __call__(self, decision, history, tracer):
+        if tracer is None:
+            return BoundProxy(
+                serializer,
+                TaskHistory(history, self.identity),
+                ActivityDecision(decision, self.identity, self.f))
+        return TracingBoundProxy(
+            tracer,
+            self.identity,
             serializer,
             TaskHistory(history, self.identity),
             ActivityDecision(decision, self.identity, self.f))
@@ -325,8 +379,14 @@ class WorkflowProxy(object):
         self.identity = identity
         self.f = f
 
-    def __call__(self, decision, history):
-        return BoundProxy(
+    def __call__(self, decision, history, tracer):
+        if tracer is None:
+            return BoundProxy(
+                serializer,
+                TaskHistory(history, self.identity),
+                WorkflowDecision(decision, self.identity, self.f))
+        return TracingBoundProxy(
+            self.identity,
             serializer,
             TaskHistory(history, self.identity),
             WorkflowDecision(decision, self.identity, self.f))
@@ -359,9 +419,11 @@ class LocalWorkflow(Workflow):
     def conf_workflow(self, dep_name, f):
         self.conf_proxy(dep_name, WorkflowProxy(dep_name, f))
 
-    def __call__(self, state, input_data):
+    def __call__(self, state, input_data, tracer):
         d = Decision()
-        self.worker(self, input_data, d, state)
+        self.worker(self, input_data, d, state, tracer)
+        if not d['type'] == 'schedule' and tracer is not None:
+            print tracer.as_dot()
         return d
 
     def run(self, *args, **kwargs):
@@ -369,5 +431,8 @@ class LocalWorkflow(Workflow):
         a_executor = self.executor(max_workers=self.activity_workers)
         w_executor = self.executor(max_workers=self.workflow_workers)
         input_data = serializer.serialize_input(*args, **kwargs)
-        wr = WorkflowRunner(self, w_executor, a_executor, input_data)
-        return wr.run(wait=wait)
+        tracer = ExecutionTracer()
+        wr = WorkflowRunner(self, w_executor, a_executor, input_data,
+                            tracer=tracer)
+        r = wr.run(wait=wait)
+        return r
