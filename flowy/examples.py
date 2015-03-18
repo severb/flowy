@@ -233,7 +233,6 @@ class ParallelMapReduce(object):
         reduce_f = lambda x, y: self.a(x, y, sleep=1.5, identity='reduce', result=100)
         map_f = lambda sleep, result: self.a(sleep=sleep, result=result, identity='map %s' % result)
         results = map(map_f, [0.5, 1.5, 1.0, 6.0, 5.0, 2.0], range(1, 7))
-        results.append(self.a(err='errtest', sleep=0))
         return parallel_reduce(reduce_f, results)
 
 
@@ -254,6 +253,8 @@ def main():
     parser.add_argument('--workflow-workers', action='store', type=int, default=2)
     parser.add_argument('--activity-workers', action='store', type=int, default=8)
     parser.add_argument('--timeit', action='store_true', default=False)
+    parser.add_argument('--trace', action='store_true', default=False)
+    parser.add_argument('--wait-children', action='store_true', default=False)
     args = parser.parse_args()
 
     start = time.time()
@@ -265,7 +266,7 @@ def main():
                            activity_workers=args.activity_workers,
                            workflow_workers=args.workflow_workers)
         lw.conf_activity('a', activity)
-        result = lw.run()
+        result = lw.run(_wait=args.wait_children, _trace=args.trace)
     if args.timeit:
         print('Timed at:', time.time() - start)
     print('Result:', result)

@@ -386,6 +386,7 @@ class WorkflowProxy(object):
                 TaskHistory(history, self.identity),
                 WorkflowDecision(decision, self.identity, self.f))
         return TracingBoundProxy(
+            tracer,
             self.identity,
             serializer,
             TaskHistory(history, self.identity),
@@ -423,16 +424,27 @@ class LocalWorkflow(Workflow):
         d = Decision()
         self.worker(self, input_data, d, state, tracer)
         if not d['type'] == 'schedule' and tracer is not None:
-            print tracer.as_dot()
+            try:
+                import xdot
+            except ImportError:
+                pass
+            else:
+                dot = tracer.as_dot()
+                win = xdot.DotWindow()
+                win.connect('destroy', xdot.gtk.main_quit)
+                win.set_filter('dot')
+                win.set_dotcode(dot)
+                xdot.gtk.main()
         return d
 
     def run(self, *args, **kwargs):
         wait = kwargs.pop('_wait', False)
+        tracer = None
+        if kwargs.pop('_trace', False):
+            tracer = ExecutionTracer()
         a_executor = self.executor(max_workers=self.activity_workers)
         w_executor = self.executor(max_workers=self.workflow_workers)
         input_data = serializer.serialize_input(*args, **kwargs)
-        tracer = ExecutionTracer()
         wr = WorkflowRunner(self, w_executor, a_executor, input_data,
                             tracer=tracer)
-        r = wr.run(wait=wait)
-        return r
+        return wr.run(wait=wait)

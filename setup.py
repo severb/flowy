@@ -29,7 +29,10 @@ setup(
     install_requires=install_requires,
     tests_require=['coverage'],
     test_suite="nose.collector",
-    extras_require={'docs': ['sphinx', 'sphinx_rtd_theme']},
+    extras_require={
+        'docs': ['sphinx', 'sphinx_rtd_theme'],
+        'trace': ['xdot', 'pygraphviz'],
+    },
     entry_points={
         "console_scripts": [
             "flowy = flowy.__main__:main",
