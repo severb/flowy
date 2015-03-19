@@ -384,8 +384,6 @@ class TracingBoundProxy(BoundProxy):
         assert is_result_proxy(r)
         factory = r.__factory__
         factory.node_id = node_id
-        if factory.is_placeholder():
-            return r
         deps = []
         deps_ids = set()
         for a in args:
@@ -398,7 +396,7 @@ class TracingBoundProxy(BoundProxy):
                 if id(k) not in deps_ids:
                     deps.append(k)
                     deps_ids.add(id(k))
-        errors, _ = _scan_args(args, kwargs)
+        errors, placeholders = _scan_args(args, kwargs)
         if errors:
             self.tracer.schedule_activity(node_id, self.trace_name)
             self.tracer.flush_scheduled()
@@ -470,8 +468,6 @@ class ExecutionTracer(object):
 
     def add_dependency(self, from_node, to_node):
         """ node_id -> node_id """
-        assert from_node in self.nodes
-        assert to_node in self.nodes
         self.deps.setdefault(from_node, []).append(to_node)
 
     def as_dot(self):
@@ -767,21 +763,22 @@ class TaskTimedout(TaskError):
 
 def _scan_args(args, kwargs):
     errs = []
+    placeholders = False
     for result in args:
         try:
             wait(result)
         except SuspendTask:
-            return [], True
+            placeholders = True
         except Exception:
             errs.append(result)
     for key, result in kwargs.items():
         try:
             wait(result)
         except SuspendTask:
-            return [], True
+            placeholders = True
         except Exception:
             errs.append(result)
-    return errs, False
+    return errs, placeholders
 
 
 _restart = namedtuple('restart', 'args kwargs')
