@@ -208,6 +208,8 @@ class SWFWorkflow(SWFConfigMixin, Workflow):
         except SWFTypeAlreadyExistsError:
             return False
         except SWFResponseError as e:
+            if 'TypeAlreadyExistsFault' in str(e):  # eucalyptus
+                return False
             logger.exception('Error while registering the workflow:')
             raise _RegistrationError(e)
         return True
@@ -354,6 +356,8 @@ class SWFActivity(SWFConfigMixin, Activity):
         except SWFTypeAlreadyExistsError:
             return False
         except SWFResponseError as e:
+            if 'TypeAlreadyExistsFault' in str(e):  # eucalyptus
+                return False
             logger.exception('Error while registering the activity:')
             raise _RegistrationError(e)
         return True
@@ -392,8 +396,8 @@ class SWFActivity(SWFConfigMixin, Activity):
 class SWFWorker(Worker):
     def register_remote(self, layer1, domain):
         """Register or check compatibility of all configs in Amazon SWF."""
-        return all(config.register_remote(layer1, domain)
-                   for config, _ in self.registry.values())
+        for config, _ in self.registry.values():
+            config.register_remote(layer1, domain)
 
     def register(self, config, impl):
         config = config.set_alternate_name(impl.__name__)
