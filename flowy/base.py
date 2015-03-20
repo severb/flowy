@@ -4,6 +4,7 @@ import heapq
 import logging
 import repr as r
 import sys
+import warnings
 from collections import namedtuple
 from functools import partial
 from itertools import chain
@@ -11,7 +12,6 @@ from keyword import iskeyword
 
 import venusian
 from lazy_object_proxy.slots import Proxy
-import pygraphviz as pgv
 
 
 __all__ = 'restart TaskError TaskTimedout wait first finish_order parallel_reduce'.split()
@@ -471,6 +471,11 @@ class ExecutionTracer(object):
         self.deps.setdefault(from_node, []).append(to_node)
 
     def as_dot(self):
+        try:
+            import pygraphviz as pgv
+        except ImportError:
+            warnings.warn('Extra requirements for "trace" are not available.')
+            return
         graph = pgv.AGraph(directed=True, strict=False)
 
         hanging = set()

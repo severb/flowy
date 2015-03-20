@@ -5,6 +5,7 @@ except ImportError:
 
 import json
 import time
+import warnings
 from collections import namedtuple
 from functools import partial
 from threading import Event
@@ -427,7 +428,8 @@ class LocalWorkflow(Workflow):
             try:
                 import xdot
             except ImportError:
-                pass
+                warnings.warn('Extra requirements for "trace" are not available.')
+                return
             else:
                 dot = tracer.as_dot()
                 win = xdot.DotWindow()
