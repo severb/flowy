@@ -2,7 +2,10 @@ from __future__ import print_function
 
 import heapq
 import logging
-import repr as r
+try:
+    import repr as r
+except ImportError:
+    import reprlib as r
 import sys
 import warnings
 from collections import namedtuple
