@@ -24,11 +24,14 @@ from flowy.base import ExecutionTracer
 
 class WorkflowRunner(object):
     def __init__(self, workflow, workflow_executor, activity_executor,
-                 input_data, parent=None, w_id=None, tracer=None):
+                 input_data, root=None, parent=None, w_id=None, tracer=None):
         self.workflow = workflow
         self.input_data = input_data
         self.workflow_executor = workflow_executor
         self.activity_executor = activity_executor
+        self.root = root
+        if root is None:
+            self.root = self
         self.parent = parent
         self.w_id = w_id
         self.running = set()
@@ -40,6 +43,7 @@ class WorkflowRunner(object):
         self.will_restart = True
         self.history_updated = False
         self.tracer = tracer
+        self.restarted = False
 
     def child_runner(self, workflow, w_id, input_data):
         return WorkflowRunner(workflow, self.workflow_executor,
@@ -48,6 +52,14 @@ class WorkflowRunner(object):
 
     def set_decision(self, decision):
         self.decision = decision
+
+    def stop_result(self, result):
+        self.result = result
+        self.stop.set()
+
+    def stop_fail(self, exception):
+        self.exception = exception
+        self.stop.set()
 
     def run(self, wait=False):
         self.reschedule_decision()
@@ -98,6 +110,8 @@ class WorkflowRunner(object):
 
     def reschedule_decision(self):
         with self.lock:
+            if self.restarted:
+                return
             try:
                 tracer = None
                 if self.tracer is not None:
@@ -111,30 +125,43 @@ class WorkflowRunner(object):
             f.add_done_callback(partial(self.schedule_tasks))
 
     def schedule_tasks(self, result):
+        if self.restarted:
+            return
         try:
             result = result.result()
         except Exception as e:
             if self.parent is None:
-                self.exception = TaskError(str(e))
-                self.stop.set()
+                self.root.stop_fail(TaskError(str(e)))
             else:
                 self.parent.fail_subwf_and_reschedule_decision(self.w_id, e)
             return
         if result['type'] == 'finish':
             if self.parent is None:
-                self.result = json.loads(result['result'])
-                self.stop.set()
+                self.root.stop_result(json.loads(result['result']))
             else:
                 self.parent.complete_subwf_and_reschedule_decision(
                     self.w_id, result['result'])
             return
         if result['type'] == 'fail':
             if self.parent is None:
-                self.exception = TaskError(result['reason'])
-                self.stop.set()
+                self.root.stop_fail(TaskError(result['reason']))
             else:
                 self.parent.fail_subwf_and_reschedule_decision(
                     self.w_id, result['reason'])
+            return
+        if result['type'] == 'restart':
+            self.restarted = True
+            if self.parent is None:
+                runner = WorkflowRunner(
+                    self.workflow, self.workflow_executor,
+                    self.activity_executor, result['input_data'],
+                    root=self.root, tracer=self.tracer)
+            else:
+                runner = WorkflowRunner(
+                    self.workflow, self.workflow_executor,
+                    self.activity_executor, result['input_data'],
+                    parent=self.parent, w_id=self.w_id)
+            runner.reschedule_decision()
             return
         assert result['type'] == 'schedule'
         with self.lock:
