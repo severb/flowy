@@ -3,6 +3,7 @@ try:
 except ImportError:
     from futures import ProcessPoolExecutor
 
+import copy
 import json
 import warnings
 from collections import namedtuple
@@ -13,11 +14,11 @@ from threading import RLock
 from flowy.backend.swf import SWFTaskExecutionHistory as TaskHistory
 from flowy.backend.swf import JSONProxyEncoder
 from flowy.base import BoundProxy
-from flowy.base import TracingBoundProxy
+from flowy.base import ExecutionTracer
 from flowy.base import TaskError
+from flowy.base import TracingBoundProxy
 from flowy.base import Worker
 from flowy.base import Workflow
-from flowy.base import ExecutionTracer
 
 
 class WorkflowRunner(object):
@@ -72,9 +73,15 @@ class WorkflowRunner(object):
     def reschedule_decision(self):
         if self.restarted:
             return
+        # Any state that can mutate between the schedule time and the actual
+        # execution time must be copied or otherwise it can be in an
+        # inconsistent state. This includes the tracer if any and the state.
+        tracer = self.tracer
+        if tracer is not None:
+            tracer = tracer.copy()
         try:
             f = self.workflow_executor.submit(
-                self.workflow, self.state, self.input_data, tracer=self.tracer)
+                self.workflow, self.state.copy(), self.input_data, tracer)
         except RuntimeError:
             return # The executor must be closed
         f.add_done_callback(self.schedule_tasks)
@@ -256,12 +263,16 @@ class ChildWorkflowRunner(WorkflowRunner):
 
 
 class State(object):
-    def __init__(self, running=None, results=None, errors=None,
-                 finish_order=None):
-        self.running = running or set()
-        self.results = results or {}
-        self.errors = errors or {}
-        self.finish_order = finish_order or []
+    def __init__(self):
+        self.running = set()
+        self.results = {}
+        self.errors = {}
+        self.finish_order = []
+
+    def copy(self):
+        s = State()
+        s.__dict__ = copy.deepcopy(self.__dict__)
+        return s
 
     def set_running(self, call_key):
         self.running.add(call_key)

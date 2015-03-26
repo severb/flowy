@@ -1,11 +1,8 @@
 from __future__ import print_function
 
+import copy
 import heapq
 import logging
-try:
-    import repr as r
-except ImportError:
-    import reprlib as r
 import sys
 import warnings
 from collections import namedtuple
@@ -15,6 +12,11 @@ from keyword import iskeyword
 
 import venusian
 from lazy_object_proxy.slots import Proxy
+
+try:
+    import repr as r
+except ImportError:
+    import reprlib as r
 
 
 __all__ = 'restart TaskError TaskTimedout wait first finish_order parallel_reduce'.split()
@@ -462,6 +464,11 @@ class ExecutionTracer(object):
     def add_dependency(self, from_node, to_node):
         """ node_id -> node_id """
         self.deps.setdefault(from_node, []).append(to_node)
+
+    def copy(self):
+        et = ExecutionTracer()
+        et.__dict__ = copy.deepcopy(self.__dict__)
+        return et
 
     def reset(self):
         self.levels = []

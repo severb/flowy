@@ -60,7 +60,7 @@ class TestExamples(unittest.TestCase):
     will significantly increase the tests duration."""
     pass
 
-TIME_SCALE = 0.1
+TIME_SCALE = 0.3
 
 def make_t(wf_name, wf):
     def test(self):
@@ -82,7 +82,7 @@ def make_t(wf_name, wf):
                 expected_duration = int(line.split()[-1]) * TIME_SCALE * 0.1
                 break
         print(expected_duration, duration)
-        self.assertTrue(abs(expected_duration - duration) < TIME_SCALE/2)
+        self.assertTrue(abs(expected_duration - duration) < TIME_SCALE * 0.9)
     return test
 
 import flowy.examples as examples
