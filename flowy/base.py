@@ -376,6 +376,16 @@ class BoundProxy(object):
 
 
 class TracingBoundProxy(BoundProxy):
+    """Similar to a BoundProxy but records task dependency.
+
+    This works by checking every arguments passed to the proxy for task results
+    and records the dependency between this call and the previous ones
+    generating the task results. It also adds some extra information on the
+    task result itself for tracking purposes.
+
+    This can be used with ExecutionTracer to track the execution dependency and
+    display in in different forms for analysis.
+    """
     def __init__(self, tracer, trace_name, *args, **kwargs):
         super (TracingBoundProxy, self).__init__(*args, **kwargs)
         self.trace_name = trace_name
@@ -411,17 +421,9 @@ class TracingBoundProxy(BoundProxy):
 
 
 class ExecutionTracer(object):
-    def __init__(self, levels=None, current_schedule=None, timeouts=None,
-                 results=None, errors=None, activities=None, deps=None,
-                 nodes=None):
-        self.levels = levels or []
-        self.current_schedule = current_schedule or []
-        self.timeouts = timeouts or {}
-        self.results = results or{}
-        self.errors = errors or {}
-        self.activities = activities or set()
-        self.deps = deps or {}
-        self.nodes = nodes or {}
+    """Record the execution history for display and analysis."""
+    def __init__(self):
+        self.reset()
 
     def schedule_activity(self, node_id, name):
         assert node_id not in self.nodes
@@ -605,7 +607,6 @@ def wait(result):
 
 
 class ResultProxy(Proxy):
-    """This is the TaskResult proxy."""
     def __repr__(self):
         return repr(self.__wrapped__)
 
