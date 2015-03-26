@@ -4,7 +4,6 @@ except ImportError:
     from futures import ProcessPoolExecutor
 
 import json
-import time
 import warnings
 from collections import namedtuple
 from functools import partial
@@ -13,7 +12,6 @@ from threading import RLock
 
 from flowy.backend.swf import SWFTaskExecutionHistory as TaskHistory
 from flowy.backend.swf import JSONProxyEncoder
-from flowy.base import _identity
 from flowy.base import BoundProxy
 from flowy.base import TracingBoundProxy
 from flowy.base import TaskError
@@ -24,178 +22,24 @@ from flowy.base import ExecutionTracer
 
 class WorkflowRunner(object):
     def __init__(self, workflow, workflow_executor, activity_executor,
-                 input_data, root=None, parent=None, w_id=None, tracer=None):
+                input_data, state=None, tracer=None):
         self.workflow = workflow
-        self.input_data = input_data
         self.workflow_executor = workflow_executor
         self.activity_executor = activity_executor
-        self.root = root
-        if root is None:
-            self.root = self
-        self.parent = parent
-        self.w_id = w_id
-        self.running = set()
-        self.results = dict()
-        self.errors = dict()
-        self.finish_order = []
+        self.input_data = input_data
+        self.state = state if state is not None else State()
+        self.tracer = tracer
         self.lock = RLock()
-        self.stop = Event()
         self.will_restart = True
         self.history_updated = False
-        self.tracer = tracer
         self.restarted = False
-
-    def child_runner(self, workflow, w_id, input_data):
-        return WorkflowRunner(workflow, self.workflow_executor,
-                              self.activity_executor, input_data,
-                              parent=self, w_id=w_id)
-
-    def set_decision(self, decision):
-        self.decision = decision
-
-    def stop_result(self, result):
-        self.result = result
-        self.stop.set()
-
-    def stop_fail(self, exception):
-        self.exception = exception
-        self.stop.set()
-
-    def run(self, wait=False):
-        self.reschedule_decision()
-        self.stop.wait()
-        self.activity_executor.shutdown(wait=wait)
-        self.workflow_executor.shutdown(wait=wait)
-        if hasattr(self, 'result'):
-            return self.result
-        if hasattr(self, 'exception'):
-            raise self.exception
-
-    def reschedule_if_history_updated(self):
-        with self.lock:
-            if self.history_updated:
-                self.history_updated = False
-                self.reschedule_decision()
-            else:
-                self.will_restart = False
-
-    def update_history_or_reschedule(self):
-        with self.lock:
-            if self.will_restart:
-                self.history_updated = True
-            else:
-                self.history_updated = False
-                self.will_restart = True
-                self.reschedule_decision()
-
-    def complete_activity_and_reschedule_decision(self, task_id, result):
-        with self.lock:
-            try:
-                r = result.result()
-            except Exception as e:
-                self.set_error(task_id, str(e))
-            else:
-                self.set_result(task_id, json.dumps(r))
-            self.update_history_or_reschedule()
-
-    def fail_subwf_and_reschedule_decision(self, task_id, reason):
-        with self.lock:
-            self.set_error(task_id, str(reason))
-            self.update_history_or_reschedule()
-
-    def complete_subwf_and_reschedule_decision(self, task_id, result):
-        with self.lock:
-            self.set_result(task_id, result)
-            self.update_history_or_reschedule()
-
-    def reschedule_decision(self):
-        with self.lock:
-            if self.restarted:
-                return
-            try:
-                tracer = None
-                if self.tracer is not None:
-                    tracer = self.tracer.copy()
-                f = self.workflow_executor.submit(self.workflow,
-                                                  self.ro_state(),
-                                                  self.input_data,
-                                                  tracer)
-            except RuntimeError:
-                return # The executor must be closed
-            f.add_done_callback(partial(self.schedule_tasks))
-
-    def schedule_tasks(self, result):
-        if self.restarted:
-            return
-        try:
-            result = result.result()
-        except Exception as e:
-            if self.parent is None:
-                self.root.stop_fail(TaskError(str(e)))
-            else:
-                self.parent.fail_subwf_and_reschedule_decision(self.w_id, e)
-            return
-        if result['type'] == 'finish':
-            if self.parent is None:
-                self.root.stop_result(json.loads(result['result']))
-            else:
-                self.parent.complete_subwf_and_reschedule_decision(
-                    self.w_id, result['result'])
-            return
-        if result['type'] == 'fail':
-            if self.parent is None:
-                self.root.stop_fail(TaskError(result['reason']))
-            else:
-                self.parent.fail_subwf_and_reschedule_decision(
-                    self.w_id, result['reason'])
-            return
-        if result['type'] == 'restart':
-            self.restarted = True
-            if self.parent is None:
-                runner = WorkflowRunner(
-                    self.workflow, self.workflow_executor,
-                    self.activity_executor, result['input_data'],
-                    root=self.root, tracer=self.tracer)
-            else:
-                runner = WorkflowRunner(
-                    self.workflow, self.workflow_executor,
-                    self.activity_executor, result['input_data'],
-                    parent=self.parent, w_id=self.w_id)
-            runner.reschedule_decision()
-            return
-        assert result['type'] == 'schedule'
-        with self.lock:
-            for a in result.get('activities', []):
-                self.set_running(a['id'])
-                self.trace_activity(a)
-            for w in result.get('workflows', []):
-                self.set_running(w['id'])
-                self.trace_workflow(w)
-            self.trace_flush()
-            for a in result.get('activities', []):
-                try:
-                    args, kwargs = json.loads(a['input_data'])
-                    f = self.activity_executor.submit(a['f'], *args, **kwargs)
-                    f.add_done_callback(partial(
-                        self.complete_activity_and_reschedule_decision,
-                        a['id']))
-                except RuntimeError:
-                    pass # The executor must be closed
-            for w in result.get('workflows', []):
-                try:
-                    child_runner = self.child_runner(w['f'], w['id'],
-                                                     w['input_data'])
-                    child_runner.reschedule_decision()
-                except RuntimeError:
-                    pass # The executor must be closed
-            self.reschedule_if_history_updated()
 
     def trace_activity(self, a):
         if self.tracer is None:
             return
         name, call_n, retry_n = a['id'].split('-')
         node_id = '%s-%s' % (name, call_n)
-        assert not int(retry_n)
+        assert int(retry_n) == 0
         self.tracer.schedule_activity(node_id, name)
 
     def trace_workflow(self, w):
@@ -203,7 +47,7 @@ class WorkflowRunner(object):
             return
         name, call_n, retry_n = w['id'].split('-')
         node_id = '%s-%s' % (name, call_n)
-        assert not int(retry_n)
+        assert int(retry_n) == 0
         self.tracer.schedule_workflow(node_id, name)
 
     def trace_flush(self):
@@ -212,49 +56,225 @@ class WorkflowRunner(object):
         self.tracer.flush_scheduled()
 
     def trace_result(self, task_id, result):
-        name, call_n, _ = task_id.split('-')
-        node_id = '%s-%s' % (name, call_n)
         if self.tracer is None:
             return
+        name, call_n, _ = task_id.split('-')
+        node_id = '%s-%s' % (name, call_n)
         self.tracer.result(node_id, result)
 
     def trace_error(self, task_id, reason):
-        name, call_n, _ = task_id.split('-')
-        node_id = '%s-%s' % (name, call_n)
         if self.tracer is None:
             return
+        name, call_n, _ = task_id.split('-')
+        node_id = '%s-%s' % (name, call_n)
         self.tracer.error(node_id, reason)
 
-    def set_running(self, call_key):
-        with self.lock:
-            self.running.add(call_key)
+    def reschedule_decision(self):
+        if self.restarted:
+            return
+        try:
+            f = self.workflow_executor.submit(
+                self.workflow, self.state, self.input_data, tracer=self.tracer)
+        except RuntimeError:
+            return # The executor must be closed
+        f.add_done_callback(self.schedule_tasks)
 
-    def set_result(self, call_key, result):
+    def schedule_tasks(self, result):
         with self.lock:
-            self.running.remove(call_key)
-            self.results[call_key] = result
-            self.finish_order.append(call_key)
-            self.trace_result(call_key, result)
+            if self.restarted:
+                return
+            try:
+                result = result.result()
+            except Exception as e:
+                self.fail(e)
+                return
+            handle_func = 'handle_%s' % result['type']
+            getattr(self, handle_func)(result)
 
-    def set_error(self, call_key, reason):
+    def fail(self, reason):
+        raise NotImplementedError
+
+    def handle_schedule(self, result):
+        for a in result.get('activities', []):
+            self.state.set_running(a['id'])
+            self.trace_activity(a)
+        for w in result.get('workflows', []):
+            self.state.set_running(w['id'])
+            self.trace_workflow(w)
+        self.trace_flush()
+        for a in result.get('activities', []):
+            try:
+                args, kwargs = json.loads(a['input_data'])
+                f = self.activity_executor.submit(a['f'], *args, **kwargs)
+                f.add_done_callback(partial(
+                    self.complete_activity_and_reschedule_decision, a['id']))
+            except RuntimeError:
+                pass # The executor must be closed
+        for w in result.get('workflows', []):
+            r = ChildWorkflowRunner(w['f'], self.workflow_executor,
+                                    self.activity_executor, w['input_data'],
+                                    parent=self, wid=w['id'])
+            r.reschedule_decision()
+        self.reschedule_if_history_updated()
+
+    def handle_restart(self, _):
+        self.restarted = True
+        if self.tracer is not None:
+            self.tracer.reset()
+
+    def complete_activity_and_reschedule_decision(self, task_id, result):
         with self.lock:
-            self.running.remove(call_key)
-            self.errors[call_key] = reason
-            self.finish_order.append(call_key)
-            self.trace_error(call_key, reason)
+            try:
+                r = result.result()
+            except Exception as e:
+                self.state.set_error(task_id, str(e))
+                self.trace_error(task_id, e)
+            else:
+                self.state.set_result(task_id, json.dumps(r))
+                self.trace_result(task_id, r)
+            self.update_history_or_reschedule()
 
-    def ro_state(self):
+    def fail_subwf_and_reschedule_decision(self, task_id, reason):
         with self.lock:
-            return ROState(set(self.running), dict(self.results),
-                           dict(self.errors), list(self.finish_order))
+            self.state.set_error(task_id, str(reason))
+            self.trace_error(task_id, reason)
+            self.update_history_or_reschedule()
 
-class ROState(object):
+    def complete_subwf_and_reschedule_decision(self, task_id, result):
+        with self.lock:
+            self.state.set_result(task_id, result)
+            self.trace_result(task_id, json.loads(result))
+            self.update_history_or_reschedule()
+
+    def update_history_or_reschedule(self):
+        if self.will_restart:
+            self.history_updated = True
+        else:
+            self.history_updated = False
+            self.will_restart = True
+            self.reschedule_decision()
+
+    def reschedule_if_history_updated(self):
+        if self.history_updated:
+            self.history_updated = False
+            self.reschedule_decision()
+        else:
+            self.will_restart = False
+
+
+class RootWorkflowRunner(WorkflowRunner):
+    def __init__(self, workflow, workflow_executor, activity_executor,
+                input_data, state=None, tracer=None):
+        super(RootWorkflowRunner, self).__init__(
+                workflow, workflow_executor, activity_executor, input_data,
+                state=state, tracer=tracer)
+        self.stop = Event()
+
+    def run(self, wait=False):
+        self.reschedule_decision()
+        self.stop.wait()
+        self.activity_executor.shutdown(wait=wait)
+        self.workflow_executor.shutdown(wait=wait)
+        if hasattr(self, 'final_value'):
+            if isinstance(self.final_value, Exception):
+                raise self.final_value
+            else:
+                return self.final_value
+        raise RuntimeError('No final value found.')
+
+    def stop_running(self, final_value):
+        self.final_value = final_value
+        self.stop.set()
+
+    def handle_fail(self, result):
+        self.stop_running(TaskError(result['reason']))
+
+    def handle_finish(self, result):
+        self.stop_running(json.loads(result['result']))
+
+    def fail(self, reason):
+        self.stop_running(TaskError(str(reason)))
+
+    def handle_restart(self, result):
+        super(RootWorkflowRunner, self).handle_restart(result)
+        RestartedRootRunner(self.workflow, self.workflow_executor,
+                            self.activity_executor, result['input_data'],
+                            self, tracer=self.tracer).reschedule_decision()
+
+
+class RestartedRootRunner(WorkflowRunner):
+    def __init__(self, workflow, workflow_executor, activity_executor,
+                input_data, root, state=None, tracer=None):
+        super(RestartedRootRunner, self).__init__(
+              workflow, workflow_executor, activity_executor, input_data,
+              state=state, tracer=tracer)
+        self.root = root
+
+    def handle_fail(self, result):
+        self.root.handle_fail(result)
+
+    def handle_finish(self, result):
+        self.root.handle_finish(result)
+
+    def fail(self, reason):
+        self.root.fail(reason)
+
+    def handle_restart(self, result):
+        super(RestartedRootRunner, self).handle_restart(result)
+        r = RestartedRootRunner(self.workflow, self.workflow_executor,
+                                self.activity_executor, result['input_data'],
+                                self.root, tracer=self.tracer)
+        r.reschedule_decision()
+
+
+class ChildWorkflowRunner(WorkflowRunner):
+    def __init__(self, workflow, workflow_executor, activity_executor,
+                 input_data, parent, wid, state=None, tracer=None):
+        super(ChildWorkflowRunner, self).__init__(
+            workflow, workflow_executor, activity_executor, input_data,
+            state=state, tracer=tracer)
+        self.parent = parent
+        self.wid = wid
+
+    def handle_fail(self, result):
+        self.parent.fail_subwf_and_reschedule_decision(
+            self.wid, result['reason'])
+
+    def handle_finish(self, result):
+        self.parent.complete_subwf_and_reschedule_decision(
+            self.wid, result['result'])
+
+    def fail(self, reason):
+        self.parent.fail_subwf_and_reschedule_decision(self.wid, reason)
+
+    def handle_restart(self, result):
+        super(ChildWorkflowRunner, self).handle_restart(result)
+        r = ChildWorkflowRunner(self.workflow, self.workflow_executor,
+                                self.activity_executor, result['input_data'],
+                                self.parent, self.wid, tracer=self.tracer)
+        r.reschedule_decision()
+
+
+class State(object):
     def __init__(self, running=None, results=None, errors=None,
                  finish_order=None):
         self.running = running or set()
         self.results = results or {}
         self.errors = errors or {}
         self.finish_order = finish_order or []
+
+    def set_running(self, call_key):
+        self.running.add(call_key)
+
+    def set_result(self, call_key, result):
+        self.running.remove(call_key)
+        self.results[call_key] = result
+        self.finish_order.append(call_key)
+
+    def set_error(self, call_key, reason):
+        self.running.remove(call_key)
+        self.errors[call_key] = reason
+        self.finish_order.append(call_key)
 
     def is_running(self, call_key):
         return call_key in self.running
@@ -373,12 +393,11 @@ class WorkflowDecision(object):
 Serializer = namedtuple('Serializer', 'serialize_input deserialize_result')
 
 def serialize_input(*args, **kwargs):
-    r = (args, kwargs)
     # Force the encoding only to walk the data structure and trigger any
     # errors or suspend tasks.
     # On py3 the proxy objects can't be pickled correctly, this fixes that
     # problem too.
-    return json.dumps(r, cls=JSONProxyEncoder)
+    return json.dumps((args, kwargs), cls=JSONProxyEncoder)
 
 serializer = Serializer(serialize_input, json.loads)
 
@@ -433,7 +452,7 @@ class LocalWorkflow(Workflow):
         self.worker.register(self, w)
 
     def serialize_result(self, result):
-        # See serialize_input for an explanation on why use json here.
+        # See serialize_input for an explanation on why JSON in used here.
         return json.dumps(result, cls=JSONProxyEncoder)
 
     def deserialize_input(self, input_data):
@@ -449,21 +468,12 @@ class LocalWorkflow(Workflow):
         self.conf_proxy(dep_name, WorkflowProxy(dep_name, f))
 
     def __call__(self, state, input_data, tracer):
+        # NB: The final trace can be computed only on the last decision
+        # thread/process
         d = Decision()
         self.worker(self, input_data, d, state, tracer)
         if not d['type'] == 'schedule' and tracer is not None:
-            try:
-                import xdot
-            except ImportError:
-                warnings.warn('Extra requirements for "trace" are not available.')
-                return
-            else:
-                dot = tracer.as_dot()
-                win = xdot.DotWindow()
-                win.connect('destroy', xdot.gtk.main_quit)
-                win.set_filter('dot')
-                win.set_dotcode(dot)
-                xdot.gtk.main()
+            tracer.display()
         return d
 
     def run(self, *args, **kwargs):
@@ -474,6 +484,6 @@ class LocalWorkflow(Workflow):
         a_executor = self.executor(max_workers=self.activity_workers)
         w_executor = self.executor(max_workers=self.workflow_workers)
         input_data = serializer.serialize_input(*args, **kwargs)
-        wr = WorkflowRunner(self, w_executor, a_executor, input_data,
-                            tracer=tracer)
+        wr = RootWorkflowRunner(self, w_executor, a_executor, input_data,
+                                tracer=tracer)
         return wr.run(wait=wait)

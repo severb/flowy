@@ -423,18 +423,6 @@ class ExecutionTracer(object):
         self.deps = deps or {}
         self.nodes = nodes or {}
 
-    def copy(self):
-        return ExecutionTracer(
-            list(self.levels),
-            list(self.current_schedule),
-            dict(self.timeouts),
-            dict(self.results),
-            dict(self.errors),
-            set(self.activities),
-            dict(self.deps),
-            dict(self.nodes)
-        )
-
     def schedule_activity(self, node_id, name):
         assert node_id not in self.nodes
         self.nodes[node_id] = name
@@ -472,6 +460,16 @@ class ExecutionTracer(object):
     def add_dependency(self, from_node, to_node):
         """ node_id -> node_id """
         self.deps.setdefault(from_node, []).append(to_node)
+
+    def reset(self):
+        self.levels = []
+        self.current_schedule = []
+        self.timeouts = {}
+        self.results = {}
+        self.errors = {}
+        self.activities = set()
+        self.deps = {}
+        self.nodes = {}
 
     def as_dot(self):
         try:
@@ -554,6 +552,18 @@ class ExecutionTracer(object):
                                color='orange', fontcolor='orange', fontsize=8)
 
         return str(graph)
+
+    def display(self):
+        try:
+            import xdot
+        except ImportError:
+            warnings.warn('Extra requirements for "trace" are not available.')
+        else:
+            win = xdot.DotWindow()
+            win.connect('destroy', xdot.gtk.main_quit)
+            win.set_filter('dot')
+            win.set_dotcode(self.as_dot())
+            xdot.gtk.main()
 
 
 def result(value, order):
