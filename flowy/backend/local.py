@@ -483,7 +483,7 @@ class LocalWorkflow(Workflow):
         # thread/process
         d = Decision()
         self.worker(self, input_data, d, state, tracer)
-        if not d['type'] == 'schedule' and tracer is not None:
+        if d['type'] in ['finish', 'error'] and tracer is not None:
             tracer.display()
         return d
 
