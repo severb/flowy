@@ -424,7 +424,6 @@ class TracingBoundProxy(BoundProxy):
 
 class ShortRepr(r.Repr):
     def __init__(self):
-        pass
         self.maxlevel = 1
         self.maxtuple = 4
         self.maxlist = 4
@@ -548,6 +547,7 @@ class ExecutionTracer(object):
                     rlabel = str(self.errors[node_id])
                 else:
                     rlabel = short_repr.repr(self.results[node_id])
+                    rlabel = ' ' + '\l '.join(rlabel.split('\n')) # Left align
                 graph.add_node(finish_id, label='', shape='point', width=0.1,
                                color=color)
                 graph.add_edge(node_id, finish_id, arrowhead='none',
