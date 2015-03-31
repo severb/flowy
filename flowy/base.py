@@ -7,7 +7,7 @@ import sys
 import warnings
 from collections import namedtuple
 from functools import partial
-from itertools import chain
+from itertools import chain, islice
 from keyword import iskeyword
 
 import venusian
@@ -422,6 +422,50 @@ class TracingBoundProxy(BoundProxy):
         return r
 
 
+class ShortRepr(r.Repr):
+    def __init__(self):
+        pass
+        self.maxlevel = 1
+        self.maxtuple = 4
+        self.maxlist = 4
+        self.maxarray = 4
+        self.maxdict = 4
+        self.maxset = 4
+        self.maxfrozenset = 4
+        self.maxdeque = 4
+        self.maxstring = self.maxlong = self.maxother = 16
+
+    def repr_dict(self, x, level):
+        n = len(x)
+        if n == 0: return '{}'
+        if level <= 0: return '{...}'
+        newlevel = level - 1
+        repr1 = self.repr1
+        pieces = []
+        for key in islice(r._possibly_sorted(x), self.maxdict):
+            keyrepr = repr1(key, newlevel)
+            valrepr = repr1(x[key], newlevel)
+            pieces.append('%s: %s' % (keyrepr, valrepr))
+        if n > self.maxdict: pieces.append('...')
+        s = ',\n'.join(pieces)
+        return '{%s}' % (s,)
+
+    def _repr_iterable(self, x, level, left, right, maxiter, trail=''):
+        n = len(x)
+        if level <= 0 and n:
+            s = '...'
+        else:
+            newlevel = level - 1
+            repr1 = self.repr1
+            pieces = [repr1(elem, newlevel) for elem in islice(x, maxiter)]
+            if n > maxiter:  pieces.append('...')
+            s = ',\n'.join(pieces)
+            if n == 1 and trail:  right = trail + right
+        return '%s%s%s' % (left, s, right)
+
+short_repr = ShortRepr()
+
+
 class ExecutionTracer(object):
     """Record the execution history for display and analysis."""
     def __init__(self):
@@ -503,7 +547,7 @@ class ExecutionTracer(object):
                 if node_id in self.errors:
                     rlabel = str(self.errors[node_id])
                 else:
-                    rlabel = r.repr(self.results[node_id])
+                    rlabel = short_repr.repr(self.results[node_id])
                 graph.add_node(finish_id, label='', shape='point', width=0.1,
                                color=color)
                 graph.add_edge(node_id, finish_id, arrowhead='none',
