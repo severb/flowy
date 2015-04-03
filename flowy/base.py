@@ -18,8 +18,8 @@ try:
 except ImportError:
     import reprlib as r
 
-__all__ = 'restart TaskError TaskTimedout wait first finish_order parallel_reduce'.split(
-)
+__all__ = ['restart', 'TaskError', 'TaskTimedout', 'wait', 'first',
+           'finish_order', 'parallel_reduce']
 
 logger = logging.getLogger(__name__.split('.', 1)[0])
 

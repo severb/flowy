@@ -20,6 +20,8 @@ from flowy.base import TracingBoundProxy
 from flowy.base import Worker
 from flowy.base import Workflow
 
+__all__ = ['LocalWorkflow']
+
 
 class WorkflowRunner(object):
     def __init__(self, workflow, workflow_executor, activity_executor,

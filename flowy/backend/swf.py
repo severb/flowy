@@ -20,8 +20,8 @@ from flowy.base import setup_default_logger
 from flowy.base import Worker
 from flowy.base import Workflow
 
-__all__ = 'SWFWorkflow SWFWorkflowWorker SWFActivity SWFActivityWorker SWFWorkflowStarter'.split(
-)
+__all__ = ['SWFWorkflow', 'SWFWorkflowWorker', 'SWFActivity',
+           'SWFActivityWorker', 'SWFWorkflowStarter']
 
 logger = logging.getLogger(__name__.split('.', 1)[0])
 
