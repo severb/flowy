@@ -25,7 +25,7 @@ setup(name='flowy',
       zip_safe=False,
       setup_requires=['nose', 'setuptools_git', 'wheel'],
       install_requires=install_requires,
-      tests_require=['coverage'],
+      tests_require=['coverage', 'vcrpy'],
       test_suite="nose.collector",
       extras_require={
           'docs': ['sphinx', 'sphinx_rtd_theme'],

@@ -1,0 +1,179 @@
+interactions:
+- request:
+    body: '{"defaultExecutionStartToCloseTimeout": "20", "domain": "IntegrationTest",
+      "version": "1", "name": "ExitWorkflow", "defaultChildPolicy": "TERMINATE", "defaultTaskStartToCloseTimeout":
+      "10", "defaultTaskList": {"name": "tl"}}'
+    headers:
+      Content-Encoding: [amz-1.0]
+      Content-Type: [application/json; charset=UTF-8]
+      Host: [!!python/unicode 'swf.us-east-1.amazonaws.com']
+      X-Amz-Target: [com.amazonaws.swf.service.model.SimpleWorkflowService.RegisterWorkflowType]
+    method: POST
+    uri: https://swf.us-east-1.amazonaws.com/
+  response:
+    body: {string: !!python/unicode '{"__type":"com.amazonaws.swf.base.model#TypeAlreadyExistsFault","message":"WorkflowType=[name=ExitWorkflow,
+        version=1]"}'}
+    headers:
+      content-length: ['120']
+      content-type: [application/json]
+      x-amzn-requestid: [22e1f1c1-da02-11e4-bff1-1da121a1f228]
+    status: {code: 400, message: Bad Request}
+- request:
+    body: '{"domain": "IntegrationTest", "workflowType": {"version": "1", "name":
+      "ExitWorkflow"}}'
+    headers:
+      Content-Encoding: [amz-1.0]
+      Content-Type: [application/json; charset=UTF-8]
+      Host: [!!python/unicode 'swf.us-east-1.amazonaws.com']
+      X-Amz-Target: [com.amazonaws.swf.service.model.SimpleWorkflowService.DescribeWorkflowType]
+    method: POST
+    uri: https://swf.us-east-1.amazonaws.com/
+  response:
+    body: {string: !!python/unicode '{"configuration":{"defaultChildPolicy":"TERMINATE","defaultExecutionStartToCloseTimeout":"20","defaultTaskList":{"name":"tl"},"defaultTaskStartToCloseTimeout":"10"},"typeInfo":{"creationDate":1.42806418128E9,"status":"REGISTERED","workflowType":{"name":"ExitWorkflow","version":"1"}}}'}
+    headers:
+      content-length: ['284']
+      content-type: [application/json]
+      x-amzn-requestid: [22f8fc4b-da02-11e4-ba06-81daa04eaa6a]
+    status: {code: 200, message: OK}
+- request:
+    body: '{"defaultExecutionStartToCloseTimeout": "20", "domain": "IntegrationTest",
+      "version": "1", "name": "TestWorkflow", "defaultChildPolicy": "TERMINATE", "defaultTaskStartToCloseTimeout":
+      "10", "defaultTaskList": {"name": "tl"}}'
+    headers:
+      Content-Encoding: [amz-1.0]
+      Content-Type: [application/json; charset=UTF-8]
+      Host: [!!python/unicode 'swf.us-east-1.amazonaws.com']
+      X-Amz-Target: [com.amazonaws.swf.service.model.SimpleWorkflowService.RegisterWorkflowType]
+    method: POST
+    uri: https://swf.us-east-1.amazonaws.com/
+  response:
+    body: {string: !!python/unicode '{"__type":"com.amazonaws.swf.base.model#TypeAlreadyExistsFault","message":"WorkflowType=[name=TestWorkflow,
+        version=1]"}'}
+    headers:
+      content-length: ['120']
+      content-type: [application/json]
+      x-amzn-requestid: [23102deb-da02-11e4-99a6-e3fb0c880c8b]
+    status: {code: 400, message: Bad Request}
+- request:
+    body: '{"domain": "IntegrationTest", "workflowType": {"version": "1", "name":
+      "TestWorkflow"}}'
+    headers:
+      Content-Encoding: [amz-1.0]
+      Content-Type: [application/json; charset=UTF-8]
+      Host: [!!python/unicode 'swf.us-east-1.amazonaws.com']
+      X-Amz-Target: [com.amazonaws.swf.service.model.SimpleWorkflowService.DescribeWorkflowType]
+    method: POST
+    uri: https://swf.us-east-1.amazonaws.com/
+  response:
+    body: {string: !!python/unicode '{"configuration":{"defaultChildPolicy":"TERMINATE","defaultExecutionStartToCloseTimeout":"20","defaultTaskList":{"name":"tl"},"defaultTaskStartToCloseTimeout":"10"},"typeInfo":{"creationDate":1.428059220208E9,"status":"REGISTERED","workflowType":{"name":"TestWorkflow","version":"1"}}}'}
+    headers:
+      content-length: ['285']
+      content-type: [application/json]
+      x-amzn-requestid: [232563e3-da02-11e4-95c5-1dbbcdb5e097]
+    status: {code: 200, message: OK}
+- request:
+    body: '{"domain": "IntegrationTest", "taskList": {"name": "tl"}, "identity": "test"}'
+    headers:
+      Content-Encoding: [amz-1.0]
+      Content-Type: [application/json; charset=UTF-8]
+      Host: [!!python/unicode 'swf.us-east-1.amazonaws.com']
+      X-Amz-Target: [com.amazonaws.swf.service.model.SimpleWorkflowService.PollForDecisionTask]
+    method: POST
+    uri: https://swf.us-east-1.amazonaws.com/
+  response:
+    body: {string: !!python/unicode '{"events":[{"eventId":1,"eventTimestamp":1.428066343834E9,"eventType":"WorkflowExecutionStarted","workflowExecutionStartedEventAttributes":{"childPolicy":"TERMINATE","executionStartToCloseTimeout":"20","input":"[[],
+        {}]","parentInitiatedEventId":0,"taskList":{"name":"tl"},"taskStartToCloseTimeout":"10","workflowType":{"name":"TestWorkflow","version":"1"}}},{"decisionTaskScheduledEventAttributes":{"startToCloseTimeout":"10","taskList":{"name":"tl"}},"eventId":2,"eventTimestamp":1.428066343834E9,"eventType":"DecisionTaskScheduled"},{"decisionTaskStartedEventAttributes":{"identity":"test","scheduledEventId":2},"eventId":3,"eventTimestamp":1.428066344469E9,"eventType":"DecisionTaskStarted"}],"previousStartedEventId":0,"startedEventId":3,"taskToken":"AAAAKgAAAAIAAAAAAAAAAtSYJp3kkLYFt3KsubVxu/Ouf0+SKS+c6OHbDNV9IbIkWxhrIAZHjeGAKZ2ElpmtR/cmZFjptQxfNlhWxM/JKTyRqRbOXDtIrTPPr8Iej+gRQfO+rVT56dwdiYk1RBdaThtAnJA3qIZUR6Op9Iv5lCkxbMT0TtjpMWQiKbSX0uZmD0nWCRnrYXC3EnJkfKZMGM35EvLnivwWyTDeqdHz0EAFFA+nw1ZE/dhJWNgVtkfQibFj9SZu4NSvGmvt7GTD0MvYzcA2k33AfUJAkqFXdg0Rlv+v7ix6F0tvJ0V0DfRLJJoiw0aEFcTRUC902e9ooMnd8WJysLfKdgbfBh7k+3k=","workflowExecution":{"runId":"22UXpHnwgQ0DJjn0e7xud0ti3w43YIzrQpXasje4lrcWc=","workflowId":"a61bda5e-32d3-4580-a1c4-8414757c593b"},"workflowType":{"name":"TestWorkflow","version":"1"}}'}
+    headers:
+      content-length: ['1306']
+      content-type: [application/json]
+      x-amzn-requestid: [233c94a7-da02-11e4-b314-d32553d721ac]
+    status: {code: 200, message: OK}
+- request:
+    body: '{"decisions": [{"scheduleActivityTaskDecisionAttributes": {"input": "[[10,
+      11], {}]", "activityId": "activity-0-0", "activityType": {"version": "1", "name":
+      "tactivity"}}, "decisionType": "ScheduleActivityTask"}], "taskToken": "AAAAKgAAAAIAAAAAAAAAAtSYJp3kkLYFt3KsubVxu/Ouf0+SKS+c6OHbDNV9IbIkWxhrIAZHjeGAKZ2ElpmtR/cmZFjptQxfNlhWxM/JKTyRqRbOXDtIrTPPr8Iej+gRQfO+rVT56dwdiYk1RBdaThtAnJA3qIZUR6Op9Iv5lCkxbMT0TtjpMWQiKbSX0uZmD0nWCRnrYXC3EnJkfKZMGM35EvLnivwWyTDeqdHz0EAFFA+nw1ZE/dhJWNgVtkfQibFj9SZu4NSvGmvt7GTD0MvYzcA2k33AfUJAkqFXdg0Rlv+v7ix6F0tvJ0V0DfRLJJoiw0aEFcTRUC902e9ooMnd8WJysLfKdgbfBh7k+3k="}'
+    headers:
+      Content-Encoding: [amz-1.0]
+      Content-Type: [application/json; charset=UTF-8]
+      Host: [!!python/unicode 'swf.us-east-1.amazonaws.com']
+      X-Amz-Target: [com.amazonaws.swf.service.model.SimpleWorkflowService.RespondDecisionTaskCompleted]
+    method: POST
+    uri: https://swf.us-east-1.amazonaws.com/
+  response:
+    body: {string: !!python/unicode ''}
+    headers:
+      content-length: ['0']
+      content-type: [application/json]
+      x-amzn-requestid: [236467d4-da02-11e4-8785-19065687e6ea]
+    status: {code: 200, message: OK}
+- request:
+    body: '{"domain": "IntegrationTest", "taskList": {"name": "tl"}, "identity": "test"}'
+    headers:
+      Content-Encoding: [amz-1.0]
+      Content-Type: [application/json; charset=UTF-8]
+      Host: [!!python/unicode 'swf.us-east-1.amazonaws.com']
+      X-Amz-Target: [com.amazonaws.swf.service.model.SimpleWorkflowService.PollForDecisionTask]
+    method: POST
+    uri: https://swf.us-east-1.amazonaws.com/
+  response:
+    body: {string: !!python/unicode '{"events":[{"eventId":1,"eventTimestamp":1.428066343834E9,"eventType":"WorkflowExecutionStarted","workflowExecutionStartedEventAttributes":{"childPolicy":"TERMINATE","executionStartToCloseTimeout":"20","input":"[[],
+        {}]","parentInitiatedEventId":0,"taskList":{"name":"tl"},"taskStartToCloseTimeout":"10","workflowType":{"name":"TestWorkflow","version":"1"}}},{"decisionTaskScheduledEventAttributes":{"startToCloseTimeout":"10","taskList":{"name":"tl"}},"eventId":2,"eventTimestamp":1.428066343834E9,"eventType":"DecisionTaskScheduled"},{"decisionTaskStartedEventAttributes":{"identity":"test","scheduledEventId":2},"eventId":3,"eventTimestamp":1.428066344469E9,"eventType":"DecisionTaskStarted"},{"decisionTaskCompletedEventAttributes":{"scheduledEventId":2,"startedEventId":3},"eventId":4,"eventTimestamp":1.428066344689E9,"eventType":"DecisionTaskCompleted"},{"activityTaskScheduledEventAttributes":{"activityId":"activity-0-0","activityType":{"name":"tactivity","version":"1"},"decisionTaskCompletedEventId":4,"heartbeatTimeout":"10","input":"[[10,
+        11], {}]","scheduleToCloseTimeout":"60","scheduleToStartTimeout":"30","startToCloseTimeout":"15","taskList":{"name":"tl"}},"eventId":5,"eventTimestamp":1.428066344689E9,"eventType":"ActivityTaskScheduled"},{"activityTaskStartedEventAttributes":{"identity":"test","scheduledEventId":5},"eventId":6,"eventTimestamp":1.428066344752E9,"eventType":"ActivityTaskStarted"},{"activityTaskCompletedEventAttributes":{"result":"21","scheduledEventId":5,"startedEventId":6},"eventId":7,"eventTimestamp":1.428066344925E9,"eventType":"ActivityTaskCompleted"},{"decisionTaskScheduledEventAttributes":{"startToCloseTimeout":"10","taskList":{"name":"tl"}},"eventId":8,"eventTimestamp":1.428066344925E9,"eventType":"DecisionTaskScheduled"},{"decisionTaskStartedEventAttributes":{"identity":"test","scheduledEventId":8},"eventId":9,"eventTimestamp":1.428066344979E9,"eventType":"DecisionTaskStarted"}],"previousStartedEventId":3,"startedEventId":9,"taskToken":"AAAAKgAAAAIAAAAAAAAAApnlelrCrvsg6F0G9re+Q1aNqa0JnZITd0swmPMPFcO2ZSuXeJTchLoKXyGt04BWO/Le02VGqxtbPRY6rLngvGp+TXiuY38fiysAD7hewLiKJNF+EPxbEJ5tL7kbOvgY+PGRj1e9g7Ac5gFnOmWMB+9+4dJcNqk1JjxYA+eIyWhSrnIZvp/770Bt956BnGsGiuCHJ9ijV+xyRsyVV9yz5oH8mEMs82+MOBgVpoznom71QX6OUvjOvLwHqDSt1xgpSoIBtc4KhpAfv6OF2Bod7FVomexTF6H46EtbSheFCh6kUOTSDim72twX/CetsdLL+xxGG50N9hh1Qj5ub6AC4xc=","workflowExecution":{"runId":"22UXpHnwgQ0DJjn0e7xud0ti3w43YIzrQpXasje4lrcWc=","workflowId":"a61bda5e-32d3-4580-a1c4-8414757c593b"},"workflowType":{"name":"TestWorkflow","version":"1"}}'}
+    headers:
+      content-length: ['2544']
+      content-type: [application/json]
+      x-amzn-requestid: [2382509d-da02-11e4-a288-0fd236cf955c]
+    status: {code: 200, message: OK}
+- request:
+    body: '{"decisions": [{"completeWorkflowExecutionDecisionAttributes": {"result":
+      "21"}, "decisionType": "CompleteWorkflowExecution"}], "taskToken": "AAAAKgAAAAIAAAAAAAAAApnlelrCrvsg6F0G9re+Q1aNqa0JnZITd0swmPMPFcO2ZSuXeJTchLoKXyGt04BWO/Le02VGqxtbPRY6rLngvGp+TXiuY38fiysAD7hewLiKJNF+EPxbEJ5tL7kbOvgY+PGRj1e9g7Ac5gFnOmWMB+9+4dJcNqk1JjxYA+eIyWhSrnIZvp/770Bt956BnGsGiuCHJ9ijV+xyRsyVV9yz5oH8mEMs82+MOBgVpoznom71QX6OUvjOvLwHqDSt1xgpSoIBtc4KhpAfv6OF2Bod7FVomexTF6H46EtbSheFCh6kUOTSDim72twX/CetsdLL+xxGG50N9hh1Qj5ub6AC4xc="}'
+    headers:
+      Content-Encoding: [amz-1.0]
+      Content-Type: [application/json; charset=UTF-8]
+      Host: [!!python/unicode 'swf.us-east-1.amazonaws.com']
+      X-Amz-Target: [com.amazonaws.swf.service.model.SimpleWorkflowService.RespondDecisionTaskCompleted]
+    method: POST
+    uri: https://swf.us-east-1.amazonaws.com/
+  response:
+    body: {string: !!python/unicode ''}
+    headers:
+      content-length: ['0']
+      content-type: [application/json]
+      x-amzn-requestid: [23ae1b03-da02-11e4-9a28-afabc803dfcf]
+    status: {code: 200, message: OK}
+- request:
+    body: '{"domain": "IntegrationTest", "taskList": {"name": "tl"}, "identity": "test"}'
+    headers:
+      Content-Encoding: [amz-1.0]
+      Content-Type: [application/json; charset=UTF-8]
+      Host: [!!python/unicode 'swf.us-east-1.amazonaws.com']
+      X-Amz-Target: [com.amazonaws.swf.service.model.SimpleWorkflowService.PollForDecisionTask]
+    method: POST
+    uri: https://swf.us-east-1.amazonaws.com/
+  response:
+    body: {string: !!python/unicode '{"events":[{"eventId":1,"eventTimestamp":1.428066345566E9,"eventType":"WorkflowExecutionStarted","workflowExecutionStartedEventAttributes":{"childPolicy":"TERMINATE","executionStartToCloseTimeout":"20","input":"[[],
+        {}]","parentInitiatedEventId":0,"taskList":{"name":"tl"},"taskStartToCloseTimeout":"10","workflowType":{"name":"ExitWorkflow","version":"1"}}},{"decisionTaskScheduledEventAttributes":{"startToCloseTimeout":"10","taskList":{"name":"tl"}},"eventId":2,"eventTimestamp":1.428066345566E9,"eventType":"DecisionTaskScheduled"},{"decisionTaskStartedEventAttributes":{"identity":"test","scheduledEventId":2},"eventId":3,"eventTimestamp":1.428066345638E9,"eventType":"DecisionTaskStarted"}],"previousStartedEventId":0,"startedEventId":3,"taskToken":"AAAAKgAAAAIAAAAAAAAAAgoLbforHw/woBq8m+xj6ZFbsOPGHo3HJKYM8akVAqgZyxYmEWG7seNJx2qnnn/W6u+YD6I/rEBxfF63BgfqUt5CDtDLLVLAwpizoblxqpJijoYtdJxPkjnjAd/Vdkl7X/pbig2kfPMfc8lE/Y90En1uij7z4llcsnrG50WMv+pFLqiFoJBl4MRB9bHv6urhsJG9WWdNNIeXtQD1yY6H2bEh9QO0sFCidfmGZga4NuX/j8gZvA/hkByGfTjRKOE6UjFFbLE7gxNB7J+gM6GAHZsKXdhMvcPQslDpgoqs4BqfmCbeSMNVDjpaCrplNVaFbXoggW7grw/Em/6Y4x6V6WI=","workflowExecution":{"runId":"22k1rBdA0FyipW45U5DqcM5UsHZn1H5v+jiL52CRG2RrY=","workflowId":"8aa85ab7-135b-4978-b3c3-7ebd1b1d8df5"},"workflowType":{"name":"ExitWorkflow","version":"1"}}'}
+    headers:
+      content-length: ['1306']
+      content-type: [application/json]
+      x-amzn-requestid: [23ca0800-da02-11e4-85b0-61227409e2ad]
+    status: {code: 200, message: OK}
+- request:
+    body: '{"decisions": [{"scheduleActivityTaskDecisionAttributes": {"input": "[[],
+      {}]", "activityId": "activity-0-0", "activityType": {"version": "1", "name":
+      "tactivity"}}, "decisionType": "ScheduleActivityTask"}], "taskToken": "AAAAKgAAAAIAAAAAAAAAAgoLbforHw/woBq8m+xj6ZFbsOPGHo3HJKYM8akVAqgZyxYmEWG7seNJx2qnnn/W6u+YD6I/rEBxfF63BgfqUt5CDtDLLVLAwpizoblxqpJijoYtdJxPkjnjAd/Vdkl7X/pbig2kfPMfc8lE/Y90En1uij7z4llcsnrG50WMv+pFLqiFoJBl4MRB9bHv6urhsJG9WWdNNIeXtQD1yY6H2bEh9QO0sFCidfmGZga4NuX/j8gZvA/hkByGfTjRKOE6UjFFbLE7gxNB7J+gM6GAHZsKXdhMvcPQslDpgoqs4BqfmCbeSMNVDjpaCrplNVaFbXoggW7grw/Em/6Y4x6V6WI="}'
+    headers:
+      Content-Encoding: [amz-1.0]
+      Content-Type: [application/json; charset=UTF-8]
+      Host: [!!python/unicode 'swf.us-east-1.amazonaws.com']
+      X-Amz-Target: [com.amazonaws.swf.service.model.SimpleWorkflowService.RespondDecisionTaskCompleted]
+    method: POST
+    uri: https://swf.us-east-1.amazonaws.com/
+  response:
+    body: {string: !!python/unicode ''}
+    headers:
+      content-length: ['0']
+      content-type: [application/json]
+      x-amzn-requestid: [24114a66-da02-11e4-a94f-c783609b8481]
+    status: {code: 200, message: OK}
+version: 1

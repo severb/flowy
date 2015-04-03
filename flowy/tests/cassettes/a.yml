@@ -1,0 +1,105 @@
+interactions:
+- request:
+    body: '{"domain": "IntegrationTest", "version": "1", "defaultTaskScheduleToStartTimeout":
+      "30", "name": "tactivity", "defaultTaskHeartbeatTimeout": "10", "defaultTaskStartToCloseTimeout":
+      "15", "defaultTaskList": {"name": "tl"}, "defaultTaskScheduleToCloseTimeout":
+      "60"}'
+    headers:
+      Content-Encoding: [amz-1.0]
+      Content-Type: [application/json; charset=UTF-8]
+      Host: [!!python/unicode 'swf.us-east-1.amazonaws.com']
+      X-Amz-Target: [com.amazonaws.swf.service.model.SimpleWorkflowService.RegisterActivityType]
+    method: POST
+    uri: https://swf.us-east-1.amazonaws.com/
+  response:
+    body: {string: !!python/unicode '{"__type":"com.amazonaws.swf.base.model#TypeAlreadyExistsFault","message":"ActivityType=[name=tactivity,
+        version=1]"}'}
+    headers:
+      content-length: ['117']
+      content-type: [application/json]
+      x-amzn-requestid: [1ffd2131-da02-11e4-8033-69a8e58d09e7]
+    status: {code: 400, message: Bad Request}
+- request:
+    body: '{"domain": "IntegrationTest", "activityType": {"version": "1", "name":
+      "tactivity"}}'
+    headers:
+      Content-Encoding: [amz-1.0]
+      Content-Type: [application/json; charset=UTF-8]
+      Host: [!!python/unicode 'swf.us-east-1.amazonaws.com']
+      X-Amz-Target: [com.amazonaws.swf.service.model.SimpleWorkflowService.DescribeActivityType]
+    method: POST
+    uri: https://swf.us-east-1.amazonaws.com/
+  response:
+    body: {string: !!python/unicode '{"configuration":{"defaultTaskHeartbeatTimeout":"10","defaultTaskList":{"name":"tl"},"defaultTaskScheduleToCloseTimeout":"60","defaultTaskScheduleToStartTimeout":"30","defaultTaskStartToCloseTimeout":"15"},"typeInfo":{"activityType":{"name":"tactivity","version":"1"},"creationDate":1.428059215612E9,"status":"REGISTERED"}}'}
+    headers:
+      content-length: ['323']
+      content-type: [application/json]
+      x-amzn-requestid: [20142c02-da02-11e4-9ad1-6f56309e768d]
+    status: {code: 200, message: OK}
+- request:
+    body: '{"domain": "IntegrationTest", "taskList": {"name": "tl"}, "identity": "test"}'
+    headers:
+      Content-Encoding: [amz-1.0]
+      Content-Type: [application/json; charset=UTF-8]
+      Host: [!!python/unicode 'swf.us-east-1.amazonaws.com']
+      X-Amz-Target: [com.amazonaws.swf.service.model.SimpleWorkflowService.PollForActivityTask]
+    method: POST
+    uri: https://swf.us-east-1.amazonaws.com/
+  response:
+    body: {string: !!python/unicode '{"activityId":"activity-0-0","activityType":{"name":"tactivity","version":"1"},"input":"[[10,
+        11], {}]","startedEventId":6,"taskToken":"AAAAKgAAAAIAAAAAAAAAAt/obLqnybKWUTjyAZ7ABsk2Q5ocGQ9ff79z32F/hO4SObv53a2iq+aiVf3vZ2IdRYHhS1lRsl/fCLyv3pOMo62j6+S90h3FR2jzAbLKgX+SFhUyKRCqH5aJAYfd431r21y6NNm/Wmx99egn91pwkJCAosH00lvGzSczyLOOhFPKIkppiWWhBUlrn7WA9qx/EPp7gY+sWzadaqZDgXCPtu+viO/H1frd4m5m6kj9IDITJQ4wPp8JvTz8HGoTaREy3KvaW8o6fImDh42CQAJpiK57b2TRdgDQpI3DH/cr2DbcRQhPBahDzg4PgeNwNS/dBvIqa85c0od+1CKMZ0jAM3U=","workflowExecution":{"runId":"22UXpHnwgQ0DJjn0e7xud0ti3w43YIzrQpXasje4lrcWc=","workflowId":"a61bda5e-32d3-4580-a1c4-8414757c593b"}}'}
+    headers:
+      content-length: ['633']
+      content-type: [application/json]
+      x-amzn-requestid: [202b0f54-da02-11e4-af3c-cd188841b0b0]
+    status: {code: 200, message: OK}
+- request:
+    body: '{"result": "21", "taskToken": "AAAAKgAAAAIAAAAAAAAAAt/obLqnybKWUTjyAZ7ABsk2Q5ocGQ9ff79z32F/hO4SObv53a2iq+aiVf3vZ2IdRYHhS1lRsl/fCLyv3pOMo62j6+S90h3FR2jzAbLKgX+SFhUyKRCqH5aJAYfd431r21y6NNm/Wmx99egn91pwkJCAosH00lvGzSczyLOOhFPKIkppiWWhBUlrn7WA9qx/EPp7gY+sWzadaqZDgXCPtu+viO/H1frd4m5m6kj9IDITJQ4wPp8JvTz8HGoTaREy3KvaW8o6fImDh42CQAJpiK57b2TRdgDQpI3DH/cr2DbcRQhPBahDzg4PgeNwNS/dBvIqa85c0od+1CKMZ0jAM3U="}'
+    headers:
+      Content-Encoding: [amz-1.0]
+      Content-Type: [application/json; charset=UTF-8]
+      Host: [!!python/unicode 'swf.us-east-1.amazonaws.com']
+      X-Amz-Target: [com.amazonaws.swf.service.model.SimpleWorkflowService.RespondActivityTaskCompleted]
+    method: POST
+    uri: https://swf.us-east-1.amazonaws.com/
+  response:
+    body: {string: !!python/unicode ''}
+    headers:
+      content-length: ['0']
+      content-type: [application/json]
+      x-amzn-requestid: [238a6682-da02-11e4-ae6c-11a3484d6280]
+    status: {code: 200, message: OK}
+- request:
+    body: '{"domain": "IntegrationTest", "taskList": {"name": "tl"}, "identity": "test"}'
+    headers:
+      Content-Encoding: [amz-1.0]
+      Content-Type: [application/json; charset=UTF-8]
+      Host: [!!python/unicode 'swf.us-east-1.amazonaws.com']
+      X-Amz-Target: [com.amazonaws.swf.service.model.SimpleWorkflowService.PollForActivityTask]
+    method: POST
+    uri: https://swf.us-east-1.amazonaws.com/
+  response:
+    body: {string: !!python/unicode '{"activityId":"activity-0-0","activityType":{"name":"tactivity","version":"1"},"input":"[[],
+        {}]","startedEventId":6,"taskToken":"AAAAKgAAAAIAAAAAAAAAAsSn55+Cv5I6UCFqIWf9ckEqmObyO6t2gaq+uRmlnu/SCvXsK+sPITfFltC/ksFARUnZLew3uF5O5Bt1Sd/6IvYMbd33R79XdPfHO023JA4yhyv4yudv/OaP4FjNLDzIFcXkORxxv/tuM4jNza1zVgIf//vvskYtteK2vIuW/zB41/p3amnw/bUOQASMkgZzxGVwZhULuyGIOb9ILcF5hN367YThZHtbsGxR3ds0q4d1P6/uPp83mCVZljcoNdmxYOHJqO/BG9tWxEptQlPExkl/nhb8hGZNb8r+PPj5G5y2Mq7DmdPqONif8BQPnYFiFLI3xXzSlIBHP24H4avYxp8=","workflowExecution":{"runId":"22k1rBdA0FyipW45U5DqcM5UsHZn1H5v+jiL52CRG2RrY=","workflowId":"8aa85ab7-135b-4978-b3c3-7ebd1b1d8df5"}}'}
+    headers:
+      content-length: ['627']
+      content-type: [application/json]
+      x-amzn-requestid: [23b2af20-da02-11e4-9003-45691576bf10]
+    status: {code: 200, message: OK}
+- request:
+    body: '{"result": "null", "taskToken": "AAAAKgAAAAIAAAAAAAAAAsSn55+Cv5I6UCFqIWf9ckEqmObyO6t2gaq+uRmlnu/SCvXsK+sPITfFltC/ksFARUnZLew3uF5O5Bt1Sd/6IvYMbd33R79XdPfHO023JA4yhyv4yudv/OaP4FjNLDzIFcXkORxxv/tuM4jNza1zVgIf//vvskYtteK2vIuW/zB41/p3amnw/bUOQASMkgZzxGVwZhULuyGIOb9ILcF5hN367YThZHtbsGxR3ds0q4d1P6/uPp83mCVZljcoNdmxYOHJqO/BG9tWxEptQlPExkl/nhb8hGZNb8r+PPj5G5y2Mq7DmdPqONif8BQPnYFiFLI3xXzSlIBHP24H4avYxp8="}'
+    headers:
+      Content-Encoding: [amz-1.0]
+      Content-Type: [application/json; charset=UTF-8]
+      Host: [!!python/unicode 'swf.us-east-1.amazonaws.com']
+      X-Amz-Target: [com.amazonaws.swf.service.model.SimpleWorkflowService.RespondActivityTaskCompleted]
+    method: POST
+    uri: https://swf.us-east-1.amazonaws.com/
+  response:
+    body: {string: !!python/unicode ''}
+    headers:
+      content-length: ['0']
+      content-type: [application/json]
+      x-amzn-requestid: [24330287-da02-11e4-85b0-61227409e2ad]
+    status: {code: 200, message: OK}
+version: 1

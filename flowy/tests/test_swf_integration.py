@@ -23,7 +23,6 @@ DOMAIN = 'IntegrationTest'
 TASKLIST = 'tl'
 IDENTITY = 'test'
 
-
 exit_event = multiprocessing.Event()
 wf_finished_event = multiprocessing.Event()
 
@@ -108,13 +107,16 @@ aworker = TestSWFActivityWorker()
 aworker.scan(package=sys.modules[__name__])
 
 cassette_args = {
-    'match_on': ['method', 'uri', 'host', 'port', 'path', 'query', 'body', 'headers'],
-    'filter_headers': ['authorization', 'x-amz-date', 'content-length']
+    'match_on': ['method', 'uri', 'host', 'port', 'path', 'query', 'body',
+                 'headers'],
+    'filter_headers': ['authorization', 'x-amz-date', 'content-length',
+                       'user-agent']
 }
 
 
 def test_activity_integration():
-    with vcr.use_cassette(A_CASSETTE, record_mode='none', **cassette_args) as cass:
+    with vcr.use_cassette(A_CASSETTE,
+                          record_mode='none', **cassette_args) as cass:
         try:
             aworker.run_forever(DOMAIN, TASKLIST, identity=IDENTITY)
         except vcr.errors.CannotOverwriteExistingCassetteException:
@@ -123,7 +125,8 @@ def test_activity_integration():
 
 
 def test_workflow_integration():
-    with vcr.use_cassette(W_CASSETTE, record_mode='none', **cassette_args) as cass:
+    with vcr.use_cassette(W_CASSETTE,
+                          record_mode='none', **cassette_args) as cass:
         try:
             wworker.run_forever(DOMAIN, TASKLIST, identity=IDENTITY)
         except vcr.errors.CannotOverwriteExistingCassetteException:
@@ -132,7 +135,8 @@ def test_workflow_integration():
 
 
 def start_activity_worker():
-    with vcr.use_cassette(A_CASSETTE, record_mode='all', **cassette_args) as cass:
+    with vcr.use_cassette(A_CASSETTE,
+                          record_mode='all', **cassette_args) as cass:
         try:
             aworker.run_forever(DOMAIN, TASKLIST, identity=IDENTITY)
         except vcr.errors.CannotOverwriteExistingCassetteException:
@@ -140,7 +144,8 @@ def start_activity_worker():
 
 
 def start_workflow_worker():
-    with vcr.use_cassette(W_CASSETTE, record_mode='all', **cassette_args) as cass:
+    with vcr.use_cassette(W_CASSETTE,
+                          record_mode='all', **cassette_args) as cass:
         try:
             wworker.run_forever(DOMAIN, TASKLIST, identity=IDENTITY)
         except vcr.errors.CannotOverwriteExistingCassetteException:
