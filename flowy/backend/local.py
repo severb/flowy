@@ -23,7 +23,9 @@ from flowy.base import Workflow
 
 class WorkflowRunner(object):
     def __init__(self, workflow, workflow_executor, activity_executor,
-                input_data, state=None, tracer=None):
+                 input_data,
+                 state=None,
+                 tracer=None):
         self.workflow = workflow
         self.workflow_executor = workflow_executor
         self.activity_executor = activity_executor
@@ -80,10 +82,10 @@ class WorkflowRunner(object):
         if tracer is not None:
             tracer = tracer.copy()
         try:
-            f = self.workflow_executor.submit(
-                self.workflow, self.state.copy(), self.input_data, tracer)
+            f = self.workflow_executor.submit(self.workflow, self.state.copy(),
+                                              self.input_data, tracer)
         except RuntimeError:
-            return # The executor must be closed
+            return  # The executor must be closed
         f.add_done_callback(self.schedule_tasks)
 
     def schedule_tasks(self, result):
@@ -116,11 +118,12 @@ class WorkflowRunner(object):
                 f.add_done_callback(partial(
                     self.complete_activity_and_reschedule_decision, a['id']))
             except RuntimeError:
-                pass # The executor must be closed
+                pass  # The executor must be closed
         for w in result.get('workflows', []):
             r = ChildWorkflowRunner(w['f'], self.workflow_executor,
                                     self.activity_executor, w['input_data'],
-                                    parent=self, wid=w['id'])
+                                    parent=self,
+                                    wid=w['id'])
             r.reschedule_decision()
         self.reschedule_if_history_updated()
 
@@ -171,10 +174,13 @@ class WorkflowRunner(object):
 
 class RootWorkflowRunner(WorkflowRunner):
     def __init__(self, workflow, workflow_executor, activity_executor,
-                input_data, state=None, tracer=None):
-        super(RootWorkflowRunner, self).__init__(
-                workflow, workflow_executor, activity_executor, input_data,
-                state=state, tracer=tracer)
+                 input_data,
+                 state=None,
+                 tracer=None):
+        super(RootWorkflowRunner, self).__init__(workflow, workflow_executor,
+                                                 activity_executor, input_data,
+                                                 state=state,
+                                                 tracer=tracer)
         self.stop = Event()
 
     def run(self, wait=False):
@@ -205,16 +211,19 @@ class RootWorkflowRunner(WorkflowRunner):
     def handle_restart(self, result):
         super(RootWorkflowRunner, self).handle_restart(result)
         RestartedRootRunner(self.workflow, self.workflow_executor,
-                            self.activity_executor, result['input_data'],
-                            self, tracer=self.tracer).reschedule_decision()
+                            self.activity_executor, result['input_data'], self,
+                            tracer=self.tracer).reschedule_decision()
 
 
 class RestartedRootRunner(WorkflowRunner):
     def __init__(self, workflow, workflow_executor, activity_executor,
-                input_data, root, state=None, tracer=None):
+                 input_data, root,
+                 state=None,
+                 tracer=None):
         super(RestartedRootRunner, self).__init__(
-              workflow, workflow_executor, activity_executor, input_data,
-              state=state, tracer=tracer)
+            workflow, workflow_executor, activity_executor, input_data,
+            state=state,
+            tracer=tracer)
         self.root = root
 
     def handle_fail(self, result):
@@ -230,26 +239,30 @@ class RestartedRootRunner(WorkflowRunner):
         super(RestartedRootRunner, self).handle_restart(result)
         r = RestartedRootRunner(self.workflow, self.workflow_executor,
                                 self.activity_executor, result['input_data'],
-                                self.root, tracer=self.tracer)
+                                self.root,
+                                tracer=self.tracer)
         r.reschedule_decision()
 
 
 class ChildWorkflowRunner(WorkflowRunner):
     def __init__(self, workflow, workflow_executor, activity_executor,
-                 input_data, parent, wid, state=None, tracer=None):
+                 input_data, parent, wid,
+                 state=None,
+                 tracer=None):
         super(ChildWorkflowRunner, self).__init__(
             workflow, workflow_executor, activity_executor, input_data,
-            state=state, tracer=tracer)
+            state=state,
+            tracer=tracer)
         self.parent = parent
         self.wid = wid
 
     def handle_fail(self, result):
-        self.parent.fail_subwf_and_reschedule_decision(
-            self.wid, result['reason'])
+        self.parent.fail_subwf_and_reschedule_decision(self.wid,
+                                                       result['reason'])
 
     def handle_finish(self, result):
-        self.parent.complete_subwf_and_reschedule_decision(
-            self.wid, result['result'])
+        self.parent.complete_subwf_and_reschedule_decision(self.wid,
+                                                           result['result'])
 
     def fail(self, reason):
         self.parent.fail_subwf_and_reschedule_decision(self.wid, reason)
@@ -258,7 +271,8 @@ class ChildWorkflowRunner(WorkflowRunner):
         super(ChildWorkflowRunner, self).handle_restart(result)
         r = ChildWorkflowRunner(self.workflow, self.workflow_executor,
                                 self.activity_executor, result['input_data'],
-                                self.parent, self.wid, tracer=self.tracer)
+                                self.parent, self.wid,
+                                tracer=self.tracer)
         r.reschedule_decision()
 
 
@@ -310,10 +324,8 @@ class State(object):
 
     def __repr__(self):
         if len(self.finish_order) > 6:
-            order = (
-                ' '.join(map(str, self.finish_order[:3]))
-                + ' ... '
-                + ' '.join(map(str, self.finish_order[-3:])))
+            order = (' '.join(map(str, self.finish_order[:3])) + ' ... ' +
+                     ' '.join(map(str, self.finish_order[-3:])))
         else:
             order = ' '.join(map(str, self.finish_order))
         return "<RUNNING: %d, RESULTS: %d, ERRORS: %d, ORDER: %s>" % (
@@ -357,18 +369,18 @@ class Decision(dict):
     def schedule_activity(self, call_key, input_data, f):
         if self.closed or 'activities' not in self:
             return
-        self['activities'].append({
-            'id': call_key,
-            'input_data': input_data,
-            'f': f})
+        self['activities'].append(
+            {'id': call_key,
+             'input_data': input_data,
+             'f': f})
 
     def schedule_workflow(self, call_key, input_data, f):
         if self.closed or 'workflows' not in self:
             return
-        self['workflows'].append({
-            'id': call_key,
-            'input_data': input_data,
-            'f': f})
+        self['workflows'].append(
+            {'id': call_key,
+             'input_data': input_data,
+             'f': f})
 
 
 class ActivityDecision(object):
@@ -403,12 +415,14 @@ class WorkflowDecision(object):
 
 Serializer = namedtuple('Serializer', 'serialize_input deserialize_result')
 
+
 def serialize_input(*args, **kwargs):
     # Force the encoding only to walk the data structure and trigger any
     # errors or suspend tasks.
     # On py3 the proxy objects can't be pickled correctly, this fixes that
     # problem too.
     return json.dumps((args, kwargs), cls=JSONProxyEncoder)
+
 
 serializer = Serializer(serialize_input, json.loads)
 
@@ -421,13 +435,10 @@ class ActivityProxy(object):
     def __call__(self, decision, history, tracer):
         if tracer is None:
             return BoundProxy(
-                serializer,
-                TaskHistory(history, self.identity),
+                serializer, TaskHistory(history, self.identity),
                 ActivityDecision(decision, self.identity, self.f))
         return TracingBoundProxy(
-            tracer,
-            self.identity,
-            serializer,
+            tracer, self.identity, serializer,
             TaskHistory(history, self.identity),
             ActivityDecision(decision, self.identity, self.f))
 
@@ -440,20 +451,18 @@ class WorkflowProxy(object):
     def __call__(self, decision, history, tracer):
         if tracer is None:
             return BoundProxy(
-                serializer,
-                TaskHistory(history, self.identity),
+                serializer, TaskHistory(history, self.identity),
                 WorkflowDecision(decision, self.identity, self.f))
         return TracingBoundProxy(
-            tracer,
-            self.identity,
-            serializer,
+            tracer, self.identity, serializer,
             TaskHistory(history, self.identity),
             WorkflowDecision(decision, self.identity, self.f))
 
 
 class LocalWorkflow(Workflow):
-
-    def __init__(self, w, activity_workers=8, workflow_workers=2,
+    def __init__(self, w,
+                 activity_workers=8,
+                 workflow_workers=2,
                  executor=ProcessPoolExecutor):
         super(LocalWorkflow, self).__init__()
         self.activity_workers = activity_workers

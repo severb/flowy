@@ -11,9 +11,7 @@ from flowy.tests.swf_cases import cases
 class DummyDecision(object):
     def __init__(self):
         self.result = None
-        self.queued = {
-            'schedule': []
-        }
+        self.queued = {'schedule': []}
 
     def fail(self, reason):
         if self.result is not None:
@@ -89,16 +87,13 @@ class DummyDecision(object):
             'child_policy': child_policy,
         })
 
-    default_timer = {
-        'delay': 0,
-    }
+    default_timer = {'delay': 0, }
 
     def schedule_timer(self, call_key, delay):
-        self.queued['schedule'].append({
-            'type': 'timer',
-            'call_key': call_key,
-            'delay': delay,
-        })
+        self.queued['schedule'].append(
+            {'type': 'timer',
+             'call_key': call_key,
+             'delay': delay, })
 
     def assert_equals(self, expected):
         if isinstance(expected, dict) and 'schedule' in expected:
@@ -147,20 +142,14 @@ for i, case in enumerate(cases):
             decision = DummyDecision()
             results = case.get('results', {})
             results = dict((k, json.dumps(v)) for k, v in results.items())
-            order = (
-                list(case.get('results', {}).keys()) 
-                + list(case.get('errors', {}).keys())
-                + list(case.get('timedout', []))
-            )
+            order = (list(case.get('results', {}).keys()) + list(case.get(
+                'errors', {}).keys()) + list(case.get('timedout', [])))
             execution_history = SWFExecutionHistory(
-                case.get('running', []),
-                case.get('timedout', []),
-                results,
-                case.get('errors', {}),
-                case.get('order', order),
-            )
+                case.get('running', []), case.get('timedout', []), results,
+                case.get('errors', {}), case.get('order', order), )
             worker(key, input_data, decision, execution_history)
             decision.assert_equals(case.get('expected'))
+
         return t
 
     t = make_t(case)
@@ -175,33 +164,28 @@ class TestRegistration(unittest.TestCase):
         worker = SWFWorkflowWorker()
         w = SWFWorkflow(name='T', version=1)
         worker.register(w, lambda: 1)
-        self.assertRaises(
-            ValueError, lambda: worker.register(w, lambda: 1))
+        self.assertRaises(ValueError, lambda: worker.register(w, lambda: 1))
 
     def test_digit_name(self):
         from flowy import SWFWorkflow
         w = SWFWorkflow(name='T', version=1)
-        self.assertRaises(
-            ValueError, lambda: w.conf_proxy('123', None))
+        self.assertRaises(ValueError, lambda: w.conf_proxy('123', None))
 
     def test_keyword_name(self):
         from flowy import SWFWorkflow
         w = SWFWorkflow(name='T', version=1)
-        self.assertRaises(
-            ValueError, lambda: w.conf_proxy('for', None))
+        self.assertRaises(ValueError, lambda: w.conf_proxy('for', None))
 
     def test_nonalnum_name(self):
         from flowy import SWFWorkflow
         w = SWFWorkflow(name='T', version=1)
-        self.assertRaises(
-            ValueError, lambda: w.conf_proxy('abc!123', None))
+        self.assertRaises(ValueError, lambda: w.conf_proxy('abc!123', None))
 
     def test_duplicate_name(self):
         from flowy import SWFWorkflow
         w = SWFWorkflow(name='T', version=1)
         w.conf_proxy('task', None)
-        self.assertRaises(
-            ValueError, lambda: w.conf_proxy('task', None))
+        self.assertRaises(ValueError, lambda: w.conf_proxy('task', None))
 
 
 class TestScan(unittest.TestCase):

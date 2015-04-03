@@ -20,12 +20,10 @@ from flowy.base import setup_default_logger
 from flowy.base import Worker
 from flowy.base import Workflow
 
-
-__all__ = 'SWFWorkflow SWFWorkflowWorker SWFActivity SWFActivityWorker SWFWorkflowStarter'.split()
-
+__all__ = 'SWFWorkflow SWFWorkflowWorker SWFActivity SWFActivityWorker SWFWorkflowStarter'.split(
+)
 
 logger = logging.getLogger(__name__.split('.', 1)[0])
-
 
 _CHILD_POLICY = ['TERMINATE', 'REQUEST_CANCEL', 'ABANDON', None]
 _INPUT_SIZE = _RESULT_SIZE = 32768
@@ -48,6 +46,7 @@ class JSONProxyEncoder(json.JSONEncoder):
 
     # On py26 things are a bit worse...
     if sys.version_info[:2] == (2, 6):
+
         def _iterencode(self, o, markers=None):
             s = super(JSONProxyEncoder, self)
             if is_result_proxy(o):
@@ -56,11 +55,15 @@ class JSONProxyEncoder(json.JSONEncoder):
 
     # pypy uses simplejson, and ...
     if platform.python_implementation() == 'PyPy':
-        def _JSONEncoder__encode(self, o, markers, builder, _current_indent_level):
+
+        def _JSONEncoder__encode(self, o, markers, builder,
+                                 _current_indent_level):
             s = super(JSONProxyEncoder, self)
             if is_result_proxy(o):
-                return s._JSONEncoder__encode(o.__wrapped__, markers, builder, _current_indent_level)
-            return s._JSONEncoder__encode(o, markers, builder, _current_indent_level)
+                return s._JSONEncoder__encode(o.__wrapped__, markers, builder,
+                                              _current_indent_level)
+            return s._JSONEncoder__encode(o, markers, builder,
+                                          _current_indent_level)
 
 
 _serialize_input = lambda *args, **kwargs: json.dumps((args, kwargs),
@@ -106,10 +109,9 @@ class SWFConfigMixin(object):
         # workflow factories and each has a different name.
         clone_args = {'name': name}
         for prop, val in self.__dict__.items():
-            if (prop == 'version'
-                    or prop.startswith('default')
-                    or prop.startswith('serialize')
-                    or prop.startswith('deserialize')):
+            if (prop == 'version' or prop.startswith('default') or
+                prop.startswith('serialize') or
+                prop.startswith('deserialize')):
                 clone_args[prop] = val
         return klass(**clone_args)
 
@@ -130,10 +132,13 @@ class SWFWorkflow(SWFConfigMixin, Workflow):
 
     category = 'swf_workflow'  # venusian category used for this type of confs
 
-    def __init__(self, version, name=None, default_task_list=None,
+    def __init__(self, version,
+                 name=None,
+                 default_task_list=None,
                  default_workflow_duration=None,
                  default_decision_duration=None,
-                 default_child_policy=None, rate_limit=64,
+                 default_child_policy=None,
+                 rate_limit=64,
                  deserialize_input=_deserialize_input,
                  serialize_result=_serialize_result,
                  serialize_restart_input=_serialize_input):
@@ -180,8 +185,10 @@ class SWFWorkflow(SWFConfigMixin, Workflow):
         if self.name is None:
             raise RuntimeError('Name is not set.')
         d_t_l = _str_or_none(self.default_task_list)
-        d_w_d = _timer_encode(self.default_workflow_duration, 'default_workflow_duration')
-        d_d_d = _timer_encode(self.default_decision_duration, 'default_decision_duration')
+        d_w_d = _timer_encode(self.default_workflow_duration,
+                              'default_workflow_duration')
+        d_d_d = _timer_encode(self.default_decision_duration,
+                              'default_decision_duration')
         d_c_p = _cp_encode(self.default_child_policy)
         return str(self.name), str(self.version), d_t_l, d_w_d, d_d_d, d_c_p
 
@@ -201,7 +208,10 @@ class SWFWorkflow(SWFConfigMixin, Workflow):
         n, version, d_t_l, d_w_d, d_d_d, d_c_p = self._cvt_values()
         try:
             swf_layer1.register_workflow_type(
-                str(domain), name=n, version=version, task_list=d_t_l,
+                str(domain),
+                name=n,
+                version=version,
+                task_list=d_t_l,
                 default_execution_start_to_close_timeout=d_w_d,
                 default_task_start_to_close_timeout=d_d_d,
                 default_child_policy=d_c_p)
@@ -233,24 +243,32 @@ class SWFWorkflow(SWFConfigMixin, Workflow):
             raise _RegistrationError(e)
         r_d_t_l = w_descr.get('defaultTaskList', {}).get('name')
         if r_d_t_l != d_t_l:
-            raise _RegistrationError('Default task list for %r version %r does not match: %r != %r' %
-                                     (n, v, r_d_t_l, d_t_l))
+            raise _RegistrationError(
+                'Default task list for %r version %r does not match: %r != %r' %
+                (n, v, r_d_t_l, d_t_l))
         r_d_d_d = w_descr.get('defaultTaskStartToCloseTimeout')
         if r_d_d_d != d_d_d:
-            raise _RegistrationError('Default decision duration for %r version %r does not match: %r != %r' %
-                                     (n, v, r_d_d_d, d_d_d))
+            raise _RegistrationError(
+                'Default decision duration for %r version %r does not match: %r != %r'
+                % (n, v, r_d_d_d, d_d_d))
         r_d_w_d = w_descr.get('defaultExecutionStartToCloseTimeout')
         if r_d_w_d != d_w_d:
-            raise _RegistrationError('Default workflow duration for %r version %r does not match: %r != %r' %
-                                     (n, v, r_d_w_d, d_w_d))
+            raise _RegistrationError(
+                'Default workflow duration for %r version %r does not match: %r != %r'
+                % (n, v, r_d_w_d, d_w_d))
         r_d_c_p = w_descr.get('defaultChildPolicy')
         if r_d_c_p != d_c_p:
-            raise _RegistrationError('Default child policy for %r version %r does not match: %r != %r' %
-                                     (n, v, r_d_c_p, d_c_p))
+            raise _RegistrationError(
+                'Default child policy for %r version %r does not match: %r != %r' %
+                (n, v, r_d_c_p, d_c_p))
 
-    def conf_activity(self, dep_name, version, name=None, task_list=None,
-                      heartbeat=None, schedule_to_close=None,
-                      schedule_to_start=None, start_to_close=None,
+    def conf_activity(self, dep_name, version,
+                      name=None,
+                      task_list=None,
+                      heartbeat=None,
+                      schedule_to_close=None,
+                      schedule_to_start=None,
+                      start_to_close=None,
                       serialize_input=_serialize_input,
                       deserialize_result=_deserialize_input,
                       retry=(0, 0, 0)):
@@ -275,8 +293,11 @@ class SWFWorkflow(SWFConfigMixin, Workflow):
         """
         if name is None:
             name = dep_name
-        proxy = SWFActivityProxy(identity=dep_name, name=name, version=version,
-                                 task_list=task_list, heartbeat=heartbeat,
+        proxy = SWFActivityProxy(identity=dep_name,
+                                 name=name,
+                                 version=version,
+                                 task_list=task_list,
+                                 heartbeat=heartbeat,
                                  schedule_to_close=schedule_to_close,
                                  schedule_to_start=schedule_to_start,
                                  start_to_close=start_to_close,
@@ -285,14 +306,21 @@ class SWFWorkflow(SWFConfigMixin, Workflow):
                                  retry=retry)
         self.conf_proxy(dep_name, proxy)
 
-    def conf_workflow(self, dep_name, version, name=None, task_list=None,
-                      workflow_duration=None, decision_duration=None,
-                      child_policy=None, serialize_input=_serialize_input,
-                      deserialize_result=_deserialize_input, retry=(0, 0, 0)):
+    def conf_workflow(self, dep_name, version,
+                      name=None,
+                      task_list=None,
+                      workflow_duration=None,
+                      decision_duration=None,
+                      child_policy=None,
+                      serialize_input=_serialize_input,
+                      deserialize_result=_deserialize_input,
+                      retry=(0, 0, 0)):
         """Same as conf_activity but for sub-workflows."""
         if name is None:
             name = dep_name
-        proxy = SWFWorkflowProxy(identity=dep_name, name=name, version=version,
+        proxy = SWFWorkflowProxy(identity=dep_name,
+                                 name=name,
+                                 version=version,
                                  task_list=task_list,
                                  workflow_duration=workflow_duration,
                                  decision_duration=decision_duration,
@@ -306,9 +334,13 @@ class SWFWorkflow(SWFConfigMixin, Workflow):
 class SWFActivity(SWFConfigMixin, Activity):
     category = 'swf_activity'  # venusian category used for this type of confs
 
-    def __init__(self, version, name=None, default_task_list=None,
-                 default_heartbeat=None, default_schedule_to_close=None,
-                 default_schedule_to_start=None, default_start_to_close=None,
+    def __init__(self, version,
+                 name=None,
+                 default_task_list=None,
+                 default_heartbeat=None,
+                 default_schedule_to_close=None,
+                 default_schedule_to_start=None,
+                 default_start_to_close=None,
                  deserialize_input=_deserialize_input,
                  serialize_result=_serialize_result):
         """Initialize the config object.
@@ -348,7 +380,10 @@ class SWFActivity(SWFConfigMixin, Activity):
         n, version, d_t_l, d_h, d_sch_c, d_sch_s, d_s_c = self._cvt_values()
         try:
             swf_layer1.register_activity_type(
-                str(domain), name=n, version=version, task_list=d_t_l,
+                str(domain),
+                name=n,
+                version=version,
+                task_list=d_t_l,
                 default_task_heartbeat_timeout=d_h,
                 default_task_schedule_to_close_timeout=d_sch_c,
                 default_task_schedule_to_start_timeout=d_sch_s,
@@ -373,24 +408,29 @@ class SWFActivity(SWFConfigMixin, Activity):
             raise _RegistrationError(e)
         r_d_t_l = a_descr.get('defaultTaskList', {}).get('name')
         if r_d_t_l != d_t_l:
-            raise _RegistrationError('Default task list for %r version %r does not match: %r != %r' %
-                                     (n, v, r_d_t_l, d_t_l))
+            raise _RegistrationError(
+                'Default task list for %r version %r does not match: %r != %r' %
+                (n, v, r_d_t_l, d_t_l))
         r_d_h = a_descr.get('defaultTaskHeartbeatTimeout')
         if r_d_h != d_h:
-            raise _RegistrationError('Default heartbeat for %r version %r does not match: %r != %r' %
-                                     (n, v, r_d_h, d_h))
+            raise _RegistrationError(
+                'Default heartbeat for %r version %r does not match: %r != %r' %
+                (n, v, r_d_h, d_h))
         r_d_sch_c = a_descr.get('defaultTaskScheduleToCloseTimeout')
         if r_d_sch_c != d_sch_c:
-            raise _RegistrationError('Default schedule to close for %r version %r does not match: %r != %r' %
-                                     (n, v, r_d_sch_c, d_sch_c))
+            raise _RegistrationError(
+                'Default schedule to close for %r version %r does not match: %r != %r'
+                % (n, v, r_d_sch_c, d_sch_c))
         r_d_sch_s = a_descr.get('defaultTaskScheduleToStartTimeout')
         if r_d_sch_s != d_sch_s:
-            raise _RegistrationError('Default schedule to start for %r version %r does not match: %r != %r' %
-                                     (n, v, r_d_sch_s, d_sch_s))
+            raise _RegistrationError(
+                'Default schedule to start for %r version %r does not match: %r != %r'
+                % (n, v, r_d_sch_s, d_sch_s))
         r_d_s_c = a_descr.get('defaultTaskStartToCloseTimeout')
         if r_d_s_c != d_s_c:
-            raise _RegistrationError('Default start to close for %r version %r does not match: %r != %r' %
-                                     (n, v, r_d_s_c, d_s_c))
+            raise _RegistrationError(
+                'Default start to close for %r version %r does not match: %r != %r'
+                % (n, v, r_d_s_c, d_s_c))
 
 
 class SWFWorker(Worker):
@@ -413,8 +453,11 @@ class SWFWorkflowWorker(SWFWorker):
         super(SWFWorkflowWorker, self).__call__(key, input_data, decision,
                                                 execution_history)
 
-    def run_forever(self, domain, task_list, layer1=None, setup_log=True,
-                    register_remote=True, identity=None):
+    def run_forever(self, domain, task_list,
+                    layer1=None,
+                    setup_log=True,
+                    register_remote=True,
+                    identity=None):
         """Start an endless single threaded/single process worker loop.
 
         The worker polls endlessly for new decisions from the specified domain
@@ -456,8 +499,11 @@ class SWFActivityWorker(SWFWorker):
         # No extra arguments are used
         super(SWFActivityWorker, self).__call__(key, input_data, decision)
 
-    def run_forever(self, domain, task_list, layer1=None, setup_log=True,
-                    register_remote=True, identity=None):
+    def run_forever(self, domain, task_list,
+                    layer1=None,
+                    setup_log=True,
+                    register_remote=True,
+                    identity=None):
         """Same as SWFWorkflowWorker.run_forever but for activities."""
         if setup_log:
             setup_default_logger()
@@ -469,11 +515,12 @@ class SWFActivityWorker(SWFWorker):
         try:
             while 1:
                 swf_response = {}
-                while ('taskToken' not in swf_response
-                       or not swf_response['taskToken']):
+                while ('taskToken' not in swf_response or
+                       not swf_response['taskToken']):
                     try:
                         swf_response = layer1.poll_for_activity_task(
-                            domain=domain, task_list=task_list,
+                            domain=domain,
+                            task_list=task_list,
                             identity=identity)
                     except SWFResponseError:
                         # add a delay before retrying?
@@ -498,9 +545,13 @@ class SWFActivityProxy(object):
     logic.
     """
 
-    def __init__(self, identity, name, version, task_list=None, heartbeat=None,
-                 schedule_to_close=None, schedule_to_start=None,
-                 start_to_close=None, retry=(0, 0, 0),
+    def __init__(self, identity, name, version,
+                 task_list=None,
+                 heartbeat=None,
+                 schedule_to_close=None,
+                 schedule_to_start=None,
+                 start_to_close=None,
+                 retry=(0, 0, 0),
                  serialize_input=_serialize_input,
                  deserialize_result=_deserialize_result):
         # This is a unique name used to generate unique identifiers
@@ -527,9 +578,13 @@ class SWFActivityProxy(object):
 
 class SWFWorkflowProxy(object):
     """Same as SWFActivityProxy but for sub-workflows."""
-    def __init__(self, identity, name, version, task_list=None,
-                 workflow_duration=None, decision_duration=None,
-                 child_policy=None, retry=(0, 0, 0),
+
+    def __init__(self, identity, name, version,
+                 task_list=None,
+                 workflow_duration=None,
+                 decision_duration=None,
+                 child_policy=None,
+                 retry=(0, 0, 0),
                  serialize_input=_serialize_input,
                  deserialize_result=_deserialize_result):
         self.identity = identity
@@ -638,7 +693,8 @@ class SWFWorkflowDecision(object):
         self.closed = True
         try:
             self.layer1.respond_decision_task_completed(
-                task_token=str(self.token), decisions=self.decisions._data)
+                task_token=str(self.token),
+                decisions=self.decisions._data)
         except SWFResponseError:
             logger.exception('Error while sending the decisions:')
             # ignore the error and let the decision timeout and retry
@@ -651,7 +707,8 @@ class SWFWorkflowDecision(object):
         decisions = self.decisions = Layer1Decisions()
         decisions.continue_as_new_workflow_execution(
             start_to_close_timeout=_str_or_none(self.decision_duration),
-            execution_start_to_close_timeout=_str_or_none(self.workflow_duration),
+            execution_start_to_close_timeout=_str_or_none(self.
+                                                          workflow_duration),
             task_list=_str_or_none(self.task_list),
             input=str(input_data)[:_INPUT_SIZE],
             tag_list=_tags(self.tags),
@@ -759,7 +816,8 @@ class SWFActivityDecision(object):
     def fail(self, reason):
         try:
             self.layer1.respond_activity_task_failed(
-                reason=str(reason)[:256], task_token=str(self.token))
+                reason=str(reason)[:256],
+                task_token=str(self.token))
         except SWFResponseError:
             logger.exception('Error while failing the activity:')
             return False
@@ -777,22 +835,29 @@ class SWFActivityDecision(object):
             self.fail("Result too large: %s/%s" % (len(result), _RESULT_SIZE))
         try:
             self.layer1.respond_activity_task_completed(
-                result=result, task_token=str(self.token))
+                result=result,
+                task_token=str(self.token))
         except SWFResponseError:
             logger.exception('Error while finishing the activity:')
             return False
         return True
 
 
-def SWFWorkflowStarter(domain, name, version, layer1=None, task_list=None,
-                       decision_duration=None, workflow_duration=None,
-                       wid=None, tags=None, serialize_input=_serialize_input,
+def SWFWorkflowStarter(domain, name, version,
+                       layer1=None,
+                       task_list=None,
+                       decision_duration=None,
+                       workflow_duration=None,
+                       wid=None,
+                       tags=None,
+                       serialize_input=_serialize_input,
                        child_policy=None):
     """Prepare to start a new workflow, returns a callable.
 
     The callable should be called only with the input arguments and will
     start the workflow.
     """
+
     def really_start(*args, **kwargs):
         """Use this function to start a workflow by passing in the args."""
         l1 = layer1 if layer1 is not None else Layer1()
@@ -812,6 +877,7 @@ def SWFWorkflowStarter(domain, name, version, layer1=None, task_list=None,
             logger.exception('Error while starting the workflow:')
             return None
         return r['runId']
+
     return really_start
 
 
@@ -844,6 +910,7 @@ def poll_next_decision(layer1, domain, task_list, identity=None):
                                    decision_duration, workflow_duration, tags,
                                    child_policy)
     return _proxy_key(name, version), input_data, execution_history, decision
+
 
 def poll_first_page(layer1, domain, task_list, identity=None):
     """Return the response from loading the first page.
@@ -982,6 +1049,7 @@ def load_events(event_iter):
 
 class DescCounter(object):
     """A simple semaphore-like descendent counter."""
+
     def __init__(self, to=None):
         if to is None:
             self.iterator = itertools.repeat(True)
@@ -1034,7 +1102,9 @@ def _timer_encode(val, name):
         return None
     val = max(int(val), 0)
     if val == 0:
-        raise ValueError('The value of %r must be a strictly positive integer: %r' % (name, val))
+        raise ValueError(
+            'The value of %r must be a strictly positive integer: %r' %
+            (name, val))
     return str(val)
 
 
@@ -1056,6 +1126,7 @@ def _tags(tags):
     if tags is None:
         return None
     return list(set(str(t) for t in tags))[:5]
+
 
 def _task_key(identity, call_number, retry_number):
     return '%s-%s-%s' % (identity, call_number, retry_number)

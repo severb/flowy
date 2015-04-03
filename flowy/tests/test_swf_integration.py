@@ -14,14 +14,12 @@ from flowy import SWFWorkflow
 from flowy import SWFWorkflowStarter
 from flowy import SWFWorkflowWorker
 
-
 VERSION = 1
 W_CASSETTE = 'cassettes/w.yml'
 A_CASSETTE = 'cassettes/a.yml'
 DOMAIN = 'IntegrationTest'
 TASKLIST = 'tl'
 IDENTITY = 'test'
-
 
 a_conf = SWFActivity(version=VERSION,
                      default_task_list=TASKLIST,
@@ -90,12 +88,11 @@ def test_workflow_integration():
 
 
 def start_activity_worker():
-    with vcr.use_cassette(
-        A_CASSETTE, record_mode='all',
-        filter_headers=['authorization', 'x-amz-date'],
-        match_on=['method', 'uri', 'host', 'port', 'path', 'query', 'body',
-                  'headers']
-    ) as cass:
+    with vcr.use_cassette(A_CASSETTE,
+                          record_mode='all',
+                          filter_headers=['authorization', 'x-amz-date'],
+                          match_on=['method', 'uri', 'host', 'port', 'path',
+                                    'query', 'body', 'headers']) as cass:
         try:
             aworker.run_forever(DOMAIN, TASKLIST, identity=IDENTITY)
         except vcr.errors.CannotOverwriteExistingCassetteException:
@@ -103,12 +100,11 @@ def start_activity_worker():
 
 
 def start_workflow_worker():
-    with vcr.use_cassette(
-        W_CASSETTE, record_mode='all',
-        filter_headers=['authorization', 'x-amz-date'],
-        match_on=['method', 'uri', 'host', 'port', 'path', 'query', 'body',
-                  'headers']
-    ) as cass:
+    with vcr.use_cassette(W_CASSETTE,
+                          record_mode='all',
+                          filter_headers=['authorization', 'x-amz-date'],
+                          match_on=['method', 'uri', 'host', 'port', 'path',
+                                    'query', 'body', 'headers']) as cass:
         try:
             wworker.run_forever(DOMAIN, TASKLIST, identity=IDENTITY)
         except vcr.errors.CannotOverwriteExistingCassetteException:

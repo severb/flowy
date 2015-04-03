@@ -25,8 +25,7 @@ class W(object):
         self.r = r
 
     def __call__(self, n):
-        return  parallel_reduce(self.r, map(self.m, range(n+1)))
-
+        return parallel_reduce(self.r, map(self.m, range(n + 1)))
 
 
 class TestLocalWorkflow(unittest.TestCase):
@@ -60,11 +59,15 @@ class TestExamples(unittest.TestCase):
     will significantly increase the tests duration."""
     pass
 
+
 TIME_SCALE = 0.3
+
 
 def make_t(wf_name, wf):
     def test(self):
-        lw = LocalWorkflow(wf, activity_workers=16, workflow_workers=2,
+        lw = LocalWorkflow(wf,
+                           activity_workers=16,
+                           workflow_workers=2,
                            executor=ThreadPoolExecutor)
         lw.conf_activity('a', examples.activity)
         start = time.time()
@@ -83,7 +86,9 @@ def make_t(wf_name, wf):
                 break
         print(expected_duration, duration)
         self.assertTrue(abs(expected_duration - duration) < TIME_SCALE * 0.9)
+
     return test
+
 
 import flowy.examples as examples
 for wf_name, wf in vars(examples).items():

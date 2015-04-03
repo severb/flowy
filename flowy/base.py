@@ -18,12 +18,10 @@ try:
 except ImportError:
     import reprlib as r
 
-
-__all__ = 'restart TaskError TaskTimedout wait first finish_order parallel_reduce'.split()
-
+__all__ = 'restart TaskError TaskTimedout wait first finish_order parallel_reduce'.split(
+)
 
 logger = logging.getLogger(__name__.split('.', 1)[0])
-
 
 _identity = lambda x: x
 _sentinel = object()
@@ -71,9 +69,11 @@ class Activity(object):
             # ... and later
             scanner.scan()
         """
+
         def callback(venusian_scanner, *_):
             """This gets called by venusian at scan time."""
             venusian_scanner.register(self, obj)
+
         venusian.attach(obj, callback, category=self.category)
         return obj
 
@@ -89,7 +89,9 @@ class Activity(object):
 class Workflow(Activity):
     """A generic workflow configuration object with dependencies."""
 
-    def __init__(self, deserialize_input=None, serialize_result=None,
+    def __init__(self,
+                 deserialize_input=None,
+                 serialize_result=None,
                  serialize_restart_input=None):
         """Initialize the workflow config object.
 
@@ -109,13 +111,18 @@ class Workflow(Activity):
         """Check if dep_name is a unique valid identifier name."""
         # stolen from namedtuple
         if not all(c.isalnum() or c == '_' for c in dep_name):
-            raise ValueError('Dependency names can only contain alphanumeric characters and underscores: %r' % dep_name)
+            raise ValueError(
+                'Dependency names can only contain alphanumeric characters and underscores: %r'
+                % dep_name)
         if iskeyword(dep_name):
-            raise ValueError('Dependency names cannot be a keyword: %r' % dep_name)
+            raise ValueError(
+                'Dependency names cannot be a keyword: %r' % dep_name)
         if dep_name[0].isdigit():
-            raise ValueError('Dependency names cannot start with a number: %r' % dep_name)
+            raise ValueError(
+                'Dependency names cannot start with a number: %r' % dep_name)
         if dep_name in self.proxy_factory_registry:
-            raise ValueError('Dependency name is already registered: %r' % dep_name)
+            raise ValueError(
+                'Dependency name is already registered: %r' % dep_name)
 
     def conf_proxy(self, dep_name, proxy_factory):
         """Set a proxy factory for a dependency name."""
@@ -161,8 +168,8 @@ class Worker(object):
         """
         key = config.key
         if key in self.registry:
-            raise ValueError(
-                'Implementation is already registered: %r' % (key,))
+            raise ValueError('Implementation is already registered: %r' %
+                             (key, ))
         self.registry[key] = (config, impl)
 
     def __call__(self, key, input_data, decision, *args, **kwargs):
@@ -190,7 +197,8 @@ class Worker(object):
         except SuspendTask:
             decision.flush()
         except TaskError as e:
-            logger.exception('Unhandled task error while initializing the task:')
+            logger.exception(
+                'Unhandled task error while initializing the task:')
             decision.fail(e)
         except Exception as e:
             logger.exception('Error while initializing the task:')
@@ -207,7 +215,8 @@ class Worker(object):
                 except SuspendTask:
                     decision.flush()
                 except TaskError as e:
-                    logger.exception('Unhandled task error while running the task:')
+                    logger.exception(
+                        'Unhandled task error while running the task:')
                     decision.fail(e)
                 except Exception as e:
                     logger.exception('Error while running the task:')
@@ -218,17 +227,21 @@ class Worker(object):
                     # evaluated. This also fixes another issue, on python2
                     # isinstance() swallows any exception while python3
                     # doesn't.
-                    if not is_result_proxy(result) and isinstance(result, _restart):
-                        serialize_restart = getattr(
-                            config, 'serialize_restart_input', _identity)
+                    if not is_result_proxy(result) and isinstance(result,
+                                                                  _restart):
+                        serialize_restart = getattr(config,
+                                                    'serialize_restart_input',
+                                                    _identity)
                         try:
                             r_i = serialize_restart(*result.args,
                                                     **result.kwargs)
                         except TaskError as e:
-                            logger.exception('Unhandled task error in restart arguments:')
+                            logger.exception(
+                                'Unhandled task error in restart arguments:')
                             decision.fail(e)
                         except Exception as e:
-                            logger.exception('Error while serializing restart arguments:')
+                            logger.exception(
+                                'Error while serializing restart arguments:')
                             decision.fail(e)
                         except SuspendTask:
                             # There are placeholders in the restart args
@@ -289,7 +302,8 @@ class BoundProxy(object):
     scheduling logic that can be reused across different backends.
     The real scheduling is dispatched to the decision object.
     """
-    def __init__(self, config, task_exec_history, task_decision, retry=(0,)):
+
+    def __init__(self, config, task_exec_history, task_decision, retry=(0, )):
         """Init the bound proxy object.
 
         Config is used to deserialize results and serialize input arguments.
@@ -345,7 +359,8 @@ class BoundProxy(object):
                 try:
                     value = self.config.deserialize_result(value)
                 except Exception as e:
-                    logger.exception('Error while deserializing the activity result:')
+                    logger.exception(
+                        'Error while deserializing the activity result:')
                     self.task_decision.fail(e)
                     break  # result = Placeholder
                 r = result(value, order)
@@ -388,8 +403,9 @@ class TracingBoundProxy(BoundProxy):
     This can be used with ExecutionTracer to track the execution dependency and
     display in in different forms for analysis.
     """
+
     def __init__(self, tracer, trace_name, *args, **kwargs):
-        super (TracingBoundProxy, self).__init__(*args, **kwargs)
+        super(TracingBoundProxy, self).__init__(*args, **kwargs)
         self.trace_name = trace_name
         self.tracer = tracer
 
@@ -447,7 +463,7 @@ class ShortRepr(r.Repr):
             pieces.append('%s: %s' % (keyrepr, valrepr))
         if n > self.maxdict: pieces.append('...')
         s = ',\n'.join(pieces)
-        return '{%s}' % (s,)
+        return '{%s}' % (s, )
 
     def _repr_iterable(self, x, level, left, right, maxiter, trail=''):
         n = len(x)
@@ -457,16 +473,18 @@ class ShortRepr(r.Repr):
             newlevel = level - 1
             repr1 = self.repr1
             pieces = [repr1(elem, newlevel) for elem in islice(x, maxiter)]
-            if n > maxiter:  pieces.append('...')
+            if n > maxiter: pieces.append('...')
             s = ',\n'.join(pieces)
-            if n == 1 and trail:  right = trail + right
+            if n == 1 and trail: right = trail + right
         return '%s%s%s' % (left, s, right)
+
 
 short_repr = ShortRepr()
 
 
 class ExecutionTracer(object):
     """Record the execution history for display and analysis."""
+
     def __init__(self):
         self.reset()
 
@@ -540,25 +558,39 @@ class ExecutionTracer(object):
             color, fontcolor = 'black', 'black'
             if node_id in self.errors:
                 color, fontcolor = 'red', 'red'
-            graph.add_node(node_id, label=node_name, shape=shape, width=0.8,
-                           color=color, fontcolor=fontcolor)
+            graph.add_node(node_id,
+                           label=node_name,
+                           shape=shape,
+                           width=0.8,
+                           color=color,
+                           fontcolor=fontcolor)
             if node_id in self.results or node_id in self.errors:
                 if node_id in self.errors:
                     rlabel = str(self.errors[node_id])
                 else:
                     rlabel = short_repr.repr(self.results[node_id])
-                    rlabel = ' ' + '\l '.join(rlabel.split('\n')) # Left align
-                graph.add_node(finish_id, label='', shape='point', width=0.1,
+                    rlabel = ' ' + '\l '.join(rlabel.split('\n'))  # Left align
+                graph.add_node(finish_id,
+                               label='',
+                               shape='point',
+                               width=0.1,
                                color=color)
-                graph.add_edge(node_id, finish_id, arrowhead='none',
-                               penwidth=3, fontsize=8, color=color,
-                               fontcolor=fontcolor, label='  ' + rlabel)
+                graph.add_edge(node_id, finish_id,
+                               arrowhead='none',
+                               penwidth=3,
+                               fontsize=8,
+                               color=color,
+                               fontcolor=fontcolor,
+                               label='  ' + rlabel)
             else:
                 hanging.add(node_id)
 
         levels = ['l%s' % i for i in range(len(self.levels))]
         for l in levels:
-            graph.add_node(l, shape='point', label='', width=0.1,
+            graph.add_node(l,
+                           shape='point',
+                           label='',
+                           width=0.1,
                            style='invis')
         if levels:
             start = levels[0]
@@ -590,9 +622,13 @@ class ExecutionTracer(object):
         if hanging:
             for node_id in hanging:
                 finish_id = 'finish-%s' % node_id
-                graph.add_node(finish_id, label='', shape='point', width=0.1,
+                graph.add_node(finish_id,
+                               label='',
+                               shape='point',
+                               width=0.1,
                                style='invis')
-                graph.add_edge(node_id, finish_id, style='dotted',
+                graph.add_edge(node_id, finish_id,
+                               style='dotted',
                                arrowhead='none')
             # l_id is the last level here
             graph.add_subgraph([l_id] + ['finish-%s' % h for h in hanging],
@@ -601,8 +637,11 @@ class ExecutionTracer(object):
         for node_id in self.nodes:
             retries = self.timeouts[node_id]
             if retries:
-                graph.add_edge(node_id, node_id, label=' %s' % retries,
-                               color='orange', fontcolor='orange', fontsize=8)
+                graph.add_edge(node_id, node_id,
+                               label=' %s' % retries,
+                               color='orange',
+                               fontcolor='orange',
+                               fontsize=8)
 
         return str(graph)
 
@@ -787,7 +826,8 @@ def parallel_reduce(f, iterable, initializer=_sentinel):
                 # Wrap the value in a result for uniform interface
                 return result(x, -1)
     if not results:  # len(iterable) == 0
-        raise ValueError('parallel_reduce() of empty sequence with no initial value')
+        raise ValueError(
+            'parallel_reduce() of empty sequence with no initial value')
     if is_result_proxy(results[0]):
         results = [(r.__factory__, r) for r in results]
         heapq.heapify(results)
@@ -816,7 +856,7 @@ def _parallel_reduce_recurse(f, results, reminder=_sentinel):
 def _i_or_args(result, results):
     if len(results) == 0:
         return iter(result)
-    return (result,) + results
+    return (result, ) + results
 
 
 class SuspendTask(BaseException):
@@ -852,6 +892,8 @@ def _scan_args(args, kwargs):
 
 
 _restart = namedtuple('restart', 'args kwargs')
+
+
 def restart(*args, **kwargs):
     """Return an instance of this to restart a workflow with the new input."""
     return _restart(args, kwargs)
@@ -877,7 +919,7 @@ def _caller_module(level=2, sys=sys):
 
 def _caller_package(level=2, caller_module=_caller_module):
     # caller_module in arglist for tests
-    module = caller_module(level+1)
+    module = caller_module(level + 1)
     f = getattr(module, '__file__', '')
     if (('__init__.py' in f) or ('__init__$py' in f)):  # empty at >>>
         # Module is a package

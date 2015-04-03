@@ -5,7 +5,6 @@ from flowy import restart
 from flowy import SWFWorkflow
 from flowy import wait
 
-
 w_no_name = SWFWorkflow(version=1)
 w_named = SWFWorkflow(name='Named', version=1)
 
@@ -20,6 +19,7 @@ class NoTask(object):
 def Closure():
     def run(n):
         return n
+
     return run
 
 

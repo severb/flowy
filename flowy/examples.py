@@ -37,6 +37,7 @@ class Sequential(object):
     Duration: 50
     Result: 0
     """
+
     def __init__(self, a):
         self.a = a
 
@@ -46,6 +47,7 @@ class Sequential(object):
         for identity, sleep in enumerate(t, 1):
             r = self.a(r, sleep=sleep, identity=identity)
         return r
+
 
 class ParallelWait(object):
     """Parallelize activity calls and wait for all to finish.
@@ -57,6 +59,7 @@ class ParallelWait(object):
     20 --------------|---16
     Duration: 20
     """
+
     def __init__(self, a):
         self.a = a
 
@@ -81,6 +84,7 @@ class ParallelSum(object):
     20 ------------------16|
     Duration: 20
     """
+
     def __init__(self, a):
         self.a = a
 
@@ -101,6 +105,7 @@ class WaitFirst(object):
     20 ------------------16
     Duration: 5
     """
+
     def __init__(self, a):
         self.a = a
 
@@ -122,6 +127,7 @@ class WaitFirstTwo(object):
     20 ------------------16
     Duration: 10
     """
+
     def __init__(self, a):
         self.a = a
 
@@ -145,6 +151,7 @@ class Conditional(object):
   R 10           -------400
     Duration: 20
     """
+
     def __init__(self, a):
         self.a = a
 
@@ -173,11 +180,14 @@ class NaiveMapReduce(object):
     20 ------------------36----------------------------------------------------------------------|
     Duration: 105
     """
+
     def __init__(self, a):
         self.a = a
 
     def __call__(self, time_scale=1):
-        reduce_f = lambda x, y: self.a(x, y, sleep=1.5 * time_scale, identity='reduce %s %s' % (x, y))
+        reduce_f = lambda x, y: self.a(x, y,
+                                       sleep=1.5 * time_scale,
+                                       identity='reduce %s %s' % (x, y))
         t = map(lambda x: x * time_scale, [0.5, 1.5, 1.0, 6.0, 5.0, 2.0])
         map_f = lambda x, sleep: self.a(x, sleep=sleep, identity='map %s' % x)
         results = list(map(map_f, range(1, 7), t))
@@ -206,11 +216,14 @@ class FinishOrderMapReduce(object):
     20 ------------------36--------------------|
     Duration: 85
     """
+
     def __init__(self, a):
         self.a = a
 
     def __call__(self, time_scale=1):
-        reduce_f = lambda x, y: self.a(x, y, sleep=1.5 * time_scale, identity='reduce %s %s' % (x, y))
+        reduce_f = lambda x, y: self.a(x, y,
+                                       sleep=1.5 * time_scale,
+                                       identity='reduce %s %s' % (x, y))
         t = map(lambda x: x * time_scale, [0.5, 1.5, 1.0, 6.0, 5.0, 2.0])
         map_f = lambda x, sleep: self.a(x, sleep=sleep, identity='map %s' % x)
         results = finish_order(map(map_f, range(1, 7), t))
@@ -239,11 +252,14 @@ class ParallelMapReduce(object):
     20 ------------------36|
     Duration: 80
     """
+
     def __init__(self, a):
         self.a = a
 
     def __call__(self, time_scale=1):
-        reduce_f = lambda x, y: self.a(x, y, sleep=1.5 * time_scale, identity='reduce %s %s' % (x, y))
+        reduce_f = lambda x, y: self.a(x, y,
+                                       sleep=1.5 * time_scale,
+                                       identity='reduce %s %s' % (x, y))
         t = map(lambda x: x * time_scale, [0.5, 1.5, 1.0, 6.0, 5.0, 2.0])
         map_f = lambda x, sleep: self.a(x, sleep=sleep, identity='map %s' % x)
         results = map(map_f, range(1, 7), t)
@@ -264,8 +280,14 @@ def main():
     parser = argparse.ArgumentParser(description='Example workflow runner.')
     parser.add_argument('workflow', action='store', type=workflow)
     parser.add_argument('--pure', action='store_true', default=False)
-    parser.add_argument('--workflow-workers', action='store', type=int, default=2)
-    parser.add_argument('--activity-workers', action='store', type=int, default=8)
+    parser.add_argument('--workflow-workers',
+                        action='store',
+                        type=int,
+                        default=2)
+    parser.add_argument('--activity-workers',
+                        action='store',
+                        type=int,
+                        default=8)
     parser.add_argument('--timeit', action='store_true', default=False)
     parser.add_argument('--trace', action='store_true', default=False)
     parser.add_argument('--wait-children', action='store_true', default=False)
