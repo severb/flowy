@@ -8,6 +8,7 @@ import json
 
 import vcr
 import vcr.errors
+from boto.swf.layer1 import Layer1
 from flowy import restart
 from flowy import wait
 from flowy import SWFActivity
@@ -136,7 +137,8 @@ def test_activity_integration():
     with vcr.use_cassette(A_CASSETTE,
                           record_mode='none', **cassette_args) as cass:
         try:
-            aworker.run_forever(DOMAIN, TASKLIST, identity=IDENTITY)
+            l1 = Layer1(aws_access_key_id='x', aws_secret_access_key='x')
+            aworker.run_forever(DOMAIN, TASKLIST, identity=IDENTITY, layer1=l1)
         except vcr.errors.CannotOverwriteExistingCassetteException:
             pass
         assert cass.all_played
@@ -146,7 +148,8 @@ def test_workflow_integration():
     with vcr.use_cassette(W_CASSETTE,
                           record_mode='none', **cassette_args) as cass:
         try:
-            wworker.run_forever(DOMAIN, TASKLIST, identity=IDENTITY)
+            l1 = Layer1(aws_access_key_id='x', aws_secret_access_key='x')
+            wworker.run_forever(DOMAIN, TASKLIST, identity=IDENTITY, layer1=l1)
         except vcr.errors.CannotOverwriteExistingCassetteException:
             pass
         assert cass.all_played
