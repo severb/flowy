@@ -453,6 +453,10 @@ class SWFWorkflowWorker(SWFWorker):
         super(SWFWorkflowWorker, self).__call__(key, input_data, decision,
                                                 execution_history)
 
+    def break_loop(self):
+        """Used to exit the loop in tests. Return True to break."""
+        return False
+
     def run_forever(self, domain, task_list,
                     layer1=None,
                     setup_log=True,
@@ -484,6 +488,8 @@ class SWFWorkflowWorker(SWFWorker):
             self.register_remote(layer1, domain)
         try:
             while 1:
+                if self.break_loop():
+                    break
                 key, input_data, exec_history, decision = poll_next_decision(
                     layer1, domain, task_list, identity)
                 self(key, input_data, decision, exec_history)
@@ -498,6 +504,10 @@ class SWFActivityWorker(SWFWorker):
     def __call__(self, key, input_data, decision):
         # No extra arguments are used
         super(SWFActivityWorker, self).__call__(key, input_data, decision)
+
+    def break_loop(self):
+        """Used to exit the loop in tests. Return True to break."""
+        return False
 
     def run_forever(self, domain, task_list,
                     layer1=None,
@@ -514,6 +524,8 @@ class SWFActivityWorker(SWFWorker):
             self.register_remote(layer1, domain)
         try:
             while 1:
+                if self.break_loop():
+                    break
                 swf_response = {}
                 while ('taskToken' not in swf_response or
                        not swf_response['taskToken']):
