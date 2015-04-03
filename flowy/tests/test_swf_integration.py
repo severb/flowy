@@ -4,6 +4,7 @@ import os
 import sys
 import multiprocessing
 import time
+import json
 
 import vcr
 import vcr.errors
@@ -106,9 +107,26 @@ wworker.scan(package=sys.modules[__name__])
 aworker = TestSWFActivityWorker()
 aworker.scan(package=sys.modules[__name__])
 
+
+def body_as_dict(r1, r2):
+    r1_body = r1.body if isinstance(r1.body, str) else r1.body.decode('utf-8')
+    r2_body = r2.body if isinstance(r2.body, str) else r2.body.decode('utf-8')
+    return json.loads(r1_body) == json.loads(r2_body)
+
+
+def escaped_headers(r1, r2):
+    import urllib
+    r1h = dict((h, urllib.unquote(v)) for h, v in r1.headers.items())
+    r2h = dict((h, urllib.unquote(v)) for h, v in r1.headers.items())
+    return r1 == r2
+
+
+vcr.default_vcr.register_matcher('dict_body', body_as_dict)
+vcr.default_vcr.register_matcher('esc_headers', body_as_dict)
+
 cassette_args = {
-    'match_on': ['method', 'uri', 'host', 'port', 'path', 'query', 'body',
-                 'headers'],
+    'match_on': ['method', 'uri', 'host', 'port', 'path', 'query', 'dict_body',
+                 'esc_headers'],
     'filter_headers': ['authorization', 'x-amz-date', 'content-length',
                        'user-agent']
 }
