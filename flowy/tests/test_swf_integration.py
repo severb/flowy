@@ -39,10 +39,11 @@ wf_finished_event = multiprocessing.Event()
 # Patch vcr to use gzip files
 
 def load_cassette(cassette_path, serializer):
-    with gzip.open(cassette_path, 'rb') as f:
-        cassette_content = f.read()
-        cassette = vcr.serialize.deserialize(cassette_content, serializer)
-        return cassette
+    f = gzip.open(cassette_path, 'rb')
+    cassette_content = f.read()
+    cassette = vcr.serialize.deserialize(cassette_content, serializer)
+    f.close()
+    return cassette
 
 
 def save_cassette(cassette_path, cassette_dict, serializer):
@@ -50,8 +51,9 @@ def save_cassette(cassette_path, cassette_dict, serializer):
     dirname, _ = os.path.split(cassette_path)
     if dirname and not os.path.exists(dirname):
         os.makedirs(dirname)
-    with gzip.open(cassette_path, 'wb') as f:
-        f.write(data)
+    f = gzip.open(cassette_path, 'wb')
+    f.write(data)
+    f.close()
 
 
 vcr.cassette.load_cassette = load_cassette
@@ -215,10 +217,15 @@ aworker = TestSWFActivityWorker()
 aworker.scan(package=sys.modules[__name__])
 
 
+body_cache = {}
 def body_as_dict(r1, r2):
-    r1_body = r1.body if isinstance(r1.body, str) else r1.body.decode('utf-8')
-    r2_body = r2.body if isinstance(r2.body, str) else r2.body.decode('utf-8')
-    return json.loads(r1_body) == json.loads(r2_body)
+    if r1 not in body_cache:
+        r1b = r1.body if isinstance(r1.body, str) else r1.body.decode('utf-8')
+        body_cache[r1] = json.loads(r1b)
+    if r2 not in body_cache:
+        r2b = r2.body if isinstance(r2.body, str) else r2.body.decode('utf-8')
+        body_cache[r2] = json.loads(r2b)
+    return body_cache[r1] == body_cache[r2]
 
 
 def escaped_headers(r1, r2):
