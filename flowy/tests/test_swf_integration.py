@@ -5,28 +5,67 @@ import sys
 import multiprocessing
 import time
 import json
+import uuid
+import random
+import functools
+import gzip
 
 import vcr
+import vcr.cassette
 import vcr.errors
+import vcr.serialize
 from boto.swf.layer1 import Layer1
 from flowy import restart
 from flowy import wait
+from flowy import TaskError
 from flowy import SWFActivity
 from flowy import SWFActivityWorker
 from flowy import SWFWorkflow
 from flowy import SWFWorkflowStarter
 from flowy import SWFWorkflowWorker
 
-VERSION = 1
+VERSION = 2
 HERE = os.path.dirname(os.path.realpath(__file__))
-A_CASSETTE = os.path.join(HERE, 'cassettes/a.yml')
-W_CASSETTE = os.path.join(HERE, 'cassettes/w.yml')
+A_CASSETTE = os.path.join(HERE, 'cassettes/a.yml.gz')
+W_CASSETTE = os.path.join(HERE, 'cassettes/w.yml.gz')
 DOMAIN = 'IntegrationTest'
 TASKLIST = 'tl'
 IDENTITY = 'test'
 
 exit_event = multiprocessing.Event()
 wf_finished_event = multiprocessing.Event()
+
+
+# Patch vcr to use gzip files
+
+def load_cassette(cassette_path, serializer):
+    with gzip.open(cassette_path, 'rb') as f:
+        cassette_content = f.read()
+        cassette = vcr.serialize.deserialize(cassette_content, serializer)
+        return cassette
+
+
+def save_cassette(cassette_path, cassette_dict, serializer):
+    data = vcr.serialize.serialize(cassette_dict, serializer)
+    dirname, _ = os.path.split(cassette_path)
+    if dirname and not os.path.exists(dirname):
+        os.makedirs(dirname)
+    with gzip.open(cassette_path, 'wb') as f:
+        f.write(data)
+
+
+vcr.cassette.load_cassette = load_cassette
+vcr.cassette.save_cassette = save_cassette
+
+
+# patch uuid4 for consistent keys
+def fake_uuid4():
+    x = 0
+    while 1:
+        yield 'fakeuuid-%s-' % x
+        x += 1
+
+uuid.uuid4 = functools.partial(next, fake_uuid4())
 
 
 def break_loop(self):
@@ -76,28 +115,95 @@ def tactivity(hb, a=None, b=None, sleep=None, heartbeat=False, err=None):
     return result
 
 
-w_conf = SWFWorkflow(version=VERSION,
-                     default_task_list=TASKLIST,
-                     default_decision_duration=10,
-                     default_workflow_duration=20,
-                     default_child_policy='TERMINATE')
-w_conf.conf_activity('activity', VERSION, 'tactivity')
+empty_conf = SWFWorkflow(version=VERSION,
+                         default_task_list=TASKLIST,
+                         default_decision_duration=10,
+                         default_workflow_duration=20,
+                         default_child_policy='TERMINATE', )
+empty_conf.conf_activity('activity', VERSION, 'tactivity')
 
 
-@w_conf
-class TestWorkflow(BaseWorkflow):
+@empty_conf
+class TWorkflow(object):
     def __init__(self, activity):
-        self.activity = activity
+        pass
+
+    def __call__(self, a=None, b=None, sleep=None, heartbeat=False, err=None):
+        dummy_heartbeat = lambda: True
+        return tactivity(dummy_heartbeat, a, b, sleep, heartbeat, err)
+
+
+conf_use_activities = SWFWorkflow(version=VERSION,
+                                  default_task_list=TASKLIST,
+                                  default_decision_duration=10,
+                                  default_workflow_duration=60,
+                                  default_child_policy='TERMINATE')
+conf_use_activities.conf_activity('task', VERSION, 'tactivity')
+conf_use_activities.conf_activity('short_task', VERSION, 'tactivity',
+                                  schedule_to_close=1,
+                                  retry=(0, ))
+conf_use_activities.conf_activity('delayed_task', VERSION, 'tactivity',
+                                  retry=(3, ))
+conf_use_activities.conf_activity('non_existing_task', 1, 'xxx')
+
+conf_use_workflow = SWFWorkflow(version=VERSION,
+                                name='TestWorkflowW',
+                                default_task_list=TASKLIST,
+                                default_decision_duration=10,
+                                default_workflow_duration=60,
+                                default_child_policy='TERMINATE')
+conf_use_workflow.conf_workflow('task', VERSION, 'TWorkflow')
+conf_use_workflow.conf_workflow('short_task', VERSION, 'TWorkflow',
+                                workflow_duration=1,
+                                retry=(0, ))
+conf_use_workflow.conf_workflow('delayed_task', VERSION, 'TWorkflow',
+                                retry=(3, ))
+conf_use_workflow.conf_workflow('non_existing_task', 1, 'xxx')
+
+
+@conf_use_activities
+@conf_use_workflow
+class TestWorkflow(BaseWorkflow):
+    def __init__(self, task, short_task, delayed_task, non_existing_task):
+        self.task = task
+        self.short_task = short_task
+        self.delayed_task = delayed_task
+        self.non_existing_task = non_existing_task
 
     def call(self):
-        return self.activity(10, 11)
+        tasks = [self.task(10),
+                 self.task(err='Error!'),
+                 self.task(heartbeat=True),
+                 self.short_task(sleep=3),
+                 self.delayed_task(20),
+                 self.non_existing_task(), ]
+        last = self.task(1, 1)  # Make the history longer, to have pages
+        for _ in range(20):
+            last = self.task(last, 1)
+        tasks.append(last)
+        for t in tasks:
+            try:
+                wait(t)
+            except TaskError:
+                pass
 
 
-@w_conf
+@empty_conf
+class RestartWorkflow(BaseWorkflow):
+    def __init__(self, activity):
+        pass
+
+    def call(self, should_restart=True):
+        if should_restart:
+            return restart(should_restart=False)
+        return 1
+
+
+@empty_conf
 class ExitWorkflow(object):
     def __init__(self, activity):
         exit_event.set()
-        wait(activity())  # notify the activity thread
+        wait(activity())  # wake the activity thread
 
     def __call__(self):
         pass
@@ -138,7 +244,10 @@ def test_activity_integration():
                           record_mode='none', **cassette_args) as cass:
         try:
             l1 = Layer1(aws_access_key_id='x', aws_secret_access_key='x')
-            aworker.run_forever(DOMAIN, TASKLIST, identity=IDENTITY, layer1=l1)
+            aworker.run_forever(DOMAIN, TASKLIST,
+                                identity=IDENTITY,
+                                layer1=l1,
+                                setup_log=False)
         except vcr.errors.CannotOverwriteExistingCassetteException:
             pass
         assert cass.all_played
@@ -149,7 +258,10 @@ def test_workflow_integration():
                           record_mode='none', **cassette_args) as cass:
         try:
             l1 = Layer1(aws_access_key_id='x', aws_secret_access_key='x')
-            wworker.run_forever(DOMAIN, TASKLIST, identity=IDENTITY, layer1=l1)
+            wworker.run_forever(DOMAIN, TASKLIST,
+                                identity=IDENTITY,
+                                layer1=l1,
+                                setup_log=False)
         except vcr.errors.CannotOverwriteExistingCassetteException:
             pass
         assert cass.all_played
@@ -191,7 +303,7 @@ if __name__ == '__main__':
 
     time.sleep(5)  # Wait for registration
 
-    wfs = ['TestWorkflow']
+    wfs = ['TestWorkflow', 'TestWorkflowW', 'RestartWorkflow']
     for wf in wfs:
         print('Starting', wf)
         SWFWorkflowStarter(DOMAIN, wf, VERSION)()

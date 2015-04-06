@@ -651,6 +651,9 @@ class SWFExecutionHistory(object):
     def is_timer_ready(self, call_key):
         return _timer_key(call_key) in self.results
 
+    def is_timer_running(self, call_key):
+        return _timer_key(call_key) in self.running
+
 
 class SWFTaskExecutionHistory(object):
     def __init__(self, exec_history, identity):
@@ -742,8 +745,7 @@ class SWFWorkflowDecision(object):
 
     def schedule_timer(self, call_key, delay):
         """Schedule a timer. This is used to delay execution of tasks."""
-        call_key = _timer_key(call_key)
-        self.decisions.start_timer(timer_id=str(call_key),
+        self.decisions.start_timer(timer_id=_timer_key(str(call_key)),
                                    start_to_fire_timeout=str(delay))
 
     def schedule_activity(self, call_key, name, version, input_data, task_list,
@@ -787,11 +789,10 @@ class SWFWorkflowTaskDecision(object):
             return
         task_key = _task_key(self.proxy.identity, call_number, retry_number)
         if delay:
-            timer_key = _timer_key(task_key)
-            if self.execution_history.has_result(timer_key):
+            if self.execution_history.is_timer_ready(task_key):
                 self._schedule(task_key, input_data)
-            elif not self.execution_history.is_running(timer_key):
-                self.decision.schedule_timer(timer_key, delay)
+            elif not self.execution_history.is_timer_running(task_key):
+                self.decision.schedule_timer(task_key, delay)
         else:
             self._schedule(task_key, input_data)
 
@@ -1049,12 +1050,10 @@ def load_events(event_iter):
             order.append(eid)
         elif e_type == 'TimerStarted':
             eid = event['timerStartedEventAttributes']['timerId']
-            # while the timer is running, act as if the task itself is running
-            # to prevent it from being scheduled again
-            running.add(_timer_call_key(eid))
+            running.add(eid)
         elif e_type == 'TimerFired':
             eid = event['timerFiredEventAttributes']['timerId']
-            running.remove(_timer_call_key(eid))
+            running.remove(eid)
             results[eid] = None
     return running, timedout, results, errors, order
 
@@ -1094,11 +1093,6 @@ def _subworkflow_id(workflow_id):
 
 def _timer_key(call_key):
     return '%s:t' % call_key
-
-
-def _timer_call_key(timer_key):
-    assert timer_key.endswith(':t')
-    return timer_key[:-2]
 
 
 def _subworkflow_key(call_key):
