@@ -1,9 +1,12 @@
 import inspect
 import time
 import unittest
+from functools import partial
 
 from flowy import LocalWorkflow
 from flowy import parallel_reduce
+from flowy import TaskError
+from flowy import restart
 
 try:
     from concurrent.futures import ThreadPoolExecutor
@@ -11,12 +14,21 @@ except ImportError:
     from futures import ThreadPoolExecutor
 
 
-def m(n):
-    return n + 1
+def tactivity(a=None, b=None, err=None):
+    if a is not None and b is not None:
+        result = a + b
+    elif a is not None:
+        result = a + 1
+    if err is not None:
+        raise RuntimeError(err)
+    return result
 
 
-def r(a, b):
-    return a + b
+class TWorkflow(object):
+    def __call__(self, a=None, b=None, err=None, r=0):
+        if r:
+            return restart(a, b, err, r=r-1)
+        return tactivity(a, b, err)
 
 
 class W(object):
@@ -24,33 +36,115 @@ class W(object):
         self.m = m
         self.r = r
 
-    def __call__(self, n):
+    def __call__(self, n, r=True):
+        if r:
+            return restart(n, r=False)
         return parallel_reduce(self.r, map(self.m, range(n + 1)))
 
 
+class F(object):
+    def __init__(self, task):
+        self.task = task
+
+    def __call__(self, r=0, throw=False):
+        if r:
+            return restart(r=r-1)
+        if throw:
+            raise ValueError('Err!')
+        return self.task(err='Err!')
+
+
 class TestLocalWorkflow(unittest.TestCase):
-    def setUp(self):
-        self.sub = LocalWorkflow(W)
-        self.sub.conf_activity('m', m)
-        self.sub.conf_activity('r', r)
-
-    def test_processes(self):
+    def test_activities_processes(self):
         main = LocalWorkflow(W)
-        main.conf_workflow('m', self.sub)
-        main.conf_activity('r', r)
+        main.conf_activity('m', tactivity)
+        main.conf_activity('r', tactivity)
         result = main.run(8, _wait=True)  # avoid broken pipe
-        self.assertEquals(result, 165)
+        self.assertEquals(result, 45)
 
-    def test_threads(self):
+    def test_activities_threads(self):
         try:
             from futures import ThreadPoolExecutor
         except ImportError:
             from concurrent.futures import ThreadPoolExecutor
         main = LocalWorkflow(W, executor=ThreadPoolExecutor)
-        main.conf_workflow('m', self.sub)
-        main.conf_activity('r', r)
-        result = main.run(8)
+        main.conf_activity('m', tactivity)
+        main.conf_activity('r', tactivity)
+        result = main.run(8, r=True, _wait=True)
+        self.assertEquals(result, 45)
+
+    def test_subworkflows_processes(self):
+        sub = LocalWorkflow(TWorkflow)
+        main = LocalWorkflow(W)
+        main.conf_workflow('m', sub)
+        main.conf_workflow('r', sub)
+        result = main.run(8, r=True, _wait=True)
+        self.assertEquals(result, 45)
+
+    def test_subworkflows_threads(self):
+        try:
+            from futures import ThreadPoolExecutor
+        except ImportError:
+            from concurrent.futures import ThreadPoolExecutor
+        sub = LocalWorkflow(TWorkflow)
+        main = LocalWorkflow(W, executor=ThreadPoolExecutor)
+        main.conf_workflow('m', sub)
+        main.conf_workflow('r', sub)
+        result = main.run(8, r=True, _wait=True)
+        self.assertEquals(result, 45)
+
+    def test_selfsubworkflows_threads(self):
+        try:
+            from futures import ThreadPoolExecutor
+        except ImportError:
+            from concurrent.futures import ThreadPoolExecutor
+        sub = LocalWorkflow(W, executor=ThreadPoolExecutor)
+        sub.conf_activity('m', tactivity)
+        sub.conf_activity('r', tactivity)
+        main = LocalWorkflow(W, executor=ThreadPoolExecutor)
+        main.conf_workflow('m', sub)
+        main.conf_activity('r', tactivity)
+        result = main.run(8, r=True, _wait=True)
         self.assertEquals(result, 165)
+
+    def test_selfsubworkflows_processes(self):
+        sub = LocalWorkflow(W, executor=ThreadPoolExecutor)
+        sub.conf_activity('m', tactivity)
+        sub.conf_activity('r', tactivity)
+        main = LocalWorkflow(W)
+        main.conf_workflow('m', sub)
+        main.conf_activity('r', tactivity)
+        result = main.run(8, r=True, _wait=True)
+        self.assertEquals(result, 165)
+
+    def test_fail_activity(self):
+        main = LocalWorkflow(F)
+        main.conf_activity('task', tactivity)
+        self.assertRaises(TaskError, lambda: main.run(_wait=True))
+        main = LocalWorkflow(F)
+        main.conf_activity('task', tactivity)
+        self.assertRaises(TaskError, lambda: main.run(r=1, _wait=True))
+        main = LocalWorkflow(F)
+        main.conf_activity('task', tactivity)
+        self.assertRaises(TaskError, lambda: main.run(r=4, _wait=True))
+        main = LocalWorkflow(F)
+        main.conf_activity('task', tactivity)
+        self.assertRaises(TaskError, lambda: main.run(throw=True, _wait=True))
+
+    def test_fail_subworkflow(self):
+        main = LocalWorkflow(F)
+        sub = LocalWorkflow(TWorkflow)
+        main.conf_workflow('task', sub)
+        self.assertRaises(TaskError, lambda: main.run(_wait=True))
+        main = LocalWorkflow(F)
+        main.conf_workflow('task', sub)
+        self.assertRaises(TaskError, lambda: main.run(r=1, _wait=True))
+        main = LocalWorkflow(F)
+        main.conf_workflow('task', sub)
+        self.assertRaises(TaskError, lambda: main.run(r=4, _wait=True))
+        main = LocalWorkflow(F)
+        main.conf_workflow('task', sub)
+        self.assertRaises(TaskError, lambda: main.run(throw=True, _wait=True))
 
 
 class TestExamples(unittest.TestCase):
