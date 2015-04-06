@@ -1087,10 +1087,6 @@ class _RegistrationError(Exception):
     """Can't register a task remotely because of default config conflicts."""
 
 
-def _subworkflow_id(workflow_id):
-    return workflow_id.rsplit('-', 1)[-1]
-
-
 def _timer_key(call_key):
     return '%s:t' % call_key
 
