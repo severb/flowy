@@ -10,7 +10,8 @@ install:
 before_script:
   - tox --version
 script:
-  - tox
+    # pypy on tox is busted
+    - tox -e py26,py27,py33,py34
 after_success:
   - coveralls
 notifications:
