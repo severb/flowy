@@ -2,15 +2,16 @@ Flowy Docs
 ==========
 
 `Flowy`_ is a library for building and running distributed, asynchronous
-workflows built on top different backends including `Amazon's SWF`_. Flowy
+workflows built on top different backends (such as `Amazon's SWF`_). Flowy
 deals away with the spaghetti code associated with orchestrating complex
 workflows. It is ideal for applications that have to deal with multi-phased
-batch processing, media encoding, long-running tasks or background processing.
+batch processing, media encoding, long-running tasks, and/or background
+processing.
 
 Flowy can model any execution topology. The same code can also run without
-Flowy, as a single-threaded sequential implementation, making it easy to test
+Flowy as a single-threaded sequential implementation, making it easy to test
 and understand. A toy map-reduce workflow with Flowy running on the local
-backend using multiple processes looks like this::
+backend using multiple processes might look like this::
 
     def sum_activity(n1, n2):
         return n1 + n2
@@ -40,17 +41,17 @@ backend using multiple processes looks like this::
 
 The above workflow example computes the sum of the squares for a range of
 numbers with the help of two activities: one that computes the square of a
-number and one that sums up two numbers. Flowy will figure out the dependencies
+number and one that sums up two numbers. Flowy will find the dependencies
 between the activities so that the summing and the squaring will happen as soon
-as possible while maximizing the parallelization. The same code can be
-configured differently to run across many machines using a remote backend like
-Amazon SWF or Eucalyptus as an open-source alternative.
+as possible while maximizing parallelization. The same code can be
+configured differently to run across many machines using a remote backend
+like Amazon SWF or Eucalyptus as an open-source alternative.
 
 
 Getting Started
 ---------------
 
-Flowy is available at the Python Package Index site. To install it use `pip`_::
+Flowy is available on the Python Package Index site. To install it use `pip`_::
 
     pip install flowy
 
