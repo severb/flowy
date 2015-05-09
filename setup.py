@@ -29,7 +29,7 @@ setup(name='flowy',
       test_suite="nose.collector",
       extras_require={
           'docs': ['sphinx', 'sphinx_rtd_theme'],
-          'trace': ['xdot', 'pygraphviz'],
+          'trace': ['pygraphviz'],
       },
       entry_points={
           "console_scripts": ["flowy = flowy.__main__:main",

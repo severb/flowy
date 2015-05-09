@@ -1,3 +1,4 @@
+import tempfile
 import copy
 import heapq
 import logging
@@ -542,7 +543,7 @@ class ExecutionTracer(object):
         self.deps = {}
         self.nodes = {}
 
-    def as_dot(self):
+    def to_dot(self):
         try:
             import pygraphviz as pgv
         except ImportError:
@@ -644,19 +645,20 @@ class ExecutionTracer(object):
                                fontcolor='orange',
                                fontsize=8)
 
-        return str(graph)
+        return graph
 
     def display(self):
-        try:
-            import xdot
-        except ImportError:
-            warnings.warn('Extra requirements for "trace" are not available.')
-        else:
-            win = xdot.DotWindow()
-            win.connect('destroy', xdot.gtk.main_quit)
-            win.set_filter('dot')
-            win.set_dotcode(self.as_dot())
-            xdot.gtk.main()
+        graph = self.to_dot()
+        if not graph:
+            return
+        tf = tempfile.NamedTemporaryFile(mode='w+b',
+                                         prefix='dot_',
+                                         suffix='.svg',
+                                         delete=False)
+        graph.draw(tf.name, format='svg', prog='dot')
+        logger.info('Workflow execution traced: %s', tf.name)
+        import webbrowser
+        webbrowser.open(tf.name)
 
 
 def result(value, order):
