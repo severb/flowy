@@ -270,7 +270,7 @@ class SWFWorkflow(SWFConfigMixin, Workflow):
                       schedule_to_start=None,
                       start_to_close=None,
                       serialize_input=_serialize_input,
-                      deserialize_result=_deserialize_input,
+                      deserialize_result=_deserialize_result,
                       retry=(0, 0, 0)):
         """Configure an activity dependency for a workflow implementation.
 
@@ -313,7 +313,7 @@ class SWFWorkflow(SWFConfigMixin, Workflow):
                       decision_duration=None,
                       child_policy=None,
                       serialize_input=_serialize_input,
-                      deserialize_result=_deserialize_input,
+                      deserialize_result=_deserialize_result,
                       retry=(0, 0, 0)):
         """Same as conf_activity but for sub-workflows."""
         if name is None:

@@ -1,5 +1,3 @@
-from __future__ import print_function
-
 import copy
 import heapq
 import logging
@@ -92,7 +90,8 @@ class Workflow(Activity):
     def __init__(self,
                  deserialize_input=None,
                  serialize_result=None,
-                 serialize_restart_input=None):
+                 serialize_restart_input=None,
+                 proxy_factory_registry=None):
         """Initialize the workflow config object.
 
         The deserialize_input, serialize_result and serialize_restart_input
@@ -103,6 +102,8 @@ class Workflow(Activity):
         if serialize_restart_input is not None:
             self.serialize_restart_input = serialize_restart_input
         self.proxy_factory_registry = {}
+        if proxy_factory_registry is not None:
+            self.proxy_factory_registry = proxy_factory_registry
 
     def serialize_restart_input(self, *args, **kwargs):
         return (args, kwargs)
