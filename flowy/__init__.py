@@ -6,10 +6,11 @@ from flowy.backend.swf import SWFWorkflowWorker
 
 from flowy.backend.local import LocalWorkflow
 
-from flowy.base import finish_order
-from flowy.base import first
-from flowy.base import parallel_reduce
-from flowy.base import restart
-from flowy.base import TaskError
-from flowy.base import TaskTimedout
-from flowy.base import wait
+from flowy.result import restart
+from flowy.result import TaskError
+from flowy.result import TaskTimedout
+from flowy.result import wait
+
+from flowy.operations import first
+from flowy.operations import finish_order
+from flowy.operations import parallel_reduce
