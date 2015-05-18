@@ -12,18 +12,22 @@ __all__ = ['result', 'error', 'timeout', 'placeholder', 'copy_result_proxy',
 
 
 def result(value, order):
+    """A result proxy for a task that has finished successfuly."""
     return ResultProxy(TaskResult(value, order))
 
 
 def error(reason, order):
+    """A result proxy for a task that failed."""
     return ResultProxy(TaskResult(TaskError(reason), order))
 
 
 def timeout(order):
+    """A result proxy for a task that timed out."""
     return ResultProxy(TaskResult(TaskTimedout('A task has timedout'), order))
 
 
 def placeholder():
+    """A result proxy for a task that is either not scheduled or running."""
     return ResultProxy(TaskResult())
 
 
@@ -55,6 +59,7 @@ class ResultProxy(Proxy):
 
 
 def is_result_proxy(obj):
+    """Use this to check if a value is a result proxy without evaluating it."""
     # Use type() instead of isinstance() to avoid the evaluation of the
     # ResultProxy if the object is indeed a proxy.
     return type(obj) is ResultProxy

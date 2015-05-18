@@ -66,14 +66,12 @@ def parallel_reduce(f, iterable, initializer=sentinel):
     20 -------------------6|
 
     The iterable must have at least one element, otherwise a ValueError will be
-    raised. Note that there is no initializer as the order of the operations
-    and of the arguments are not deterministic.
+    raised.
 
     The improvement over the built-in reduce() is obtained by starting the
     reduction as soon as any two results are available. The number of reduce
     operations is always constant and equal to len(iterable) - 1 regardless of
     how the reduction graph looks like.
-
     """
     if initializer is not sentinel:
         iterable = itertools.chain([initializer], iterable)
