@@ -30,12 +30,17 @@ def setup_default_logger():
 
 
 def i_or_args(result, results):
+    """Return an iterable for functions with signature f(arg, *args).
+    f can be called with f([a, b, c, ...]) or f(a, b, c, ...).
+    In both cases, calling i_or_args(arg, args) returns an iterable over a, b, c, ...
+    """
     if len(results) == 0:
         return iter(result)
     return (result, ) + results
 
 
 class ShortRepr(r.Repr):
+    """Make shorter representations on multiple lines."""
     def __init__(self):
         self.maxlevel = 1
         self.maxtuple = 4
@@ -80,6 +85,11 @@ short_repr = ShortRepr()
 
 
 def scan_args(args, kwargs):
+    """Return a tuple of errs, placeholders.
+
+    Where errs is a list of proxy_results containing erros; and placeholders is
+    a boolean flag indictating whether there is at least one placeholder.
+    """
     errs = []
     placeholders = False
     for result in args:

@@ -8,7 +8,7 @@ from flowy.serialization import JSONProxyEncoder
 from flowy.result import is_result_proxy, restart_type
 
 
-__all__ = ['ActivityConfig', 'WorkflowConfig']
+__all__ = ['ActivityConfig', 'WorkflowConfig', 'Restart']
 
 
 class ActivityConfig(object):

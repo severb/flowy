@@ -1,6 +1,7 @@
 import copy
 import tempfile
 import warnings
+import webbrowser
 
 from flowy.operations import first
 from flowy.proxy import BoundProxy
@@ -13,6 +14,7 @@ from flowy.utils import short_repr
 __all__ = ['TracingBoundProxy', 'ExecutionTracer']
 
 
+# XXX: Trace dependencies even if data structures containing result proxies are used
 class TracingBoundProxy(BoundProxy):
     """Similar to a BoundProxy but records task dependency.
 
@@ -119,6 +121,7 @@ class ExecutionTracer(object):
         self.nodes = {}
 
     def to_dot(self):
+        """Render the dot for the recorded execution."""
         try:
             import pygraphviz as pgv
         except ImportError:
@@ -135,40 +138,23 @@ class ExecutionTracer(object):
             color, fontcolor = 'black', 'black'
             if node_id in self.errors:
                 color, fontcolor = 'red', 'red'
-            graph.add_node(node_id,
-                           label=node_name,
-                           shape=shape,
-                           width=0.8,
-                           color=color,
-                           fontcolor=fontcolor)
+            graph.add_node(node_id, label=node_name, shape=shape, width=0.8,
+                           color=color, fontcolor=fontcolor)
             if node_id in self.results or node_id in self.errors:
                 if node_id in self.errors:
                     rlabel = str(self.errors[node_id])
                 else:
                     rlabel = short_repr.repr(self.results[node_id])
                     rlabel = ' ' + '\l '.join(rlabel.split('\n'))  # Left align
-                graph.add_node(finish_id,
-                               label='',
-                               shape='point',
-                               width=0.1,
-                               color=color)
-                graph.add_edge(node_id, finish_id,
-                               arrowhead='none',
-                               penwidth=3,
-                               fontsize=8,
-                               color=color,
-                               fontcolor=fontcolor,
-                               label='  ' + rlabel)
+                graph.add_node(finish_id, label='', shape='point', width=0.1, color=color)
+                graph.add_edge(node_id, finish_id, arrowhead='none', penwidth=3, fontsize=8,
+                               color=color, fontcolor=fontcolor, label='  ' + rlabel)
             else:
                 hanging.add(node_id)
 
         levels = ['l%s' % i for i in range(len(self.levels))]
         for l in levels:
-            graph.add_node(l,
-                           shape='point',
-                           label='',
-                           width=0.1,
-                           style='invis')
+            graph.add_node(l, shape='point', label='', width=0.1, style='invis')
         if levels:
             start = levels[0]
             for l in levels[1:]:
@@ -199,38 +185,25 @@ class ExecutionTracer(object):
         if hanging:
             for node_id in hanging:
                 finish_id = 'finish-%s' % node_id
-                graph.add_node(finish_id,
-                               label='',
-                               shape='point',
-                               width=0.1,
-                               style='invis')
-                graph.add_edge(node_id, finish_id,
-                               style='dotted',
-                               arrowhead='none')
+                graph.add_node(finish_id, label='', shape='point', width=0.1, style='invis')
+                graph.add_edge(node_id, finish_id, style='dotted', arrowhead='none')
             # l_id is the last level here
-            graph.add_subgraph([l_id] + ['finish-%s' % h for h in hanging],
-                               rank='same')
+            graph.add_subgraph([l_id] + ['finish-%s' % h for h in hanging], rank='same')
 
         for node_id in self.nodes:
             retries = self.timeouts[node_id]
             if retries:
-                graph.add_edge(node_id, node_id,
-                               label=' %s' % retries,
-                               color='orange',
-                               fontcolor='orange',
-                               fontsize=8)
+                graph.add_edge(node_id, node_id, label=' %s' % retries, color='orange',
+                               fontcolor='orange', fontsize=8)
 
         return graph
 
     def display(self):
+        """Create a temp file and render the dot in it."""
         graph = self.to_dot()
         if not graph:
             return
-        tf = tempfile.NamedTemporaryFile(mode='w+b',
-                                         prefix='dot_',
-                                         suffix='.svg',
-                                         delete=False)
+        tf = tempfile.NamedTemporaryFile(mode='w+b', prefix='dot_', suffix='.svg', delete=False)
         graph.draw(tf.name, format='svg', prog='dot')
         logger.info('Workflow execution traced: %s', tf.name)
-        import webbrowser
         webbrowser.open(tf.name)

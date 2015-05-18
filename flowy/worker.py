@@ -65,14 +65,15 @@ class Worker(object):
             decision.finish(serialized_result)
 
     def scan(self, categories=None, package=None, ignore=None, level=0):
-        """Scan for registered implementations and their configuration.
+        """Scan for registered implementations and their configs.
 
         The categories can be used to scan for only a subset of tasks. By
         default it will use the categories property set on the class.
 
-        Use venusian to scan. By default it will scan the package of the scan
-        caller but this can be changed using the package and ignore arguments.
-        Their semantics is the same with the ones in venusian documentation.
+        Use venusian to scan. By default it will scan the package of the caller
+        of the scan method but this can be changed using the package and ignore
+        arguments. Their semantics is the same with the ones in venusian
+        documentation.
 
         The level represents the additional stack frames to add to the caller
         package identification code. This is useful when this call happens
@@ -80,7 +81,7 @@ class Worker(object):
         """
         if categories is None:
             categories = self.categories
-        scanner = venusian.Scanner(register=self.register)
+        scanner = venusian.Scanner(registry=self)
         if package is None:
             package = caller_package(level=2 + level)
         scanner.scan(package, categories=categories, ignore=ignore)
