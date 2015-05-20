@@ -32,11 +32,18 @@ def setup_default_logger():
 def i_or_args(result, results):
     """Return an iterable for functions with signature f(arg, *args).
     f can be called with f([a, b, c, ...]) or f(a, b, c, ...).
-    In both cases, calling i_or_args(arg, args) returns an iterable over a, b, c, ...
+    In both cases, calling i_or_args(arg, args) returns an iterable
+    over a, b, c, ...
     """
     if len(results) == 0:
         return iter(result)
     return (result, ) + results
+
+
+def str_or_none(val):
+    if val is None:
+        return None
+    return str(val)
 
 
 class ShortRepr(r.Repr):
