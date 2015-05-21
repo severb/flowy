@@ -1,10 +1,13 @@
+import functools
+
 from boto.exception import SWFResponseError
 from boto.swf.exceptions import SWFTypeAlreadyExistsError
 
-from flowy.backend.swf.proxy import SWFActivityProxy
-from flowy.backend.swf.proxy import SWFWorkflowProxy
+from flowy.backend.swf.proxy import SWFActivityProxyFactory
+from flowy.backend.swf.proxy import SWFWorkflowProxyFactory
 from flowy.config import ActivityConfig
 from flowy.config import WorkflowConfig
+from flowy.utils import DescCounter
 from flowy.utils import logger
 from flowy.utils import str_or_none
 
@@ -71,10 +74,10 @@ class SWFActivity(SWFConfigMixin, ActivityConfig):
     def _cvt_values(self):
         """Convert values to their expected types or bailout."""
         d_t_l = str_or_none(self.default_task_list)
-        d_h = str_or_none(self.default_heartbeat)
-        d_sch_c = str_or_none(self.default_schedule_to_close)
-        d_sch_s = str_or_none(self.default_schedule_to_start)
-        d_s_c = str_or_none(self.default_start_to_close)
+        d_h = timer_encode(self.default_heartbeat, 'default_heartbeat')
+        d_sch_c = timer_encode(self.default_schedule_to_close, 'default_schedule_to_close')
+        d_sch_s = timer_encode(self.default_schedule_to_start, 'default_schedule_to_start')
+        d_s_c = timer_encode(self.default_start_to_close, 'default_start_to_close')
         return str(self.version), d_t_l, d_h, d_sch_c, d_sch_s, d_s_c
 
     def try_register_remote(self, swf_layer1, domain, name):
@@ -297,18 +300,19 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
         """
         if name is None:
             name = dep_name
-        proxy = SWFActivityProxy(identity=dep_name,
-                                 name=name,
-                                 version=version,
-                                 task_list=task_list,
-                                 heartbeat=heartbeat,
-                                 schedule_to_close=schedule_to_close,
-                                 schedule_to_start=schedule_to_start,
-                                 start_to_close=start_to_close,
-                                 serialize_input=serialize_input,
-                                 deserialize_result=deserialize_result,
-                                 retry=retry)
-        self.conf_proxy(dep_name, proxy)
+        proxy = SWFActivityProxyFactory(
+            identity=str(dep_name),
+            name=str(name),
+            version=str(version),
+            task_list=str_or_none(task_list),
+            heartbeat=timer_encode(heartbeat, 'heartbeat'),
+            schedule_to_close=timer_encode(schedule_to_close, 'schedule_to_close'),
+            schedule_to_start=timer_encode(schedule_to_start, 'schedule_to_start'),
+            start_to_close=timer_encode(start_to_close, 'start_to_close'),
+            serialize_input=serialize_input,
+            deserialize_result=deserialize_result,
+            retry=(str(max(int(i), 0)) for i in retry))
+        self.conf_proxy_factory(dep_name, proxy)
 
     def conf_workflow(self, dep_name, version,
                       name=None,
@@ -322,26 +326,39 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
         """Same as conf_activity but for sub-workflows."""
         if name is None:
             name = dep_name
-        proxy = SWFWorkflowProxy(identity=dep_name,
-                                 name=name,
-                                 version=version,
-                                 task_list=task_list,
-                                 workflow_duration=workflow_duration,
-                                 decision_duration=decision_duration,
-                                 child_policy=child_policy,
-                                 serialize_input=serialize_input,
-                                 deserialize_result=deserialize_result,
-                                 retry=retry)
-        self.conf_proxy(dep_name, proxy)
+        proxy = SWFWorkflowProxyFactory(
+            identity=str(dep_name),
+            name=str(name),
+            version=str(version),
+            task_list=str_or_none(task_list),
+            workflow_duration=timer_encode(workflow_duration, 'workflow_duration'),
+            decision_duration=timer_encode(decision_duration, 'decision_duration'),
+            child_policy=cp_encode(child_policy),
+            serialize_input=serialize_input,
+            deserialize_result=deserialize_result,
+            retry=(str(max(int(i), 0)) for i in retry))
+        self.conf_proxy_factory(dep_name, proxy)
 
-#     def init(self, workflow_factory, decision, execution_history):
-#         rate_limit = DescCounter(int(self.rate_limit))
-#         return super(SWFWorkflow, self).init(workflow_factory, decision,
-#                                              execution_history, rate_limit)
+    def wrap(self, func):
+        """Insert an additional DescCounter object for rate limiting."""
+        f = super(SWFWorkflowConfig, self).wrap(func)
+
+        @functools.wraps(func)
+        def wrapper(input_data, *extra_args):
+            extra_args = extra_args + (DescCounter(int(self.rate_limit)), )
+            return f(input_data, *extra_args)
 
 
 class SWFRegistrationError(Exception):
     """Can't register a task remotely because of default config conflicts."""
+
+
+def cp_encode(val):
+    if val is not None:
+        val = str(val).upper()
+    if val not in _CHILD_POLICY:
+        raise ValueError('Invalid child policy value: %r' % val)
+    return val
 
 
 def timer_encode(val, name):
@@ -353,11 +370,3 @@ def timer_encode(val, name):
             'The value of %r must be a strictly positive integer: %r' %
             (name, val))
     return str(val)
-
-
-def cp_encode(val):
-    if val is not None:
-        val = str(val).upper()
-    if val not in _CHILD_POLICY:
-        raise ValueError('Invalid child policy value: %r' % val)
-    return val

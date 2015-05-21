@@ -116,6 +116,21 @@ def scan_args(args, kwargs):
     return errs, placeholders
 
 
+class DescCounter(object):
+    """A simple semaphore-like descendent counter."""
+
+    def __init__(self, to=None):
+        if to is None:
+            self.iterator = itertools.repeat(True)
+        else:
+            self.iterator = itertools.chain(itertools.repeat(True, to),
+                                            itertools.repeat(False))
+
+    def consume(self):
+        """Conusme one position; returns True if positions are available."""
+        return next(self.iterator)
+
+
 # Stolen from Pyramid
 def caller_module(level=2, sys=sys):
     module_globals = sys._getframe(level).f_globals

@@ -1,3 +1,5 @@
+import json
+
 from flowy.operations import first
 from flowy.result import copy_result_proxy
 from flowy.result import error
@@ -6,6 +8,7 @@ from flowy.result import result
 from flowy.result import SuspendTask
 from flowy.result import timeout
 from flowy.result import wait
+from flowy.serialization import JSONProxyEncoder
 from flowy.utils import logger
 from flowy.utils import scan_args
 
@@ -21,20 +24,23 @@ class BoundProxy(object):
     The real scheduling is dispatched to the decision object.
     """
 
-    def __init__(self, config, task_exec_history, task_decision, retry=(0, )):
+    def __init__(self, task_exec_history, task_decision, retry=(0, ),
+                 serialize_input=None, deserialize_result=None):
         """Init the bound proxy object.
 
-        Config is used to deserialize results and serialize input arguments.
         The task execution history contains the execution history and is
         used to decide what new tasks should be scheduled.
         The scheduling of new tasks or execution or the execution failure is
         delegated to the task decision object.
         """
-        self.config = config
         self.task_exec_history = task_exec_history
         self.task_decision = task_decision
         self.retry = retry
         self.call_number = 0
+        if serialize_input is not None:
+            self.serialize_input = serialize_input
+        if deserialize_result is not None:
+            self.deserialize_result = deserialize_result
 
     def __call__(self, *args, **kwargs):
         """Consult the execution history for results or schedule a new task.
@@ -75,10 +81,9 @@ class BoundProxy(object):
                 value = task_exec_history.result(call_number, retry_number)
                 order = task_exec_history.order(call_number, retry_number)
                 try:
-                    value = self.config.deserialize_result(value)
+                    value = self.deserialize_result(value)
                 except Exception as e:
-                    logger.exception(
-                        'Error while deserializing the activity result:')
+                    logger.exception('Error while deserializing the activity result:')
                     self.task_decision.fail(e)
                     break  # result = Placeholder
                 r = result(value, order)
@@ -95,16 +100,23 @@ class BoundProxy(object):
             if placeholders:
                 break  # result = Placeholder
             try:
-                input_data = self.config.serialize_input(*args, **kwargs)
+                input_data = self.serialize_input(*args, **kwargs)
             except Exception as e:
                 logger.exception('Error while serializing the task input:')
                 self.task_decision.fail(e)
                 break  # result = Placeholder
-            self.task_decision.schedule(call_number, retry_number, delay,
-                                        input_data)
+            self.task_decision.schedule(call_number, retry_number, delay, input_data)
             break  # result = Placeholder
         else:
             # No retries left, it must be a timeout
             order = task_exec_history.order(call_number, retry_number)
             r = timeout(order)
         return r
+
+    @staticmethod
+    def serialize_input(*args, **kwargs):
+        return json.dumps([args, kwargs], cls=JSONProxyEncoder)
+
+    @staticmethod
+    def deserialize_result(result):
+        return json.loads(result)

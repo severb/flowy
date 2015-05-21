@@ -162,7 +162,7 @@ class WorkflowConfig(ActivityConfig):
             raise ValueError(
                 'Dependency name is already registered: %r' % dep_name)
 
-    def conf_proxy(self, dep_name, proxy_factory):
+    def conf_proxy_factory(self, dep_name, proxy_factory):
         """Set a proxy factory for a dependency name."""
         self._check_dep(dep_name)
         self.proxy_factory_registry[dep_name] = proxy_factory
