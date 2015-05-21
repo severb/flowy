@@ -12,9 +12,6 @@ from flowy.utils import logger
 from flowy.utils import str_or_none
 
 
-_CHILD_POLICY = ['TERMINATE', 'REQUEST_CANCEL', 'ABANDON', None]
-
-
 class SWFConfigMixin(object):
     def register_remote(self, swf_layer1, domain, alternate_name=None):
         """Register the config in Amazon SWF if it's missing.
@@ -300,7 +297,7 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
         """
         if name is None:
             name = dep_name
-        proxy = SWFActivityProxyFactory(
+        proxy_factory = SWFActivityProxyFactory(
             identity=str(dep_name),
             name=str(name),
             version=str(version),
@@ -312,7 +309,7 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
             serialize_input=serialize_input,
             deserialize_result=deserialize_result,
             retry=(str(max(int(i), 0)) for i in retry))
-        self.conf_proxy_factory(dep_name, proxy)
+        self.conf_proxy_factory(dep_name, proxy_factory)
 
     def conf_workflow(self, dep_name, version,
                       name=None,
@@ -326,7 +323,7 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
         """Same as conf_activity but for sub-workflows."""
         if name is None:
             name = dep_name
-        proxy = SWFWorkflowProxyFactory(
+        proxy_factory = SWFWorkflowProxyFactory(
             identity=str(dep_name),
             name=str(name),
             version=str(version),
@@ -337,7 +334,7 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
             serialize_input=serialize_input,
             deserialize_result=deserialize_result,
             retry=(str(max(int(i), 0)) for i in retry))
-        self.conf_proxy_factory(dep_name, proxy)
+        self.conf_proxy_factory(dep_name, proxy_factory)
 
     def wrap(self, func):
         """Insert an additional DescCounter object for rate limiting."""
@@ -350,13 +347,13 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
 
 
 class SWFRegistrationError(Exception):
-    """Can't register a task remotely because of default config conflicts."""
+    """Can't register a task remotely."""
 
 
 def cp_encode(val):
     if val is not None:
         val = str(val).upper()
-    if val not in _CHILD_POLICY:
+    if val not in ['TERMINATE', 'REQUEST_CANCEL', 'ABANDON', None]:
         raise ValueError('Invalid child policy value: %r' % val)
     return val
 

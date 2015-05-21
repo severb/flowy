@@ -131,7 +131,7 @@ class SWFWorkflowDecision(object):
 
     def schedule_timer(self, call_key, delay):
         """Schedule a timer. This is used to delay execution of tasks."""
-        self.decisions.start_timer(timer_id='%s:t' % call_key,
+        self.decisions.start_timer(timer_id=timer_key(call_key),
                                    start_to_fire_timeout=delay)
 
     def schedule_activity(self, call_key, name, version, input_data, task_list,
@@ -179,14 +179,14 @@ class SWFWorkflowTaskDecision(object):
     def schedule(self, call_number, retry_number, delay, input_data):
         if not self.rate_limit.consume():
             return
-        task_key = '%s-%s-%s' % (self.proxy_factory.identity, call_number, retry_number)
+        tk = task_key(self.proxy_factory.identity, call_number, retry_number)
         if delay:
-            if self.execution_history.is_timer_ready(task_key):
-                self._schedule(task_key, input_data)
-            elif not self.execution_history.is_timer_running(task_key):
-                self.decision.schedule_timer(task_key, delay)
+            if self.execution_history.is_timer_ready(tk):
+                self._schedule(tk, input_data)
+            elif not self.execution_history.is_timer_running(tk):
+                self.decision.schedule_timer(tk, delay)
         else:
-            self._schedule(task_key, input_data)
+            self._schedule(tk, input_data)
 
     def _schedule(self, task_key, input_data):
         self.decision.schedule_workflow(
@@ -208,3 +208,11 @@ def tags_encode(tags):
     if tags is None:
         return None
     return list(set(str(t) for t in tags))[:5]
+
+
+def timer_key(call_key):
+    return '%s:t' % call_key
+
+
+def task_key(identity, call_number, retry_number):
+    return '%s-%s-%s' % (identity, call_number, retry_number)

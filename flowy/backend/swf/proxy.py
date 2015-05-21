@@ -31,7 +31,7 @@ class SWFActivityProxyFactory(object):
         self.deserialize_result = deserialize_result
 
     def __call__(self, decision, execution_history, rate_limit=DescCounter()):
-        """Instantiate a BoundProxy."""
+        """Instantiate BoundProxy."""
         task_exec_hist = SWFTaskExecutionHistory(execution_history, self.identity)
         task_decision = SWFActivityTaskDecision(decision, execution_history, self, rate_limit)
         return BoundProxy(task_exec_hist, task_decision, self.retry,
@@ -61,7 +61,7 @@ class SWFWorkflowProxyFactory(object):
         self.deserialize_result = deserialize_result
 
     def __call__(self, decision, execution_history, rate_limit):
-        """Return a BoundProxy instance."""
+        """Instantiate BoundProxy."""
         task_exec_hist = SWFTaskExecutionHistory(execution_history, self.identity)
         task_decision = SWFWorkflowTaskDecision(decision, execution_history, self, rate_limit)
         return BoundProxy(task_exec_hist, task_decision, self.retry,

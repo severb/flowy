@@ -1,3 +1,6 @@
+from flowy.backend.swf.decision import task_key, timer_key
+
+
 class SWFExecutionHistory(object):
     def __init__(self, running, timedout, results, errors, order):
         self.running = running
@@ -48,11 +51,7 @@ class SWFTaskExecutionHistory(object):
         delegate_to = getattr(self.exec_history, fname)
 
         def clos(call_number, retry_number):
-            return delegate_to('%s-%s-%s' % (self.identity, call_number, retry_number))
+            return delegate_to(task_key(self.identity, call_number, retry_number))
 
         setattr(self, fname, clos)  # cache it
         return clos
-
-
-def timer_key(call_key):
-    return '%s:t' % call_key
