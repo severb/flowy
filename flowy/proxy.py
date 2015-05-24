@@ -13,10 +13,10 @@ from flowy.utils import logger
 from flowy.utils import scan_args
 
 
-__all__ = ['BoundProxy']
+__all__ = ['Proxy']
 
 
-class BoundProxy(object):
+class Proxy(object):
     """A proxy bound to a task_exec_history and a decision object.
 
     This is what gets passed as a dependency in a workflow and has most of the
@@ -26,7 +26,7 @@ class BoundProxy(object):
 
     def __init__(self, task_exec_history, task_decision, retry=(0, ),
                  serialize_input=None, deserialize_result=None):
-        """Init the bound proxy object.
+        """Init the proxy object.
 
         The task execution history contains the execution history and is
         used to decide what new tasks should be scheduled.

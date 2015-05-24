@@ -108,7 +108,7 @@ class ActivityConfig(object):
         return wrapper
 
     def _get_register_key(self, func):
-        return self.name if self.name is not None else func.__name__
+        return str(self.name if self.name is not None else func.__name__)
 
     def register(self, registry, func):
         """Register this config and func with the registry.

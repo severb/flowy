@@ -1,7 +1,7 @@
 from flowy.backend.swf.decision import SWFActivityTaskDecision
 from flowy.backend.swf.decision import SWFWorkflowTaskDecision
 from flowy.backend.swf.history import SWFTaskExecutionHistory
-from flowy.proxy import BoundProxy
+from flowy.proxy import Proxy
 from flowy.utils import DescCounter
 
 
@@ -31,11 +31,11 @@ class SWFActivityProxyFactory(object):
         self.deserialize_result = deserialize_result
 
     def __call__(self, decision, execution_history, rate_limit=DescCounter()):
-        """Instantiate BoundProxy."""
+        """Instantiate Proxy."""
         task_exec_hist = SWFTaskExecutionHistory(execution_history, self.identity)
         task_decision = SWFActivityTaskDecision(decision, execution_history, self, rate_limit)
-        return BoundProxy(task_exec_hist, task_decision, self.retry,
-                          self.serialize_input, self.deserialize_result)
+        return Proxy(task_exec_hist, task_decision, self.retry,
+                     self.serialize_input, self.deserialize_result)
 
 
 class SWFWorkflowProxyFactory(object):
@@ -61,8 +61,8 @@ class SWFWorkflowProxyFactory(object):
         self.deserialize_result = deserialize_result
 
     def __call__(self, decision, execution_history, rate_limit):
-        """Instantiate BoundProxy."""
+        """Instantiate Proxy."""
         task_exec_hist = SWFTaskExecutionHistory(execution_history, self.identity)
         task_decision = SWFWorkflowTaskDecision(decision, execution_history, self, rate_limit)
-        return BoundProxy(task_exec_hist, task_decision, self.retry,
-                          self.serialize_input, self.deserialize_result)
+        return Proxy(task_exec_hist, task_decision, self.retry,
+                     self.serialize_input, self.deserialize_result)

@@ -13,7 +13,7 @@ from flowy.utils import str_or_none
 
 
 class SWFConfigMixin(object):
-    def register_remote(self, swf_layer1, domain, alternate_name=None):
+    def register_remote(self, swf_layer1, domain, task_factory):
         """Register the config in Amazon SWF if it's missing.
 
         If the task registration fails because there is another task registered
@@ -25,20 +25,18 @@ class SWFConfigMixin(object):
         SWFRegistrationError. ValueError is raised if any configuration values
         can't be converted to the required types.
         """
-        if self.name is None and alternate_name is None:
-            raise ValueError('The config has no name.')
-        name = self.name or alternate_name
+        name = super(SWFConfigMixin, self)._get_register_key(task_factory)
         registered_as_new = self.try_register_remote(swf_layer1, domain, name)
         if not registered_as_new:
             self.check_compatible(swf_layer1, domain, name)  # raises if incompatible
 
     def _get_register_key(self,  func):
         name = super(SWFConfigMixin, self)._get_register_key(func)
-        return (name, self.version)
+        return (name, str(self.version))
 
 
-class SWFActivity(SWFConfigMixin, ActivityConfig):
-    """A configuration object suited for Amazon SWF Activities."""
+class SWFActivityConfig(SWFConfigMixin, ActivityConfig):
+    """A configuration object for Amazon SWF Activities."""
     category = 'swf_activity'  # venusian category used for this type of confs
 
     def __init__(self, version,
@@ -60,7 +58,7 @@ class SWFActivity(SWFConfigMixin, ActivityConfig):
         The name is optional. If no name is set, it will default to the
         function name.
         """
-        super(SWFActivity, self).__init__(name, deserialize_input, serialize_result)
+        super(SWFActivityConfig, self).__init__(name, deserialize_input, serialize_result)
         self.version = version
         self.default_task_list = default_task_list
         self.default_heartbeat = default_heartbeat
