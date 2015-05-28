@@ -306,7 +306,7 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
             start_to_close=timer_encode(start_to_close, 'start_to_close'),
             serialize_input=serialize_input,
             deserialize_result=deserialize_result,
-            retry=(str(max(int(i), 0)) for i in retry))
+            retry=retry)
         self.conf_proxy_factory(dep_name, proxy_factory)
 
     def conf_workflow(self, dep_name, version,
@@ -331,7 +331,7 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
             child_policy=cp_encode(child_policy),
             serialize_input=serialize_input,
             deserialize_result=deserialize_result,
-            retry=(str(max(int(i), 0)) for i in retry))
+            retry=retry)
         self.conf_proxy_factory(dep_name, proxy_factory)
 
     def wrap(self, func):
@@ -342,6 +342,8 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
         def wrapper(input_data, *extra_args):
             extra_args = extra_args + (DescCounter(int(self.rate_limit)), )
             return f(input_data, *extra_args)
+
+        return wrapper
 
 
 class SWFRegistrationError(Exception):

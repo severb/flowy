@@ -1,10 +1,16 @@
-from boto.swf.layer1 import Layer1
-from boto.exception import SWFResponseError
+import os
+import socket
 
-from flowy.utils import setup_default_logger
-from flowy.utils import logger
-from flowy.worker import Worker
+from boto.exception import SWFResponseError
+from boto.swf.layer1 import Layer1
+
 from flowy.backend.swf.decision import SWFActivityDecision
+from flowy.backend.swf.decision import SWFWorkflowDecision
+from flowy.backend.swf.history import SWFExecutionHistory
+from flowy.utils import logger
+from flowy.utils import setup_default_logger
+from flowy.utils import str_or_none
+from flowy.worker import Worker
 
 
 __all__ = ['SWFWorkflowWorker', 'SWFActivityWorker']
@@ -86,7 +92,7 @@ class SWFActivityWorker(SWFWorker):
     categories = ['swf_activity']
 
     #Be explicit about what arguments are expected
-    def __call__(self, name, version, input_data, decision):
+    def __call__(self, key, input_data, decision):
         # No extra arguments are used
         super(SWFActivityWorker, self).__call__(
             key, input_data, decision,    # needed for worker logic
@@ -114,8 +120,7 @@ class SWFActivityWorker(SWFWorker):
                 if self.break_loop():
                     break
                 swf_response = {}
-                while ('taskToken' not in swf_response or
-                       not swf_response['taskToken']):
+                while ('taskToken' not in swf_response or not swf_response['taskToken']):
                     try:
                         swf_response = layer1.poll_for_activity_task(
                             domain=domain,
@@ -139,3 +144,174 @@ def default_identity():
     """Generate a local identity for this process."""
     identity = "%s-%s" % (socket.getfqdn(), os.getpid())
     return identity[-_IDENTITY_SIZE:]  # keep the most important part
+
+
+def poll_next_decision(layer1, domain, task_list, identity=None):
+    """Poll a decision and create a SWFWorkflowContext instance."""
+    first_page = poll_first_page(layer1, domain, task_list, identity)
+    token = first_page['taskToken']
+    all_events = events(layer1, domain, task_list, first_page, identity)
+    # Sometimes the first event in on the second page,
+    # and the first page is empty
+    first_event = next(all_events)
+    assert first_event['eventType'] == 'WorkflowExecutionStarted'
+    wesea = 'workflowExecutionStartedEventAttributes'
+    assert first_event[wesea]['taskList']['name'] == task_list
+    decision_duration = first_event[wesea]['taskStartToCloseTimeout']
+    workflow_duration = first_event[wesea]['executionStartToCloseTimeout']
+    tags = first_event[wesea].get('tagList', None)
+    child_policy = first_event[wesea]['childPolicy']
+    name = first_event[wesea]['workflowType']['name']
+    version = first_event[wesea]['workflowType']['version']
+    input_data = first_event[wesea]['input']
+    try:
+        running, timedout, results, errors, order = load_events(all_events)
+    except _PaginationError:
+        # There's nothing better to do than to retry
+        return poll_next_decision(layer1, task_list, domain, identity)
+    execution_history = SWFExecutionHistory(running, timedout, results, errors, order)
+    decision = SWFWorkflowDecision(layer1, token, name, version, task_list,
+                                   decision_duration, workflow_duration, tags,
+                                   child_policy)
+    return (name, version), input_data, execution_history, decision
+
+
+def poll_first_page(layer1, domain, task_list, identity=None):
+    """Return the response from loading the first page.
+
+    In case of errors, empty responses or whatnot retry until a valid response.
+    """
+    swf_response = {}
+    while 'taskToken' not in swf_response or not swf_response['taskToken']:
+        try:
+            swf_response = layer1.poll_for_decision_task(
+                str(domain), str(task_list), str_or_none(identity))
+        except SWFResponseError:
+            logger.exception('Error while polling for decisions:')
+    return swf_response
+
+
+def poll_response_page(layer1, domain, task_list, token, identity=None):
+    """Return a specific page. In case of errors retry a number of times."""
+    swf_response = None
+    for _ in range(7):  # give up after a limited number of retries
+        try:
+            swf_response = layer1.poll_for_decision_task(
+                str(domain), str(task_list), str_or_none(identity),
+                next_page_token=str(token))
+            break
+        except SWFResponseError:
+            logger.exception('Error while polling for decision page:')
+    else:
+        raise _PaginationError()
+    return swf_response
+
+
+def events(layer1, domain, task_list, first_page, identity=None):
+    """Load pages one by one and generate all events found."""
+    page = first_page
+    while 1:
+        for event in page['events']:
+            yield event
+        if not page.get('nextPageToken'):
+            break
+        page = poll_response_page(layer1, domain, task_list,
+                                  page['nextPageToken'], identity)
+
+
+def load_events(event_iter):
+    """Combine all events in their order.
+
+    This returns a tuple of the following things:
+        running  - a set of the ids of running tasks
+        timedout - a set of the ids of tasks that have timedout
+        results  - a dictionary of id -> result for each finished task
+        errors   - a dictionary of id -> error message for each failed task
+        order    - an list of task ids in the order they finished
+    """
+    running, timedout = set(), set()
+    results, errors = {}, {}
+    order = []
+    event2call = {}
+    for event in event_iter:
+        e_type = event.get('eventType')
+        if e_type == 'ActivityTaskScheduled':
+            eid = event['activityTaskScheduledEventAttributes']['activityId']
+            event2call[event['eventId']] = eid
+            running.add(eid)
+        elif e_type == 'ActivityTaskCompleted':
+            atcea = 'activityTaskCompletedEventAttributes'
+            eid = event2call[event[atcea]['scheduledEventId']]
+            result = event[atcea]['result']
+            running.remove(eid)
+            results[eid] = result
+            order.append(eid)
+        elif e_type == 'ActivityTaskFailed':
+            atfea = 'activityTaskFailedEventAttributes'
+            eid = event2call[event[atfea]['scheduledEventId']]
+            reason = event[atfea]['reason']
+            running.remove(eid)
+            errors[eid] = reason
+            order.append(eid)
+        elif e_type == 'ActivityTaskTimedOut':
+            attoea = 'activityTaskTimedOutEventAttributes'
+            eid = event2call[event[attoea]['scheduledEventId']]
+            running.remove(eid)
+            timedout.add(eid)
+            order.append(eid)
+        elif e_type == 'ScheduleActivityTaskFailed':
+            satfea = 'scheduleActivityTaskFailedEventAttributes'
+            eid = event[satfea]['activityId']
+            reason = event[satfea]['cause']
+            # when a job is not found it's not even started
+            errors[eid] = reason
+            order.append(eid)
+        elif e_type == 'StartChildWorkflowExecutionInitiated':
+            scweiea = 'startChildWorkflowExecutionInitiatedEventAttributes'
+            eid = _subworkflow_call_key(event[scweiea]['workflowId'])
+            running.add(eid)
+        elif e_type == 'ChildWorkflowExecutionCompleted':
+            cwecea = 'childWorkflowExecutionCompletedEventAttributes'
+            eid = _subworkflow_call_key(
+                event[cwecea]['workflowExecution']['workflowId'])
+            result = event[cwecea]['result']
+            running.remove(eid)
+            results[eid] = result
+            order.append(eid)
+        elif e_type == 'ChildWorkflowExecutionFailed':
+            cwefea = 'childWorkflowExecutionFailedEventAttributes'
+            eid = _subworkflow_call_key(
+                event[cwefea]['workflowExecution']['workflowId'])
+            reason = event[cwefea]['reason']
+            running.remove(eid)
+            errors[eid] = reason
+            order.append(eid)
+        elif e_type == 'ChildWorkflowExecutionTimedOut':
+            cwetoea = 'childWorkflowExecutionTimedOutEventAttributes'
+            eid = _subworkflow_call_key(
+                event[cwetoea]['workflowExecution']['workflowId'])
+            running.remove(eid)
+            timedout.add(eid)
+            order.append(eid)
+        elif e_type == 'StartChildWorkflowExecutionFailed':
+            scwefea = 'startChildWorkflowExecutionFailedEventAttributes'
+            eid = _subworkflow_call_key(event[scwefea]['workflowId'])
+            reason = event[scwefea]['cause']
+            errors[eid] = reason
+            order.append(eid)
+        elif e_type == 'TimerStarted':
+            eid = event['timerStartedEventAttributes']['timerId']
+            running.add(eid)
+        elif e_type == 'TimerFired':
+            eid = event['timerFiredEventAttributes']['timerId']
+            running.remove(eid)
+            results[eid] = None
+    return running, timedout, results, errors, order
+
+
+class _PaginationError(Exception):
+    """Can't retrieve the next page after X retries."""
+
+
+def _subworkflow_call_key(w_id):
+    return w_id.split(':')[-1]

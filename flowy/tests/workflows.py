@@ -2,11 +2,11 @@ from flowy import finish_order
 from flowy import first
 from flowy import parallel_reduce
 from flowy import restart
-from flowy import SWFWorkflow
+from flowy import SWFWorkflowConfig
 from flowy import wait
 
-w_no_name = SWFWorkflow(version=1)
-w_named = SWFWorkflow(name='Named', version=1)
+w_no_name = SWFWorkflowConfig(version=1)
+w_named = SWFWorkflowConfig(name='Named', version=1)
 
 
 @w_no_name

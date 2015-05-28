@@ -1,21 +1,21 @@
-from flowy import SWFWorkflow
+from flowy import SWFWorkflowConfig
 from flowy import SWFWorkflowWorker
 
 from flowy.tests.workflows import *
 
-NoTaskWorkflow = SWFWorkflow(version=1)
-ClosureWorkflow = SWFWorkflow(version=1)
-ArgumentsWorkflow = SWFWorkflow(version=1)
-DependencyWorkflow = SWFWorkflow(version=1)
+NoTaskWorkflow = SWFWorkflowConfig(version=1)
+ClosureWorkflow = SWFWorkflowConfig(version=1)
+ArgumentsWorkflow = SWFWorkflowConfig(version=1)
+DependencyWorkflow = SWFWorkflowConfig(version=1)
 DependencyWorkflow.conf_activity('task', version=1)
-ParallelWorkflow = SWFWorkflow(version=1)
+ParallelWorkflow = SWFWorkflowConfig(version=1)
 ParallelWorkflow.conf_activity('task', version=1)
-ParallelWorkflowRL = SWFWorkflow(name='ParallelRL', version=1, rate_limit=3)
+ParallelWorkflowRL = SWFWorkflowConfig(name='ParallelRL', version=1, rate_limit=3)
 ParallelWorkflowRL.conf_activity('task', version=1)
-UnhandledExceptionWorkflow = SWFWorkflow(version=1)
-SingleActivityWorkflow = SWFWorkflow(version=1)
+UnhandledExceptionWorkflow = SWFWorkflowConfig(version=1)
+SingleActivityWorkflow = SWFWorkflowConfig(version=1)
 SingleActivityWorkflow.conf_activity('task', version=1)
-SAWorkflowCustomTimers = SWFWorkflow(name='SACustomTimers', version=1)
+SAWorkflowCustomTimers = SWFWorkflowConfig(name='SACustomTimers', version=1)
 SAWorkflowCustomTimers.conf_activity('task',
                                      version=1,
                                      heartbeat=10,
@@ -23,32 +23,32 @@ SAWorkflowCustomTimers.conf_activity('task',
                                      schedule_to_close=12,
                                      start_to_close=13,
                                      task_list='TL', )
-SAWorkflowCustomTimersW = SWFWorkflow(name='SACustomTimersW', version=1)
+SAWorkflowCustomTimersW = SWFWorkflowConfig(name='SACustomTimersW', version=1)
 SAWorkflowCustomTimersW.conf_workflow('task',
                                       version=1,
                                       decision_duration=10,
                                       workflow_duration=11,
                                       task_list='TL',
                                       child_policy='TERMINATE')
-WaitActivityWorkflow = SWFWorkflow(version=1)
+WaitActivityWorkflow = SWFWorkflowConfig(version=1)
 WaitActivityWorkflow.conf_activity('task', version=1)
-RestartWorkflow = SWFWorkflow(version=1)
+RestartWorkflow = SWFWorkflowConfig(version=1)
 RestartWorkflow.conf_activity('task', version=1)
-PreRunWorkflow = SWFWorkflow(version=1)
+PreRunWorkflow = SWFWorkflowConfig(version=1)
 PreRunWorkflow.conf_activity('task', version=1)
-PreRunErrorWorkflow = SWFWorkflow(version=1)
-PreRunWaitWorkflow = SWFWorkflow(version=1)
+PreRunErrorWorkflow = SWFWorkflowConfig(version=1)
+PreRunWaitWorkflow = SWFWorkflowConfig(version=1)
 PreRunWaitWorkflow.conf_activity('task', version=1)
-DoubleDepWorkflow = SWFWorkflow(version=1)
+DoubleDepWorkflow = SWFWorkflowConfig(version=1)
 DoubleDepWorkflow.conf_activity('task', version=1)
-FirstWorkflow = SWFWorkflow(version=1)
+FirstWorkflow = SWFWorkflowConfig(version=1)
 FirstWorkflow.conf_activity('task', version=1)
-First2Workflow = SWFWorkflow(version=1)
+First2Workflow = SWFWorkflowConfig(version=1)
 First2Workflow.conf_activity('task', version=1)
-ParallelReduceWorkflow = SWFWorkflow(version=1)
+ParallelReduceWorkflow = SWFWorkflowConfig(version=1)
 ParallelReduceWorkflow.conf_activity('task', version=1)
 ParallelReduceWorkflow.conf_activity('red', version=1)
-ParallelReduceCombinedWorkflow = SWFWorkflow(version=1)
+ParallelReduceCombinedWorkflow = SWFWorkflowConfig(version=1)
 ParallelReduceCombinedWorkflow.conf_activity('task', version=1)
 ParallelReduceCombinedWorkflow.conf_activity('red', version=1)
 

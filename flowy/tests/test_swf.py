@@ -2,7 +2,7 @@ import json
 import pprint
 import unittest
 
-from flowy.backend.swf import SWFExecutionHistory
+from flowy.backend.swf.history import SWFExecutionHistory
 
 from flowy.tests.swf_cases import worker
 from flowy.tests.swf_cases import cases
@@ -100,13 +100,28 @@ class DummyDecision(object):
             schedule = []
             for sched in expected['schedule']:
                 if sched['type'] == 'activity':
-                    schedule.append(dict(self.default_activity, **sched))
+                    s = dict(self.default_activity, **sched)
                 elif sched['type'] == 'workflow':
-                    schedule.append(dict(self.default_workflow, **sched))
+                    s = dict(self.default_workflow, **sched)
                 elif sched['type'] == 'timer':
-                    schedule.append(dict(self.default_timer, **sched))
+                    s = dict(self.default_timer, **sched)
                 else:
                     assert False, 'Invalid schedule type'
+                if 'version' in s:
+                    s['version'] = str(s['version'])
+                if s.get('heartbeat') is not None:
+                    s['heartbeat'] = str(s['heartbeat'])
+                if s.get('start_to_close') is not None:
+                    s['start_to_close'] = str(s['start_to_close'])
+                if s.get('schedule_to_close') is not None:
+                    s['schedule_to_close'] = str(s['schedule_to_close'])
+                if s.get('schedule_to_start') is not None:
+                    s['schedule_to_start'] = str(s['schedule_to_start'])
+                if s.get('decision_duration') is not None:
+                    s['decision_duration'] = str(s['decision_duration'])
+                if s.get('workflow_duration') is not None:
+                    s['workflow_duration'] = str(s['workflow_duration'])
+                schedule.append(s)
             expected = {'schedule': schedule}
         if isinstance(expected, dict) and 'restart' in expected:
             r = expected['restart']
@@ -160,32 +175,32 @@ for i, case in enumerate(cases):
 
 class TestRegistration(unittest.TestCase):
     def test_already_registered(self):
-        from flowy import SWFWorkflow, SWFWorkflowWorker
+        from flowy import SWFWorkflowConfig, SWFWorkflowWorker
         worker = SWFWorkflowWorker()
-        w = SWFWorkflow(name='T', version=1)
+        w = SWFWorkflowConfig(name='T', version=1)
         worker.register(w, lambda: 1)
         self.assertRaises(ValueError, lambda: worker.register(w, lambda: 1))
 
     def test_digit_name(self):
-        from flowy import SWFWorkflow
-        w = SWFWorkflow(name='T', version=1)
-        self.assertRaises(ValueError, lambda: w.conf_proxy('123', None))
+        from flowy import SWFWorkflowConfig
+        w = SWFWorkflowConfig(name='T', version=1)
+        self.assertRaises(ValueError, lambda: w.conf_proxy_factory('123', None))
 
     def test_keyword_name(self):
-        from flowy import SWFWorkflow
-        w = SWFWorkflow(name='T', version=1)
-        self.assertRaises(ValueError, lambda: w.conf_proxy('for', None))
+        from flowy import SWFWorkflowConfig
+        w = SWFWorkflowConfig(name='T', version=1)
+        self.assertRaises(ValueError, lambda: w.conf_proxy_factory('for', None))
 
     def test_nonalnum_name(self):
-        from flowy import SWFWorkflow
-        w = SWFWorkflow(name='T', version=1)
-        self.assertRaises(ValueError, lambda: w.conf_proxy('abc!123', None))
+        from flowy import SWFWorkflowConfig
+        w = SWFWorkflowConfig(name='T', version=1)
+        self.assertRaises(ValueError, lambda: w.conf_proxy_factory('abc!123', None))
 
     def test_duplicate_name(self):
-        from flowy import SWFWorkflow
-        w = SWFWorkflow(name='T', version=1)
-        w.conf_proxy('task', None)
-        self.assertRaises(ValueError, lambda: w.conf_proxy('task', None))
+        from flowy import SWFWorkflowConfig
+        w = SWFWorkflowConfig(name='T', version=1)
+        w.conf_proxy_factory('task', None)
+        self.assertRaises(ValueError, lambda: w.conf_proxy_factory('task', None))
 
 
 class TestScan(unittest.TestCase):
@@ -221,7 +236,7 @@ class TestFinishOrder(unittest.TestCase):
 
     def test_mixed(self):
         from flowy import finish_order
-        from flowy.base import result, error, timeout, placeholder
+        from flowy.result import result, error, timeout, placeholder
         r = result(1, 1)
         t = timeout(2)
         e = error('err!', 3)
@@ -235,7 +250,7 @@ class TestFinishOrder(unittest.TestCase):
 
     def test_results(self):
         from flowy import finish_order
-        from flowy.base import result, error, timeout, placeholder
+        from flowy.result import result, error, timeout, placeholder
         r = result(1, 1)
         t = timeout(2)
         e = error('err!', 3)
@@ -253,7 +268,7 @@ class TestFinishOrder(unittest.TestCase):
 
     def test_first_mixed(self):
         from flowy import first
-        from flowy.base import result, error, timeout, placeholder
+        from flowy.result import result, error, timeout, placeholder
         r = result(1, 1)
         t = timeout(2)
         e = error('err!', 3)
@@ -261,7 +276,7 @@ class TestFinishOrder(unittest.TestCase):
 
     def test_first_results(self):
         from flowy import first
-        from flowy.base import result, error, timeout, placeholder
+        from flowy.result import result, error, timeout, placeholder
         r = result(1, 1)
         t = timeout(2)
         e = error('err!', 3)
@@ -271,9 +286,10 @@ class TestFinishOrder(unittest.TestCase):
 
 class TestResultJsonTransport(unittest.TestCase):
     def _get_uut(self):
-        from flowy.backend.swf import _serialize_result, _deserialize_result
-        from flowy.base import result
-        return result, _serialize_result, _deserialize_result
+        from flowy.result import result
+        from flowy.config import ActivityConfig
+        from flowy.proxy import Proxy
+        return result, ActivityConfig.serialize_result, Proxy.deserialize_result
 
     def test_int(self):
         r, s, ds = self._get_uut()

@@ -1,11 +1,14 @@
+import functools
 import json
 import keyword
-import functools
 
 import venusian
 
+from flowy.result import is_result_proxy
+from flowy.result import restart_type
+from flowy.result import TaskError
 from flowy.serialization import JSONProxyEncoder
-from flowy.result import is_result_proxy, restart_type
+from flowy.utils import logger
 
 
 __all__ = ['ActivityConfig', 'WorkflowConfig', 'Restart']
@@ -79,7 +82,7 @@ class ActivityConfig(object):
 
         def callback(venusian_scanner, *_):
             """This gets called by venusian at scan time."""
-            self.register(venusian_scanner.registry, func)
+            venusian_scanner.registry.register(self, func)
 
         venusian.attach(func, callback, category=self.category)
         return func
@@ -188,6 +191,7 @@ class WorkflowConfig(ActivityConfig):
             try:
                 args, kwargs = self.deserialize_input(input_data)
             except Exception:
+                logger.exception('Cannot serialize the result.')
                 raise ValueError('Cannot deserialize input.')
             result = func(*args, **kwargs)
             # Can't use directly isinstance(result, restart_type) because if the
@@ -199,7 +203,10 @@ class WorkflowConfig(ActivityConfig):
                 raise Restart(r_input_data)
             try:
                 return self.serialize_result(result)
+            except TaskError:
+                raise  # let task errors go trough
             except Exception:
+                logger.exception('Cannot serialize the result.')
                 raise ValueError('Cannot serialize the result.')
         return wrapper
 

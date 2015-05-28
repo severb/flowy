@@ -4,10 +4,10 @@ import warnings
 import webbrowser
 
 from flowy.operations import first
-from flowy.proxy import BoundProxy
+from flowy.proxy import Proxy
 from flowy.result import is_result_proxy
 from flowy.utils import logger
-from flowy.utils import scan_args
+from flowy.proxy import scan_args
 from flowy.utils import short_repr
 
 
@@ -15,7 +15,7 @@ __all__ = ['TracingBoundProxy', 'ExecutionTracer']
 
 
 # XXX: Trace dependencies even if data structures containing result proxies are used
-class TracingBoundProxy(BoundProxy):
+class TracingBoundProxy(Proxy):
     """Similar to a BoundProxy but records task dependency.
 
     This works by checking every arguments passed to the proxy for task results

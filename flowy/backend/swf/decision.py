@@ -4,13 +4,10 @@ from boto.exception import SWFResponseError
 from boto.swf.layer1_decisions import Layer1Decisions
 
 from flowy.utils import logger
-from flowy.utils import str_or_none
-from flowy.backend.swf.config import timer_encode
-from flowy.backend.swf.config import cp_encode
 
 
-_INPUT_SIZE = _RESULT_SIZE = 32768
-_REASON_SIZE = 256
+INPUT_SIZE = RESULT_SIZE = 32768
+REASON_SIZE = 256
 
 
 class SWFActivityDecision(object):
@@ -43,8 +40,8 @@ class SWFActivityDecision(object):
 
     def finish(self, result):
         result = str(result)
-        if len(result) > _RESULT_SIZE:
-            self.fail("Result too large: %s/%s" % (len(result), _RESULT_SIZE))
+        if len(result) > RESULT_SIZE:
+            self.fail("Result too large: %s/%s" % (len(result), RESULT_SIZE))
         try:
             self.layer1.respond_activity_task_completed(
                 result=result, task_token=str(self.token))
@@ -74,7 +71,7 @@ class SWFWorkflowDecision(object):
         The reason is truncated if too large.
         """
         decisions = self.decisions = Layer1Decisions()
-        decisions.fail_workflow_execution(reason=str(reason)[:_REASON_SIZE])
+        decisions.fail_workflow_execution(reason=str(reason)[:REASON_SIZE])
         self.flush()
 
     def flush(self):
@@ -96,24 +93,16 @@ class SWFWorkflowDecision(object):
         """
         decisions = self.decisions = Layer1Decisions()
         input_data = str(input_data)
-        if len(input_data) > _INPUT_SIZE:
-            self.fail("Restart input too large: %s/%s" % (len(input_data), _INPUT_SIZE))
-        try:
-            decision_duration = timer_encode(self.decision_duration, 'decision_duration')
-            workflow_duration = timer_encode(self.workflow_duration, 'workflow_duration')
-            task_list = str_or_none(self.task_list)
-            tags = tags_encode(self.tags)
-            child_policy = cp_encode(self.child_policy)
-        except Exception as e:
-            self.fail(e)
+        if len(input_data) > INPUT_SIZE:
+            self.fail("Restart input too large: %s/%s" % (len(input_data), INPUT_SIZE))
         else:
             decisions.continue_as_new_workflow_execution(
-                start_to_close_timeout=decision_duration,
-                execution_start_to_close_timeout=workflow_duration,
-                task_list=task_list,
+                start_to_close_timeout=self.decision_duration,
+                execution_start_to_close_timeout=self.workflow_duration,
+                task_list=self.task_list,
                 input=input_data,
-                tag_list=tags,
-                child_policy=child_policy)
+                tag_list=self.tags,
+                child_policy=self.child_policy)
         self.flush()
 
     def finish(self, result):
@@ -123,8 +112,8 @@ class SWFWorkflowDecision(object):
         """
         decisions = self.decisions = Layer1Decisions()
         result = str(result)
-        if len(result) > _RESULT_SIZE:
-            self.fail("Result too large: %s/%s" % (len(result), _RESULT_SIZE))
+        if len(result) > RESULT_SIZE:
+            self.fail("Result too large: %s/%s" % (len(result), RESULT_SIZE))
         else:
             decisions.complete_workflow_execution(result)
             self.flush()
@@ -132,15 +121,15 @@ class SWFWorkflowDecision(object):
     def schedule_timer(self, call_key, delay):
         """Schedule a timer. This is used to delay execution of tasks."""
         self.decisions.start_timer(timer_id=timer_key(call_key),
-                                   start_to_fire_timeout=delay)
+                                   start_to_fire_timeout=str(delay))
 
     def schedule_activity(self, call_key, name, version, input_data, task_list,
                           heartbeat, schedule_to_close, schedule_to_start,
                           start_to_close):
         """Schedule an activity execution."""
         input_data = str(input_data)
-        if len(input_data) > _INPUT_SIZE:
-            self.fail("Activity input too large: %s/%s" % (len(input_data), _INPUT_SIZE))
+        if len(input_data) > INPUT_SIZE:
+            self.fail("Activity input too large: %s/%s" % (len(input_data), INPUT_SIZE))
         self.decisions.schedule_activity_task(
             call_key, name, version,
             heartbeat_timeout=heartbeat,
@@ -154,8 +143,8 @@ class SWFWorkflowDecision(object):
                           workflow_duration, decision_duration, child_policy):
         """Schedule a workflow execution."""
         input_data = str(input_data)
-        if len(input_data) > _INPUT_SIZE:
-            self.fail("Workflow input too large: %s/%s" % (len(input_data), _INPUT_SIZE))
+        if len(input_data) > INPUT_SIZE:
+            self.fail("Workflow input too large: %s/%s" % (len(input_data), INPUT_SIZE))
         call_key = '%s:%s' % (uuid.uuid4(), call_key)
         self.decisions.start_child_workflow_execution(
             name, version, call_key,
@@ -180,7 +169,7 @@ class SWFWorkflowTaskDecision(object):
         if not self.rate_limit.consume():
             return
         tk = task_key(self.proxy_factory.identity, call_number, retry_number)
-        if delay:
+        if delay > 0:
             if self.execution_history.is_timer_ready(tk):
                 self._schedule(tk, input_data)
             elif not self.execution_history.is_timer_running(tk):
@@ -204,10 +193,6 @@ class SWFActivityTaskDecision(SWFWorkflowTaskDecision):
             self.proxy_factory.start_to_close)
 
 
-def tags_encode(tags):
-    if tags is None:
-        return None
-    return list(set(str(t) for t in tags))[:5]
 
 
 def timer_key(call_key):

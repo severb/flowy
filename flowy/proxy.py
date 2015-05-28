@@ -10,7 +10,6 @@ from flowy.result import timeout
 from flowy.result import wait
 from flowy.serialization import JSONProxyEncoder
 from flowy.utils import logger
-from flowy.utils import scan_args
 
 
 __all__ = ['Proxy']
@@ -120,3 +119,28 @@ class Proxy(object):
     @staticmethod
     def deserialize_result(result):
         return json.loads(result)
+
+
+def scan_args(args, kwargs):
+    """Return a tuple of errs, placeholders.
+
+    Where errs is a list of proxy_results containing erros; and placeholders is
+    a boolean flag indictating whether there is at least one placeholder.
+    """
+    errs = []
+    placeholders = False
+    for result in args:
+        try:
+            wait(result)
+        except SuspendTask:
+            placeholders = True
+        except Exception:
+            errs.append(result)
+    for key, result in kwargs.items():
+        try:
+            wait(result)
+        except SuspendTask:
+            placeholders = True
+        except Exception:
+            errs.append(result)
+    return errs, placeholders

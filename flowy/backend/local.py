@@ -11,14 +11,14 @@ from functools import partial
 from threading import Event
 from threading import RLock
 
-from flowy.backend.swf import SWFTaskExecutionHistory as TaskHistory
-from flowy.backend.swf import JSONProxyEncoder
-from flowy.base import BoundProxy
-from flowy.base import ExecutionTracer
-from flowy.base import TaskError
-from flowy.base import TracingBoundProxy
-from flowy.base import Worker
-from flowy.base import Workflow
+from flowy.backend.swf.history import SWFTaskExecutionHistory as TaskHistory
+from flowy.serialization import JSONProxyEncoder
+from flowy.proxy import Proxy
+from flowy.tracer import ExecutionTracer
+from flowy.result import TaskError
+from flowy.tracer import TracingBoundProxy
+from flowy.worker import Worker
+from flowy.config import WorkflowConfig
 
 __all__ = ['LocalWorkflow']
 
@@ -436,7 +436,7 @@ class ActivityProxy(object):
 
     def __call__(self, decision, history, tracer):
         if tracer is None:
-            return BoundProxy(
+            return Proxy(
                 serializer, TaskHistory(history, self.identity),
                 ActivityDecision(decision, self.identity, self.f))
         return TracingBoundProxy(
@@ -452,7 +452,7 @@ class WorkflowProxy(object):
 
     def __call__(self, decision, history, tracer):
         if tracer is None:
-            return BoundProxy(
+            return Proxy(
                 serializer, TaskHistory(history, self.identity),
                 WorkflowDecision(decision, self.identity, self.f))
         return TracingBoundProxy(
@@ -461,7 +461,7 @@ class WorkflowProxy(object):
             WorkflowDecision(decision, self.identity, self.f))
 
 
-class LocalWorkflow(Workflow):
+class LocalWorkflow(WorkflowConfig):
     def __init__(self, w,
                  activity_workers=8,
                  workflow_workers=2,
@@ -473,21 +473,11 @@ class LocalWorkflow(Workflow):
         self.worker = Worker()
         self.worker.register(self, w)
 
-    def serialize_result(self, result):
-        # See serialize_input for an explanation on why JSON in used here.
-        return json.dumps(result, cls=JSONProxyEncoder)
-
-    def deserialize_input(self, input_data):
-        return json.loads(input_data)
-
-    def serialize_restart_input(self, *args, **kwargs):
-        return serialize_input(*args, **kwargs)
-
     def conf_activity(self, dep_name, f):
-        self.conf_proxy(dep_name, ActivityProxy(dep_name, f))
+        self.conf_proxy_factory(dep_name, ActivityProxy(dep_name, f))
 
     def conf_workflow(self, dep_name, f):
-        self.conf_proxy(dep_name, WorkflowProxy(dep_name, f))
+        self.conf_proxy_factory(dep_name, WorkflowProxy(dep_name, f))
 
     def __call__(self, state, input_data, tracer):
         # NB: The final trace can be computed only on the last decision
