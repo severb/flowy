@@ -42,14 +42,18 @@ class SWFWorker(Worker):
             register_task=self.register_task,
             add_remote_reg_callback=self.add_remote_reg_callback)
 
+    def __call__(self, name, version, input_data, decision, *extra_args):
+        return super(SWFWorker, self).__call__(
+            (str(name), str(version)), input_data, decision, *extra_args)
+
 
 class SWFWorkflowWorker(SWFWorker):
     categories = ['swf_workflow']
 
     # Be explicit about what arguments are expected
-    def __call__(self, key, input_data, decision, execution_history):
+    def __call__(self, name, version, input_data, decision, execution_history):
         super(SWFWorkflowWorker, self).__call__(
-            key, input_data, decision,    # needed for worker logic
+            name, version, input_data, decision,  # needed for worker logic
             decision, execution_history)  # extra_args passed to proxies
 
     def break_loop(self):
@@ -89,9 +93,9 @@ class SWFWorkflowWorker(SWFWorker):
             while 1:
                 if self.break_loop():
                     break
-                key, input_data, exec_history, decision = poll_next_decision(
+                name, version, input_data, exec_history, decision = poll_decision(
                     layer1, domain, task_list, identity)
-                self(key, input_data, decision, exec_history)
+                self(name, version, input_data, decision, exec_history)
         except KeyboardInterrupt:
             pass
 
@@ -100,10 +104,10 @@ class SWFActivityWorker(SWFWorker):
     categories = ['swf_activity']
 
     #Be explicit about what arguments are expected
-    def __call__(self, key, input_data, decision):
+    def __call__(self, name, version, input_data, decision):
         # No extra arguments are used
         super(SWFActivityWorker, self).__call__(
-            key, input_data, decision,    # needed for worker logic
+            name, version, input_data, decision,  # needed for worker logic
             decision.heartbeat)           # extra_args
 
     def break_loop(self):
@@ -139,11 +143,8 @@ class SWFActivityWorker(SWFWorker):
                         logger.exception('Error while polling for activities:')
 
                 at = swf_response['activityType']
-                key = (at['name'], at['version'])
-                input_data = swf_response['input']
-                token = swf_response['taskToken']
-                decision = SWFActivityDecision(layer1, token)
-                self((at['name'], at['version']), input_data, decision)
+                decision = SWFActivityDecision(layer1, swf_response['taskToken'])
+                self(at['name'], at['version'], swf_response['input'], decision)
         except KeyboardInterrupt:
             pass
 
@@ -154,7 +155,7 @@ def default_identity():
     return identity[-_IDENTITY_SIZE:]  # keep the most important part
 
 
-def poll_next_decision(layer1, domain, task_list, identity=None):
+def poll_decision(layer1, domain, task_list, identity=None):
     """Poll a decision and create a SWFWorkflowContext instance."""
     first_page = poll_first_page(layer1, domain, task_list, identity)
     token = first_page['taskToken']
@@ -176,12 +177,12 @@ def poll_next_decision(layer1, domain, task_list, identity=None):
         running, timedout, results, errors, order = load_events(all_events)
     except _PaginationError:
         # There's nothing better to do than to retry
-        return poll_next_decision(layer1, task_list, domain, identity)
+        return poll_decision(layer1, task_list, domain, identity)
     execution_history = SWFExecutionHistory(running, timedout, results, errors, order)
     decision = SWFWorkflowDecision(layer1, token, name, version, task_list,
                                    decision_duration, workflow_duration, tags,
                                    child_policy)
-    return (name, version), input_data, execution_history, decision
+    return name, version, input_data, execution_history, decision
 
 
 def poll_first_page(layer1, domain, task_list, identity=None):
