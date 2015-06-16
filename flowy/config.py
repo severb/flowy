@@ -25,9 +25,8 @@ class ActivityConfig(object):
     """
 
     category = None  # The category used with venusian
-    name = None
 
-    def __init__(self, name=None, deserialize_input=None, serialize_result=None):
+    def __init__(self, deserialize_input=None, serialize_result=None):
         """Initialize the activity config object.
 
         The deserialize_input/serialize_result callables are used to
@@ -35,29 +34,26 @@ class ActivityConfig(object):
 
         By default, use a custom JSON Encoder for serialization.
 
-        Any custom serialization should walk the entire data structure, just
-        like JSON does, so that any placeholders inside the data structure will
-        have a chance to raise SuspendTask and any errors raise TaskError.
+        Custom serializers must walk the entire data structure. This ensures
+        that any placeholder or error objects in the data structure will have a
+        chance to raise.
         """
         # Use default methods for the serialization/deserialization instead of
-        # default argument values. This is needed for the local backend and
-        # pickle.
+        # default argument values. This is convenient for the local backend
+        # that uses pickle.
         if deserialize_input is not None:
             self.deserialize_input = deserialize_input
         if serialize_result is not None:
             self.serialize_result = serialize_result
-        if name is not None:
-            self.name = name
 
     @staticmethod
     def deserialize_input(input_data):
         """Deserialize the input data in args, kwargs."""
-        # raise TypeError if deconstructing fails
-        args, kwargs = json.loads(input_data)
+        args, kwargs = json.loads(input_data)  # raise TypeError if deconstructing fails
         if not isinstance(args, list):
-            raise ValueError('Invalid args')
+            raise ValueError('Invalid args: %r' % (args,))
         if not isinstance(kwargs, dict):
-            raise ValueError('Invalid kwargs')
+            raise ValueError('Invalid kwargs: %r' % (kwargs,))
         return args, kwargs
 
     @staticmethod
@@ -65,27 +61,37 @@ class ActivityConfig(object):
         """Serialize and as a side effect, raise any SuspendTask/TaskErrors."""
         return json.dumps(result, cls=JSONProxyEncoder)
 
-    def __call__(self, func):
+    def __call__(self, key=None):
         """Associate an activity implementation (callable) to this config.
 
         The config object can be used as a decorator to bind it to a function
         and make it discoverable later using a scanner (see venusian for more
         details). The decorated function is left untouched.
 
-            @MyConfig(...)
+            my_config = ActivityConfig(...)
+
+            @my_config(key='my_name')
             def x(...):
                 ...
 
             # and later
-            some_object.scan()
+            worker.scan()
         """
+        def conf_deco(func):
 
-        def callback(venusian_scanner, *_):
-            """This gets called by venusian at scan time."""
-            venusian_scanner.registry.register(self, func)
+            def callback(venusian_scanner, *_):
+                """This gets called by venusian at scan time."""
+                self.register(venusian_scanner, key, func)
 
-        venusian.attach(func, callback, category=self.category)
-        return func
+            venusian.attach(func, callback, category=self.category)
+            return func
+
+        return conf_deco
+
+    def register(self, registry, key, func):
+        if key is None:
+            key = func.__name__
+        registry.register_task(key, self.wrap(func))
 
     def wrap(self, func):
         """Wrap the func so that it can be called with serialized input_data.
@@ -102,31 +108,21 @@ class ActivityConfig(object):
             try:
                 args, kwargs = self.deserialize_input(input_data)
             except Exception:
-                raise ValueError('Cannot deserialize input.')
+                logger.exception('Cannot deserialize the input:')
+                raise ValueError('Cannot deserialize the input: %r' % (input_data,))
             result = func(*(tuple(extra_args) + tuple(args)), **kwargs)
             try:
                 return self.serialize_result(result)
             except Exception:
-                raise ValueError('Cannot serialize the result.')
+                logger.exception('Cannot serialize the result:')
+                raise ValueError('Cannot serialize the result: %r' % (result,))
         return wrapper
-
-    def _get_register_key(self, func):
-        return str(self.name if self.name is not None else func.__name__)
-
-    def register(self, registry, func):
-        """Register this config and func with the registry.
-
-        Call the registry registration method for this class type and register
-        the wrapped func with the config's name. If no name was definded,
-        fallback to the func name.
-        """
-        registry._register(self._get_register_key(func), self.wrap(func))
 
 
 class WorkflowConfig(ActivityConfig):
     """A simple/generic workflow configuration object with dependencies."""
 
-    def __init__(self, name=None, deserialize_input=None, serialize_result=None,
+    def __init__(self, deserialize_input=None, serialize_result=None,
                  serialize_restart_input=None, proxy_factory_registry=None):
         """Initialize the workflow config object.
 
@@ -137,7 +133,7 @@ class WorkflowConfig(ActivityConfig):
 
         See ActivityConfig for a note on serialization.
         """
-        super(WorkflowConfig, self).__init__(name, deserialize_input, serialize_result)
+        super(WorkflowConfig, self).__init__(deserialize_input, serialize_result)
         if serialize_restart_input is not None:
             self.serialize_restart_input = serialize_restart_input
         self.proxy_factory_registry = {}
@@ -191,8 +187,8 @@ class WorkflowConfig(ActivityConfig):
             try:
                 args, kwargs = self.deserialize_input(input_data)
             except Exception:
-                logger.exception('Cannot serialize the result.')
-                raise ValueError('Cannot deserialize input.')
+                logger.exception('Cannot deserialize the input:')
+                raise ValueError('Cannot deserialize the input: %r' % (input_data,))
             result = func(*args, **kwargs)
             # Can't use directly isinstance(result, restart_type) because if the
             # result is a single result proxy it will be evaluated. This also
@@ -206,8 +202,8 @@ class WorkflowConfig(ActivityConfig):
             except TaskError:
                 raise  # let task errors go trough
             except Exception:
-                logger.exception('Cannot serialize the result.')
-                raise ValueError('Cannot serialize the result.')
+                logger.exception('Cannot serialize the result:')
+                raise ValueError('Cannot serialize the result: %r' % (result,))
         return wrapper
 
     def __repr__(self):

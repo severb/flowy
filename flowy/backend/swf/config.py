@@ -13,7 +13,7 @@ from flowy.utils import str_or_none
 
 
 class SWFConfigMixin(object):
-    def register_remote(self, swf_layer1, domain, task_factory):
+    def register_remote(self, swf_layer1, domain, name, version):
         """Register the config in Amazon SWF if it's missing.
 
         If the task registration fails because there is another task registered
@@ -25,22 +25,29 @@ class SWFConfigMixin(object):
         SWFRegistrationError. ValueError is raised if any configuration values
         can't be converted to the required types.
         """
-        name = super(SWFConfigMixin, self)._get_register_key(task_factory)
-        registered_as_new = self.try_register_remote(swf_layer1, domain, name)
+        registered_as_new = self.try_register_remote(swf_layer1, domain, name, version)
         if not registered_as_new:
-            self.check_compatible(swf_layer1, domain, name)  # raises if incompatible
+            self.check_compatible(swf_layer1, domain, name, version)  # raises if incompatible
 
-    def _get_register_key(self,  func):
-        name = super(SWFConfigMixin, self)._get_register_key(func)
-        return (name, str(self.version))
+    def register(self, registry, key, func):
+        name, version = key
+        if name is None:
+            name = func.__name__
+        name, version = str(name), str(version)
+        registry.register_task((name, version), self.wrap(func))
+        registry.add_remote_reg_callback(
+            functools.partial(self.register_remote, name=name, version=version))
+
+    def __call__(self, version, name=None):
+        key = (name, version)
+        return super(SWFConfigMixin, self).__call__(key)
 
 
 class SWFActivityConfig(SWFConfigMixin, ActivityConfig):
     """A configuration object for Amazon SWF Activities."""
     category = 'swf_activity'  # venusian category used for this type of confs
 
-    def __init__(self, version,
-                 name=None,
+    def __init__(self,
                  default_task_list=None,
                  default_heartbeat=None,
                  default_schedule_to_close=None,
@@ -58,8 +65,7 @@ class SWFActivityConfig(SWFConfigMixin, ActivityConfig):
         The name is optional. If no name is set, it will default to the
         function name.
         """
-        super(SWFActivityConfig, self).__init__(name, deserialize_input, serialize_result)
-        self.version = version
+        super(SWFActivityConfig, self).__init__(deserialize_input, serialize_result)
         self.default_task_list = default_task_list
         self.default_heartbeat = default_heartbeat
         self.default_schedule_to_close = default_schedule_to_close
@@ -73,9 +79,9 @@ class SWFActivityConfig(SWFConfigMixin, ActivityConfig):
         d_sch_c = timer_encode(self.default_schedule_to_close, 'default_schedule_to_close')
         d_sch_s = timer_encode(self.default_schedule_to_start, 'default_schedule_to_start')
         d_s_c = timer_encode(self.default_start_to_close, 'default_start_to_close')
-        return str(self.version), d_t_l, d_h, d_sch_c, d_sch_s, d_s_c
+        return d_t_l, d_h, d_sch_c, d_sch_s, d_s_c
 
-    def try_register_remote(self, swf_layer1, domain, name):
+    def try_register_remote(self, swf_layer1, domain, name, version):
         """Register the activity remotely.
 
         Returns True if registration is successful and False if another
@@ -85,12 +91,12 @@ class SWFActivityConfig(SWFConfigMixin, ActivityConfig):
         ValueError if any configuration values can't be converted to the
         required types.
         """
-        version, d_t_l, d_h, d_sch_c, d_sch_s, d_s_c = self._cvt_values()
+        d_t_l, d_h, d_sch_c, d_sch_s, d_s_c = self._cvt_values()
         try:
             swf_layer1.register_activity_type(
                 str(domain),
                 name=str(name),
-                version=version,
+                version=str(version),
                 task_list=d_t_l,
                 default_task_heartbeat_timeout=d_h,
                 default_task_schedule_to_close_timeout=d_sch_c,
@@ -105,16 +111,16 @@ class SWFActivityConfig(SWFConfigMixin, ActivityConfig):
             raise SWFRegistrationError(e)
         return True
 
-    def check_compatible(self, swf_layer1, domain, name):
+    def check_compatible(self, swf_layer1, domain, name, version):
         """Check if the remote config has the same defaults as this one.
 
         Raise SWFRegistrationError in case of SWF communication errors or
         incompatibility and ValueError if any configuration values can't be
         converted to the required types.
         """
-        version, d_t_l, d_h, d_sch_c, d_sch_s, d_s_c = self._cvt_values()
+        d_t_l, d_h, d_sch_c, d_sch_s, d_s_c = self._cvt_values()
         try:
-            a_descr = swf_layer1.describe_activity_type(str(domain), str(name), version)
+            a_descr = swf_layer1.describe_activity_type(str(domain), str(name), str(version))
             a_descr = a_descr['configuration']
         except SWFResponseError as e:
             logger.exception('Error while checking activity compatibility:')
@@ -155,7 +161,7 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
 
     category = 'swf_workflow'  # venusian category used for this type of confs
 
-    def __init__(self, version,
+    def __init__(self,
                  name=None,
                  default_task_list=None,
                  default_workflow_duration=None,
@@ -181,7 +187,6 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
         """
         super(SWFWorkflowConfig, self).__init__(
             name, deserialize_input, serialize_result, serialize_restart_input)
-        self.version = version
         self.default_task_list = default_task_list
         self.default_workflow_duration = default_workflow_duration
         self.default_decision_duration = default_decision_duration
@@ -195,9 +200,9 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
         d_w_d = timer_encode(self.default_workflow_duration, 'default_workflow_duration')
         d_d_d = timer_encode(self.default_decision_duration, 'default_decision_duration')
         d_c_p = cp_encode(self.default_child_policy)
-        return str(self.version), d_t_l, d_w_d, d_d_d, d_c_p
+        return d_t_l, d_w_d, d_d_d, d_c_p
 
-    def try_register_remote(self, swf_layer1, domain, name):
+    def try_register_remote(self, swf_layer1, domain, name, version):
         """Register the workflow remotely.
 
         Returns True if registration is successful and False if another
@@ -210,12 +215,12 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
         ValueError if any configuration values can't be converted to the
         required types.
         """
-        version, d_t_l, d_w_d, d_d_d, d_c_p = self._cvt_values()
+        d_t_l, d_w_d, d_d_d, d_c_p = self._cvt_values()
         try:
             swf_layer1.register_workflow_type(
                 str(domain),
                 name=str(name),
-                version=version,
+                version=str(version),
                 task_list=d_t_l,
                 default_execution_start_to_close_timeout=d_w_d,
                 default_task_start_to_close_timeout=d_d_d,
@@ -229,16 +234,16 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
             raise SWFRegistrationError(e)
         return True
 
-    def check_compatible(self, swf_layer1, domain, name):
+    def check_compatible(self, swf_layer1, domain, name, version):
         """Check if the remote config has the same defaults as this one.
 
         Raise SWFRegistrationError in case of SWF communication errors or
         incompatibility and ValueError if any configuration values can't be
         converted to the required types.
         """
-        version, d_t_l, d_w_d, d_d_d, d_c_p = self._cvt_values()
+        d_t_l, d_w_d, d_d_d, d_c_p = self._cvt_values()
         try:
-            w_descr = swf_layer1.describe_workflow_type(str(domain), str(name), version)
+            w_descr = swf_layer1.describe_workflow_type(str(domain), str(name), str(version))
             w_descr = w_descr['configuration']
         except SWFResponseError as e:
             logger.exception('Error while checking workflow compatibility:')

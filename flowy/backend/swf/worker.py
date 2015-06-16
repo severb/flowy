@@ -1,6 +1,7 @@
 import os
 import socket
 
+import venusian
 from boto.exception import SWFResponseError
 from boto.swf.layer1 import Layer1
 
@@ -22,17 +23,24 @@ _IDENTITY_SIZE = 256
 class SWFWorker(Worker):
     def __init__(self, *args, **kwargs):
         super(SWFWorker, self).__init__(*args, **kwargs)
-        self.reg_remote = []
+        self.remote_reg_callbacks = []
 
     def register_remote(self, layer1, domain):
         """Register or check compatibility of all configs in Amazon SWF."""
-        for config, task_factory in self.reg_remote:
+        for remote_reg_callback in self.remote_reg_callbacks:
             # Raises if there are registration problems
-            config.register_remote(layer1, domain, task_factory)
+            remote_reg_callback(layer1, domain)
 
-    def register(self, config, task_factory):
-        super(SWFWorker, self).register(config, task_factory)
-        self.reg_remote.append((config, task_factory))
+    def register(self, config, func, version, name=None):
+        super(SWFWorker, self).register(config, func, (name, version))
+
+    def add_remote_reg_callback(self, callback):
+        self.remote_reg_callbacks.append(callback)
+
+    def make_scanner(self):
+        return venusian.Scanner(
+            register_task=self.register_task,
+            add_remote_reg_callback=self.add_remote_reg_callback)
 
 
 class SWFWorkflowWorker(SWFWorker):

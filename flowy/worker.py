@@ -18,16 +18,16 @@ class Worker(object):
     def __init__(self):
         self.registry = {}
 
-    def register(self, config, func):
-        """Register a task configuration and an implementation.
+    def register(self, config, func, key=None):
+        """Register a config and a function with a key."""
+        config.register(self, key, func)
 
-        Implementations can be executed later by calling Worker instances and
-        passing them a key. The key must have the same value the config.key had
-        at registration time.
+    def register_task(self, key, wrapped_func):
+        """Register a wrapped task and its key.
+
+        This can executed later by calling Worker instances and passing them
+        the same key used for registration.
         """
-        config.register(self, func)
-
-    def _register(self, key, wrapped_func):
         if key in self.registry:
             raise ValueError('Implementation is already registered: %r' % (key, ))
         self.registry[key] = wrapped_func
@@ -47,7 +47,7 @@ class Worker(object):
         try:
             wrapped_func = self.registry[key]
         except KeyError:
-            logger.error("Colud not find implementation for key: %r", key)
+            logger.error("Colud not find implementation for key: %r", (key,))
             return  # Let it timeout
         try:
             serialized_result = wrapped_func(input_data, *extra_args)
@@ -81,10 +81,13 @@ class Worker(object):
         """
         if categories is None:
             categories = self.categories
-        scanner = venusian.Scanner(registry=self)
+        scanner = self.make_scanner()
         if package is None:
             package = caller_package(level=2 + level)
         scanner.scan(package, categories=categories, ignore=ignore)
+
+    def make_scanner(self):
+        return venusian.Scanner(register_task=self.register_task)
 
     def __repr__(self):
         klass = self.__class__.__name__
