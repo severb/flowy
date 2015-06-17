@@ -1,4 +1,4 @@
-from flowy.backend.swf.decision import task_key, timer_key
+from flowy.swf.decision import task_key, timer_key
 
 
 class SWFExecutionHistory(object):

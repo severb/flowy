@@ -3,8 +3,8 @@ import functools
 from boto.exception import SWFResponseError
 from boto.swf.exceptions import SWFTypeAlreadyExistsError
 
-from flowy.backend.swf.proxy import SWFActivityProxyFactory
-from flowy.backend.swf.proxy import SWFWorkflowProxyFactory
+from flowy.swf.proxy import SWFActivityProxyFactory
+from flowy.swf.proxy import SWFWorkflowProxyFactory
 from flowy.config import ActivityConfig
 from flowy.config import WorkflowConfig
 from flowy.utils import DescCounter

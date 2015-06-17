@@ -1,6 +1,6 @@
-from flowy.backend.swf.decision import SWFActivityTaskDecision
-from flowy.backend.swf.decision import SWFWorkflowTaskDecision
-from flowy.backend.swf.history import SWFTaskExecutionHistory
+from flowy.swf.decision import SWFActivityTaskDecision
+from flowy.swf.decision import SWFWorkflowTaskDecision
+from flowy.swf.history import SWFTaskExecutionHistory
 from flowy.proxy import Proxy
 from flowy.utils import DescCounter
 

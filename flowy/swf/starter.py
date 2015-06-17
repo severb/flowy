@@ -3,8 +3,8 @@ import uuid
 from boto.exception import SWFResponseError
 from boto.swf.layer1 import Layer1
 
-from flowy.backend.swf.config import cp_encode
-from flowy.backend.swf.decision import INPUT_SIZE
+from flowy.swf.config import cp_encode
+from flowy.swf.decision import INPUT_SIZE
 from flowy.utils import logger
 from flowy.utils import str_or_none
 from flowy.proxy import Proxy

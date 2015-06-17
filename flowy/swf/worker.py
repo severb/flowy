@@ -5,9 +5,9 @@ import venusian
 from boto.exception import SWFResponseError
 from boto.swf.layer1 import Layer1
 
-from flowy.backend.swf.decision import SWFActivityDecision
-from flowy.backend.swf.decision import SWFWorkflowDecision
-from flowy.backend.swf.history import SWFExecutionHistory
+from flowy.swf.decision import SWFActivityDecision
+from flowy.swf.decision import SWFWorkflowDecision
+from flowy.swf.history import SWFExecutionHistory
 from flowy.utils import logger
 from flowy.utils import setup_default_logger
 from flowy.utils import str_or_none

@@ -11,7 +11,7 @@ from functools import partial
 from threading import Event
 from threading import RLock
 
-from flowy.backend.swf.history import SWFTaskExecutionHistory as TaskHistory
+from flowy.swf.history import SWFTaskExecutionHistory as TaskHistory
 from flowy.serialization import JSONProxyEncoder
 from flowy.proxy import Proxy
 from flowy.tracer import ExecutionTracer

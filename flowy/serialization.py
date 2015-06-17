@@ -17,9 +17,8 @@ __all__ = ['JSONProxyEncoder']
 
 class JSONProxyEncoder(json.JSONEncoder):
     # Patch the hell out of it!
-    # The pure Python implementation uses isinstance() which work on proxy
-    # objects but the C implementation uses a stricter check that won't work on
-    # proxy objects.
+    # The pure Python implementation uses isinstance() which works on proxy
+    # objects but the C implementation uses a stricter check that won't work.
     def encode(self, o):
         if is_result_proxy(o):
             o = o.__wrapped__
@@ -46,7 +45,6 @@ class JSONProxyEncoder(json.JSONEncoder):
                                  _current_indent_level):
             s = super(JSONProxyEncoder, self)
             if is_result_proxy(o):
-                return s._JSONEncoder__encode(o.__wrapped__, markers, builder,
-                                              _current_indent_level)
+                o = o.__wrapped__
             return s._JSONEncoder__encode(o, markers, builder,
                                           _current_indent_level)
