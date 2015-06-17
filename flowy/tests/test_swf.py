@@ -2,7 +2,7 @@ import json
 import pprint
 import unittest
 
-from flowy.backend.swf.history import SWFExecutionHistory
+from flowy.swf.history import SWFExecutionHistory
 
 from flowy.tests.swf_cases import worker
 from flowy.tests.swf_cases import cases
@@ -150,7 +150,7 @@ for i, case in enumerate(cases):
 
     def make_t(case):
         def t(self):
-            key = str(case['name']), str(case['version'])
+            name, version = str(case['name']), str(case['version'])
             input_args = case.get('input_args', [])
             input_kwargs = case.get('input_kwargs', {})
             input_data = json.dumps([input_args, input_kwargs])
@@ -162,7 +162,7 @@ for i, case in enumerate(cases):
             execution_history = SWFExecutionHistory(
                 case.get('running', []), case.get('timedout', []), results,
                 case.get('errors', {}), case.get('order', order), )
-            worker(key, input_data, decision, execution_history)
+            worker(name, version, input_data, decision, execution_history)
             decision.assert_equals(case.get('expected'))
 
         return t
@@ -177,28 +177,28 @@ class TestRegistration(unittest.TestCase):
     def test_already_registered(self):
         from flowy import SWFWorkflowConfig, SWFWorkflowWorker
         worker = SWFWorkflowWorker()
-        w = SWFWorkflowConfig(name='T', version=1)
-        worker.register(w, lambda: 1)
-        self.assertRaises(ValueError, lambda: worker.register(w, lambda: 1))
+        w = SWFWorkflowConfig()
+        worker.register(w, lambda: 1, name='T', version=1)
+        self.assertRaises(ValueError, lambda: worker.register(w, lambda: 1, name='T', version=1))
 
     def test_digit_name(self):
         from flowy import SWFWorkflowConfig
-        w = SWFWorkflowConfig(name='T', version=1)
+        w = SWFWorkflowConfig()
         self.assertRaises(ValueError, lambda: w.conf_proxy_factory('123', None))
 
     def test_keyword_name(self):
         from flowy import SWFWorkflowConfig
-        w = SWFWorkflowConfig(name='T', version=1)
+        w = SWFWorkflowConfig()
         self.assertRaises(ValueError, lambda: w.conf_proxy_factory('for', None))
 
     def test_nonalnum_name(self):
         from flowy import SWFWorkflowConfig
-        w = SWFWorkflowConfig(name='T', version=1)
+        w = SWFWorkflowConfig()
         self.assertRaises(ValueError, lambda: w.conf_proxy_factory('abc!123', None))
 
     def test_duplicate_name(self):
         from flowy import SWFWorkflowConfig
-        w = SWFWorkflowConfig(name='T', version=1)
+        w = SWFWorkflowConfig()
         w.conf_proxy_factory('task', None)
         self.assertRaises(ValueError, lambda: w.conf_proxy_factory('task', None))
 
