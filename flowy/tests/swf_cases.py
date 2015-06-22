@@ -1,78 +1,57 @@
-from flowy import SWFWorkflow
+from flowy import SWFWorkflowConfig
 from flowy import SWFWorkflowWorker
 
 from flowy.tests.workflows import *
 
-NoTaskWorkflow = SWFWorkflow(version=1)
-ClosureWorkflow = SWFWorkflow(version=1)
-ArgumentsWorkflow = SWFWorkflow(version=1)
-DependencyWorkflow = SWFWorkflow(version=1)
-DependencyWorkflow.conf_activity('task', version=1)
-ParallelWorkflow = SWFWorkflow(version=1)
-ParallelWorkflow.conf_activity('task', version=1)
-ParallelWorkflowRL = SWFWorkflow(name='ParallelRL', version=1, rate_limit=3)
-ParallelWorkflowRL.conf_activity('task', version=1)
-UnhandledExceptionWorkflow = SWFWorkflow(version=1)
-SingleActivityWorkflow = SWFWorkflow(version=1)
-SingleActivityWorkflow.conf_activity('task', version=1)
-SAWorkflowCustomTimers = SWFWorkflow(name='SACustomTimers', version=1)
-SAWorkflowCustomTimers.conf_activity('task',
+no_activity_workflow = SWFWorkflowConfig()
+
+task_activity_workflow = SWFWorkflowConfig()
+task_activity_workflow.conf_activity('task', version=1)
+
+task_activity_workflow_rl = SWFWorkflowConfig(rate_limit=3)
+task_activity_workflow_rl.conf_activity('task', version=1)
+
+sa_workflow_custom_timers = SWFWorkflowConfig()
+sa_workflow_custom_timers.conf_activity('task',
                                      version=1,
                                      heartbeat=10,
                                      schedule_to_start=11,
                                      schedule_to_close=12,
                                      start_to_close=13,
                                      task_list='TL', )
-SAWorkflowCustomTimersW = SWFWorkflow(name='SACustomTimersW', version=1)
-SAWorkflowCustomTimersW.conf_workflow('task',
+
+sa_workflow_custom_timers_W = SWFWorkflowConfig()
+sa_workflow_custom_timers_W.conf_workflow('task',
                                       version=1,
                                       decision_duration=10,
                                       workflow_duration=11,
                                       task_list='TL',
                                       child_policy='TERMINATE')
-WaitActivityWorkflow = SWFWorkflow(version=1)
-WaitActivityWorkflow.conf_activity('task', version=1)
-RestartWorkflow = SWFWorkflow(version=1)
-RestartWorkflow.conf_activity('task', version=1)
-PreRunWorkflow = SWFWorkflow(version=1)
-PreRunWorkflow.conf_activity('task', version=1)
-PreRunErrorWorkflow = SWFWorkflow(version=1)
-PreRunWaitWorkflow = SWFWorkflow(version=1)
-PreRunWaitWorkflow.conf_activity('task', version=1)
-DoubleDepWorkflow = SWFWorkflow(version=1)
-DoubleDepWorkflow.conf_activity('task', version=1)
-FirstWorkflow = SWFWorkflow(version=1)
-FirstWorkflow.conf_activity('task', version=1)
-First2Workflow = SWFWorkflow(version=1)
-First2Workflow.conf_activity('task', version=1)
-ParallelReduceWorkflow = SWFWorkflow(version=1)
-ParallelReduceWorkflow.conf_activity('task', version=1)
-ParallelReduceWorkflow.conf_activity('red', version=1)
-ParallelReduceCombinedWorkflow = SWFWorkflow(version=1)
-ParallelReduceCombinedWorkflow.conf_activity('task', version=1)
-ParallelReduceCombinedWorkflow.conf_activity('red', version=1)
+task_red_activities_workflow = SWFWorkflowConfig()
+task_red_activities_workflow.conf_activity('task', version=1)
+task_red_activities_workflow.conf_activity('red', version=1)
 
 worker = SWFWorkflowWorker()
-worker.register(NoTaskWorkflow, NoTask)
-worker.register(ClosureWorkflow, Closure)
-worker.register(ArgumentsWorkflow, Arguments)
-worker.register(DependencyWorkflow, Dependency)
-worker.register(ParallelWorkflow, Parallel)
-worker.register(ParallelWorkflowRL, Parallel)
-worker.register(UnhandledExceptionWorkflow, UnhandledException)
-worker.register(SingleActivityWorkflow, SingleTask)
-worker.register(SAWorkflowCustomTimers, SingleTask)
-worker.register(SAWorkflowCustomTimersW, SingleTask)
-worker.register(WaitActivityWorkflow, WaitTask)
-worker.register(RestartWorkflow, Restart)
-worker.register(PreRunWorkflow, PreRun)
-worker.register(PreRunErrorWorkflow, PreRunError)
-worker.register(PreRunWaitWorkflow, PreRunWait)
-worker.register(DoubleDepWorkflow, DoubleDep)
-worker.register(FirstWorkflow, First)
-worker.register(First2Workflow, First2)
-worker.register(ParallelReduceWorkflow, ParallelReduce)
-worker.register(ParallelReduceCombinedWorkflow, ParallelReduceCombined)
+worker.register(no_activity_workflow, NoTask, version=1)
+worker.register(no_activity_workflow, Closure, version=1)
+worker.register(no_activity_workflow, Arguments, version=1)
+worker.register(task_activity_workflow, Dependency, version=1)
+worker.register(task_activity_workflow, Parallel, version=1)
+worker.register(task_activity_workflow_rl, Parallel, version=1, name='ParallelRL')
+worker.register(no_activity_workflow, UnhandledException, version=1)
+worker.register(task_activity_workflow, SingleTask, version=1)
+worker.register(sa_workflow_custom_timers, SingleTask, version=1, name='SACustomTimers')
+worker.register(sa_workflow_custom_timers_W, SingleTask, version=1, name='SACustomTimersW')
+worker.register(task_activity_workflow, WaitTask, version=1)
+worker.register(task_activity_workflow, Restart, version=1)
+worker.register(task_activity_workflow, PreRun, version=1)
+worker.register(no_activity_workflow, PreRunError, version=1)
+worker.register(task_activity_workflow, PreRunWait, version=1)
+worker.register(task_activity_workflow, DoubleDep, version=1)
+worker.register(task_activity_workflow, First, version=1)
+worker.register(task_activity_workflow, First2, version=1)
+worker.register(task_red_activities_workflow, ParallelReduce, version=1)
+worker.register(task_red_activities_workflow, ParallelReduceCombined, version=1)
 
 cases = [
     {'name': 'NotFound',
@@ -170,28 +149,25 @@ cases = [
                  'name': 'task',
                  'version': 1,
                  'input_args': [0],
-             },
-                          {
-                              'type': 'activity',
-                              'call_key': 'task-1-0',
-                              'name': 'task',
-                              'version': 1,
-                              'input_args': [1],
-                          },
-                          {
-                              'type': 'activity',
-                              'call_key': 'task-2-0',
-                              'name': 'task',
-                              'version': 1,
-                              'input_args': [2],
-                          },
-                          {
-                              'type': 'activity',
-                              'call_key': 'task-3-0',
-                              'name': 'task',
-                              'version': 1,
-                              'input_args': [3],
-                          }, ],
+             }, {
+                 'type': 'activity',
+                 'call_key': 'task-1-0',
+                 'name': 'task',
+                 'version': 1,
+                 'input_args': [1],
+             }, {
+                 'type': 'activity',
+                 'call_key': 'task-2-0',
+                 'name': 'task',
+                 'version': 1,
+                 'input_args': [2],
+             }, {
+                 'type': 'activity',
+                 'call_key': 'task-3-0',
+                 'name': 'task',
+                 'version': 1,
+                 'input_args': [3],
+             }, ],
          },
      }, {
          'name': 'Parallel',
@@ -213,21 +189,19 @@ cases = [
                  'name': 'task',
                  'version': 1,
                  'input_args': [0],
-             },
-                          {
-                              'type': 'activity',
-                              'call_key': 'task-1-0',
-                              'name': 'task',
-                              'version': 1,
-                              'input_args': [1],
-                          },
-                          {
-                              'type': 'activity',
-                              'call_key': 'task-2-0',
-                              'name': 'task',
-                              'version': 1,
-                              'input_args': [2],
-                          }, ],
+             }, {
+                 'type': 'activity',
+                 'call_key': 'task-1-0',
+                 'name': 'task',
+                 'version': 1,
+                 'input_args': [1],
+             }, {
+                 'type': 'activity',
+                 'call_key': 'task-2-0',
+                 'name': 'task',
+                 'version': 1,
+                 'input_args': [2],
+             }, ],
          },
      }, {
          'name': 'UnhandledException',

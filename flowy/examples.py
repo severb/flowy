@@ -6,7 +6,7 @@ import random
 import time
 
 from flowy import finish_order, first, LocalWorkflow, parallel_reduce, wait
-from flowy.base import setup_default_logger
+from flowy.utils import setup_default_logger
 
 
 def activity(x=None, y=None, identity=None, sleep=None, err=None):

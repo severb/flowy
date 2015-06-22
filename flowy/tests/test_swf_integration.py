@@ -18,9 +18,9 @@ from boto.swf.layer1 import Layer1
 from flowy import restart
 from flowy import wait
 from flowy import TaskError
-from flowy import SWFActivity
+from flowy import SWFActivityConfig
 from flowy import SWFActivityWorker
-from flowy import SWFWorkflow
+from flowy import SWFWorkflowConfig
 from flowy import SWFWorkflowStarter
 from flowy import SWFWorkflowWorker
 
@@ -93,15 +93,14 @@ class BaseWorkflow(object):
         raise NotImplementedError
 
 
-a_conf = SWFActivity(version=VERSION,
-                     default_task_list=TASKLIST,
-                     default_schedule_to_start=30,
-                     default_schedule_to_close=60,
-                     default_start_to_close=15,
-                     default_heartbeat=10)
+a_conf = SWFActivityConfig(default_task_list=TASKLIST,
+                           default_schedule_to_start=30,
+                           default_schedule_to_close=60,
+                           default_start_to_close=15,
+                           default_heartbeat=10)
 
 
-@a_conf
+@a_conf(version=VERSION)
 def tactivity(hb, a=None, b=None, sleep=None, heartbeat=False, err=None):
     result = None
     if a is not None and b is not None:
@@ -117,15 +116,14 @@ def tactivity(hb, a=None, b=None, sleep=None, heartbeat=False, err=None):
     return result
 
 
-empty_conf = SWFWorkflow(version=VERSION,
-                         default_task_list=TASKLIST,
-                         default_decision_duration=10,
-                         default_workflow_duration=20,
-                         default_child_policy='TERMINATE', )
+empty_conf = SWFWorkflowConfig(default_task_list=TASKLIST,
+                               default_decision_duration=10,
+                               default_workflow_duration=20,
+                               default_child_policy='TERMINATE', )
 empty_conf.conf_activity('activity', VERSION, 'tactivity')
 
 
-@empty_conf
+@empty_conf(version=VERSION)
 class TWorkflow(object):
     def __init__(self, activity):
         pass
@@ -135,11 +133,10 @@ class TWorkflow(object):
         return tactivity(dummy_heartbeat, a, b, sleep, heartbeat, err)
 
 
-conf_use_activities = SWFWorkflow(version=VERSION,
-                                  default_task_list=TASKLIST,
-                                  default_decision_duration=10,
-                                  default_workflow_duration=60,
-                                  default_child_policy='TERMINATE')
+conf_use_activities = SWFWorkflowConfig(default_task_list=TASKLIST,
+                                        default_decision_duration=10,
+                                        default_workflow_duration=60,
+                                        default_child_policy='TERMINATE')
 conf_use_activities.conf_activity('task', VERSION, 'tactivity')
 conf_use_activities.conf_activity('short_task', VERSION, 'tactivity',
                                   schedule_to_close=1,
@@ -148,12 +145,10 @@ conf_use_activities.conf_activity('delayed_task', VERSION, 'tactivity',
                                   retry=(3, ))
 conf_use_activities.conf_activity('non_existing_task', 1, 'xxx')
 
-conf_use_workflow = SWFWorkflow(version=VERSION,
-                                name='TestWorkflowW',
-                                default_task_list=TASKLIST,
-                                default_decision_duration=10,
-                                default_workflow_duration=60,
-                                default_child_policy='TERMINATE')
+conf_use_workflow = SWFWorkflowConfig(default_task_list=TASKLIST,
+                                      default_decision_duration=10,
+                                      default_workflow_duration=60,
+                                      default_child_policy='TERMINATE')
 conf_use_workflow.conf_workflow('task', VERSION, 'TWorkflow')
 conf_use_workflow.conf_workflow('short_task', VERSION, 'TWorkflow',
                                 workflow_duration=1,
@@ -163,8 +158,8 @@ conf_use_workflow.conf_workflow('delayed_task', VERSION, 'TWorkflow',
 conf_use_workflow.conf_workflow('non_existing_task', 1, 'xxx')
 
 
-@conf_use_activities
-@conf_use_workflow
+@conf_use_activities(version=VERSION)
+@conf_use_workflow(version=VERSION, name='TestWorkflowW')
 class TestWorkflow(BaseWorkflow):
     def __init__(self, task, short_task, delayed_task, non_existing_task):
         self.task = task
@@ -190,7 +185,7 @@ class TestWorkflow(BaseWorkflow):
                 pass
 
 
-@empty_conf
+@empty_conf(version=VERSION)
 class RestartWorkflow(BaseWorkflow):
     def __init__(self, activity):
         pass
@@ -201,7 +196,7 @@ class RestartWorkflow(BaseWorkflow):
         return 1
 
 
-@empty_conf
+@empty_conf(version=VERSION)
 class ExitWorkflow(object):
     def __init__(self, activity):
         exit_event.set()
