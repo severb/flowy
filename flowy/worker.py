@@ -57,7 +57,7 @@ class Worker(object):
             logger.exception('Unhandled task error in task:')
             decision.fail(e)
         except Restart as e:
-            decision.restart(e.message)
+            decision.restart(e.input_data)
         except Exception as e:
             logger.exception('Unhandled exception in task:')
             decision.fail(e)

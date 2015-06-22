@@ -222,3 +222,5 @@ def _workflow_wrapper(self, factory, input_data, *extra_args):
 
 class Restart(Exception):
     """Used to notify that an workflow finished with a restart request."""
+    def __init__(self, input_data):
+        self.input_data = input_data
