@@ -105,6 +105,7 @@ class ActivityConfig(object):
         """
         # We can't pickle closures, thus making multiprocessing ->
         # concurrent.futures -> local backend fail. Instead, use partials.
+        # This won't work on python 2.6, https://bugs.python.org/issue5228
         return functools.partial(_activity_wrapper, self, func)
 
 

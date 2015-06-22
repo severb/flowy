@@ -162,7 +162,6 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
     category = 'swf_workflow'  # venusian category used for this type of confs
 
     def __init__(self,
-                 name=None,
                  default_task_list=None,
                  default_workflow_duration=None,
                  default_decision_duration=None,
@@ -179,14 +178,11 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
         For the default configs, a value of None means that the config is unset
         and must be set explicitly in proxies pointing to this activity.
 
-        The name is optional. If no name is set, it will default to the
-        function name.
-
         The rate_limit is used to limit the number of concurrent tasks. A value
         of None means no rate limit.
         """
         super(SWFWorkflowConfig, self).__init__(
-            name, deserialize_input, serialize_result, serialize_restart_input)
+            deserialize_input, serialize_result, serialize_restart_input)
         self.default_task_list = default_task_list
         self.default_workflow_duration = default_workflow_duration
         self.default_decision_duration = default_decision_duration
