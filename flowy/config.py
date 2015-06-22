@@ -103,27 +103,30 @@ class ActivityConfig(object):
 
         Finally, the func result is serialized.
         """
-        @functools.wraps(func)
-        def wrapper(input_data, *extra_args):
-            try:
-                args, kwargs = self.deserialize_input(input_data)
-            except Exception:
-                logger.exception('Cannot deserialize the input:')
-                raise ValueError('Cannot deserialize the input: %r' % (input_data,))
-            result = func(*(tuple(extra_args) + tuple(args)), **kwargs)
-            try:
-                return self.serialize_result(result)
-            except Exception:
-                logger.exception('Cannot serialize the result:')
-                raise ValueError('Cannot serialize the result: %r' % (result,))
-        return wrapper
+        # We can't pickle closures, thus making multiprocessing ->
+        # concurrent.futures -> local backend fail. Instead, use partials.
+        return functools.partial(_activity_wrapper, self, func)
+
+
+def _activity_wrapper(self, func, input_data, *extra_args):
+    try:
+        args, kwargs = self.deserialize_input(input_data)
+    except Exception:
+        logger.exception('Cannot deserialize the input:')
+        raise ValueError('Cannot deserialize the input: %r' % (input_data,))
+    result = func(*(tuple(extra_args) + tuple(args)), **kwargs)
+    try:
+        return self.serialize_result(result)
+    except Exception:
+        logger.exception('Cannot serialize the result:')
+        raise ValueError('Cannot serialize the result: %r' % (result,))
 
 
 class WorkflowConfig(ActivityConfig):
     """A simple/generic workflow configuration object with dependencies."""
 
     def __init__(self, deserialize_input=None, serialize_result=None,
-                 serialize_restart_input=None, proxy_factory_registry=None):
+                 serialize_restart_input=None):
         """Initialize the workflow config object.
 
         The deserialize_input, serialize_result and serialize_restart_input
@@ -137,8 +140,6 @@ class WorkflowConfig(ActivityConfig):
         if serialize_restart_input is not None:
             self.serialize_restart_input = serialize_restart_input
         self.proxy_factory_registry = {}
-        if proxy_factory_registry is not None:
-            self.proxy_factory_registry = dict(proxy_factory_registry)
 
     def serialize_restart_input(self, *args, **kwargs):
         """Serialize and as a side effect, raise any SuspendTask/TaskErrors."""
@@ -178,33 +179,8 @@ class WorkflowConfig(ActivityConfig):
 
         There are some additional things going on, related to restart handling.
         """
-        @functools.wraps(factory)
-        def wrapper(input_data, *extra_args):
-            wf_kwargs = {}
-            for dep_name, proxy in self.proxy_factory_registry.items():
-                wf_kwargs[dep_name] = proxy(*extra_args)
-            func = factory(**wf_kwargs)
-            try:
-                args, kwargs = self.deserialize_input(input_data)
-            except Exception:
-                logger.exception('Cannot deserialize the input:')
-                raise ValueError('Cannot deserialize the input: %r' % (input_data,))
-            result = func(*args, **kwargs)
-            # Can't use directly isinstance(result, restart_type) because if the
-            # result is a single result proxy it will be evaluated. This also
-            # fixes another issue, on python2 isinstance() swallows any
-            # exception while python3 it doesn't.
-            if not is_result_proxy(result) and isinstance(result, restart_type):
-                r_input_data = self.serialize_restart_input(*result.args, **result.kwargs)
-                raise Restart(r_input_data)
-            try:
-                return self.serialize_result(result)
-            except TaskError:
-                raise  # let task errors go trough
-            except Exception:
-                logger.exception('Cannot serialize the result:')
-                raise ValueError('Cannot serialize the result: %r' % (result,))
-        return wrapper
+        # See Activity.wrap for an explanation why there isn't a closure here.
+        return functools.partial(_workflow_wrapper, self, factory)
 
     def __repr__(self):
         klass = self.__class__.__name__
@@ -214,6 +190,33 @@ class WorkflowConfig(ActivityConfig):
         if more_deps > 0:
             deps = deps[:max_entries] + ['... and %s more' % more_deps]
         return '<%s deps=%s>' % (klass, ','.join(deps))
+
+
+def _workflow_wrapper(self, factory, input_data, *extra_args):
+    wf_kwargs = {}
+    for dep_name, proxy in self.proxy_factory_registry.items():
+        wf_kwargs[dep_name] = proxy(*extra_args)
+    func = factory(**wf_kwargs)
+    try:
+        args, kwargs = self.deserialize_input(input_data)
+    except Exception:
+        logger.exception('Cannot deserialize the input:')
+        raise ValueError('Cannot deserialize the input: %r' % (input_data,))
+    result = func(*args, **kwargs)
+    # Can't use directly isinstance(result, restart_type) because if the
+    # result is a single result proxy it will be evaluated. This also
+    # fixes another issue, on python2 isinstance() swallows any
+    # exception while python3 it doesn't.
+    if not is_result_proxy(result) and isinstance(result, restart_type):
+        r_input_data = self.serialize_restart_input(*result.args, **result.kwargs)
+        raise Restart(r_input_data)
+    try:
+        return self.serialize_result(result)
+    except TaskError:
+        raise  # let task errors go trough
+    except Exception:
+        logger.exception('Cannot serialize the result:')
+        raise ValueError('Cannot serialize the result: %r' % (result,))
 
 
 class Restart(Exception):

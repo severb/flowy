@@ -11,11 +11,11 @@ from flowy.proxy import scan_args
 from flowy.utils import short_repr
 
 
-__all__ = ['TracingBoundProxy', 'ExecutionTracer']
+__all__ = ['TracingProxy', 'ExecutionTracer']
 
 
 # XXX: Trace dependencies even if data structures containing result proxies are used
-class TracingBoundProxy(Proxy):
+class TracingProxy(Proxy):
     """Similar to a BoundProxy but records task dependency.
 
     This works by checking every arguments passed to the proxy for task results
@@ -28,13 +28,13 @@ class TracingBoundProxy(Proxy):
     """
 
     def __init__(self, tracer, trace_name, *args, **kwargs):
-        super(TracingBoundProxy, self).__init__(*args, **kwargs)
+        super(TracingProxy, self).__init__(*args, **kwargs)
         self.trace_name = trace_name
         self.tracer = tracer
 
     def __call__(self, *args, **kwargs):
         node_id = "%s-%s" % (self.trace_name, self.call_number)
-        r = super(TracingBoundProxy, self).__call__(*args, **kwargs)
+        r = super(TracingProxy, self).__call__(*args, **kwargs)
         assert is_result_proxy(r)
         factory = r.__factory__
         factory.node_id = node_id

@@ -16,7 +16,7 @@ from flowy.serialization import JSONProxyEncoder
 from flowy.proxy import Proxy
 from flowy.tracer import ExecutionTracer
 from flowy.result import TaskError
-from flowy.tracer import TracingBoundProxy
+from flowy.tracer import TracingProxy
 from flowy.worker import Worker
 from flowy.config import WorkflowConfig
 
@@ -415,34 +415,17 @@ class WorkflowDecision(object):
             input_data, self.f)
 
 
-Serializer = namedtuple('Serializer', 'serialize_input deserialize_result')
-
-
-def serialize_input(*args, **kwargs):
-    # Force the encoding only to walk the data structure and trigger any
-    # errors or suspend tasks.
-    # On py3 the proxy objects can't be pickled correctly, this fixes that
-    # problem too.
-    return json.dumps((args, kwargs), cls=JSONProxyEncoder)
-
-
-serializer = Serializer(serialize_input, json.loads)
-
-
 class ActivityProxy(object):
     def __init__(self, identity, f):
         self.identity = identity
         self.f = f
 
     def __call__(self, decision, history, tracer):
+        th = TaskHistory(history, self.identity)
+        ad = ActivityDecision(decision, self.identity, self.f)
         if tracer is None:
-            return Proxy(
-                serializer, TaskHistory(history, self.identity),
-                ActivityDecision(decision, self.identity, self.f))
-        return TracingBoundProxy(
-            tracer, self.identity, serializer,
-            TaskHistory(history, self.identity),
-            ActivityDecision(decision, self.identity, self.f))
+            return Proxy(th, ad)
+        return TracingProxy(tracer, self.identity, th, ad)
 
 
 class WorkflowProxy(object):
@@ -451,14 +434,11 @@ class WorkflowProxy(object):
         self.f = f
 
     def __call__(self, decision, history, tracer):
+        th = TaskHistory(history, self.identity)
+        wd = WorkflowDecision(decision, self.identity, self.f)
         if tracer is None:
-            return Proxy(
-                serializer, TaskHistory(history, self.identity),
-                WorkflowDecision(decision, self.identity, self.f))
-        return TracingBoundProxy(
-            tracer, self.identity, serializer,
-            TaskHistory(history, self.identity),
-            WorkflowDecision(decision, self.identity, self.f))
+            return Proxy(th, wd)
+        return TracingProxy(tracer, self.identity, th, wd)
 
 
 class LocalWorkflow(WorkflowConfig):
@@ -471,7 +451,7 @@ class LocalWorkflow(WorkflowConfig):
         self.workflow_workers = workflow_workers
         self.executor = executor
         self.worker = Worker()
-        self.worker.register(self, w)
+        self.worker.register_task('local', self.wrap(w))
 
     def conf_activity(self, dep_name, f):
         self.conf_proxy_factory(dep_name, ActivityProxy(dep_name, f))
@@ -483,7 +463,8 @@ class LocalWorkflow(WorkflowConfig):
         # NB: The final trace can be computed only on the last decision
         # thread/process
         d = Decision()
-        self.worker(self, input_data, d, state, tracer)
+        self.worker('local', input_data, d,
+                    d, state, tracer) # pass to proxies
         if d['type'] in ['finish', 'fail'] and tracer is not None:
             tracer.display()
         return d
@@ -495,7 +476,7 @@ class LocalWorkflow(WorkflowConfig):
             tracer = ExecutionTracer()
         a_executor = self.executor(max_workers=self.activity_workers)
         w_executor = self.executor(max_workers=self.workflow_workers)
-        input_data = serializer.serialize_input(*args, **kwargs)
+        input_data = Proxy.serialize_input(*args, **kwargs)
         wr = RootWorkflowRunner(self, w_executor, a_executor, input_data,
                                 tracer=tracer)
         return wr.run(wait=wait)
