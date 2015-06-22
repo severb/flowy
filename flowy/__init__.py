@@ -1,4 +1,4 @@
-from flowy.backend.local import LocalWorkflow
+from flowy.local.config import LocalWorkflow
 from flowy.swf.config import SWFActivityConfig
 from flowy.swf.config import SWFWorkflowConfig
 from flowy.swf.starter import SWFWorkflowStarter
@@ -11,4 +11,3 @@ from flowy.result import restart
 from flowy.result import TaskError
 from flowy.result import TaskTimedout
 from flowy.result import wait
-
