@@ -9,7 +9,7 @@ except ImportError:
 
 
 __all__ = ['logger', 'sentinel', 'setup_default_logger', 'i_or_args',
-           'short_repr', 'scan_args', 'caller_module']
+           'short_repr', 'caller_module']
 
 
 logger = logging.getLogger(__name__.split('.', 1)[0])
