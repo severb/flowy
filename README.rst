@@ -7,7 +7,7 @@
 .. image:: https://landscape.io/github/severb/flowy/master/landscape.png
     :target: https://landscape.io/github/severb/flowy/master
 
-.. image:: https://img.shields.io/pypi/python/flowy.svg
+.. image:: https://img.shields.io/pypi/v/flowy.svg
    :target: https://pypi.python.org/pypi/flowy/
 
 .. image:: https://img.shields.io/pypi/dm/flowy.svg
