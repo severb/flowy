@@ -1,20 +1,20 @@
-.. image:: https://travis-ci.org/severb/flowy.svg?branch=master
+.. image:: https://img.shields.io/travis/severb/flowy.svg
    :target: https://travis-ci.org/severb/flowy
 
-.. image:: https://coveralls.io/repos/severb/flowy/badge.png?branch=master
+.. image:: https://img.shields.io/coveralls/severb/flowy.svg
    :target: https://coveralls.io/r/severb/flowy?branch=master
 
 .. image:: https://landscape.io/github/severb/flowy/master/landscape.png
     :target: https://landscape.io/github/severb/flowy/master
 
-.. image:: https://pypip.in/version/flowy/badge.png
+.. image:: https://img.shields.io/pypi/python/flowy.svg
    :target: https://pypi.python.org/pypi/flowy/
 
-.. image:: https://pypip.in/download/flowy/badge.png
+.. image:: https://img.shields.io/pypi/dm/flowy.svg
    :target: https://pypi.python.org/pypi/flowy/
 
-.. image:: https://pypip.in/license/flowy/badge.png
+.. image:: https://img.shields.io/pypi/l/flowy.svg
    :target: https://pypi.python.org/pypi/flowy/
 
-.. image:: https://pypip.in/format/flowy/badge.png
+.. image:: https://img.shields.io/pypi/wheel/flowy.svg
    :target: https://pypi.python.org/pypi/flowy/
