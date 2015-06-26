@@ -39,3 +39,4 @@ docs/_build/
 
 # virtualfish connect
 .venv
+**/__pycache__/
