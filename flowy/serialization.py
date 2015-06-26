@@ -18,16 +18,10 @@ __all__ = ['loads', 'dumps']
 
 
 def dumps(value):
-    print 'dumps:', value,
-    r = json.dumps(_tag(value))
-    print r
-    return r
+    return json.dumps(_tag(value))
 
 def loads(value):
-    print 'loads:', value,
-    r = json.loads(value, object_hook=_obj_hook)
-    print r
-    return r
+    return json.loads(value, object_hook=_obj_hook)
 
 
 def _tag(value):
