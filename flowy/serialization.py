@@ -45,7 +45,7 @@ def _tag(value):
 def _obj_hook(obj):
     if len(obj) != 1:
         return obj
-    key, value = obj.items()[0]
+    key, value = next(iter(obj.items()))
     if key == ' u':
         return uuid.UUID(value)
     elif key == ' b':
