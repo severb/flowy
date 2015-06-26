@@ -155,4 +155,4 @@ class ParallelReduceCombined(object):
 
     def __call__(self):
         a = self.task()
-        return parallel_reduce(self.red, (a, 'a', 'b', 'c'))
+        return parallel_reduce(self.red, (a, u'a', u'b', u'c'))

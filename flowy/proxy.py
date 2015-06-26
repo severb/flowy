@@ -8,7 +8,8 @@ from flowy.result import result
 from flowy.result import SuspendTask
 from flowy.result import timeout
 from flowy.result import wait
-from flowy.serialization import JSONProxyEncoder
+from flowy.serialization import dumps
+from flowy.serialization import loads
 from flowy.utils import logger
 
 
@@ -114,11 +115,11 @@ class Proxy(object):
 
     @staticmethod
     def serialize_input(*args, **kwargs):
-        return json.dumps([args, kwargs], cls=JSONProxyEncoder)
+        return dumps([args, kwargs])
 
     @staticmethod
     def deserialize_result(result):
-        return json.loads(result)
+        return loads(result)
 
 
 def scan_args(args, kwargs):

@@ -7,7 +7,8 @@ import venusian
 from flowy.result import is_result_proxy
 from flowy.result import restart_type
 from flowy.result import TaskError
-from flowy.serialization import JSONProxyEncoder
+from flowy.serialization import dumps
+from flowy.serialization import loads
 from flowy.utils import logger
 
 
@@ -49,7 +50,7 @@ class ActivityConfig(object):
     @staticmethod
     def deserialize_input(input_data):
         """Deserialize the input data in args, kwargs."""
-        args, kwargs = json.loads(input_data)  # raise TypeError if deconstructing fails
+        args, kwargs = loads(input_data)  # raise TypeError if deconstructing fails
         if not isinstance(args, list):
             raise ValueError('Invalid args: %r' % (args,))
         if not isinstance(kwargs, dict):
@@ -59,7 +60,7 @@ class ActivityConfig(object):
     @staticmethod
     def serialize_result(result):
         """Serialize and as a side effect, raise any SuspendTask/TaskErrors."""
-        return json.dumps(result, cls=JSONProxyEncoder)
+        return dumps(result)
 
     def __call__(self, key=None):
         """Associate an activity implementation (callable) to this config.
@@ -144,7 +145,7 @@ class WorkflowConfig(ActivityConfig):
 
     def serialize_restart_input(self, *args, **kwargs):
         """Serialize and as a side effect, raise any SuspendTask/TaskErrors."""
-        return json.dumps([args, kwargs], cls=JSONProxyEncoder)
+        return dumps([args, kwargs])
 
     def _check_dep(self, dep_name):
         """Check if dep_name is a unique valid identifier name."""

@@ -169,7 +169,7 @@ class TestWorkflow(BaseWorkflow):
 
     def call(self):
         tasks = [self.task(10),
-                 self.task(err='Error!'),
+                 self.task(err=u'Error!'),
                  self.task(heartbeat=True),
                  self.short_task(sleep=3),
                  self.delayed_task(20),
