@@ -52,6 +52,9 @@ worker.register(task_activity_workflow, First, version=1)
 worker.register(task_activity_workflow, First2, version=1)
 worker.register(task_red_activities_workflow, ParallelReduce, version=1)
 worker.register(task_red_activities_workflow, ParallelReduceCombined, version=1)
+worker.register(task_activity_workflow, ArgsStructErrors, version=1)
+worker.register(task_activity_workflow, ArgsStructErrorsHandled, version=1)
+
 
 cases = [
     {'name': 'NotFound',
@@ -576,5 +579,38 @@ cases = [
                  'input_args': ['c', 'xyz'],
              }, ],
          },
+     }, {
+         'name': 'ArgsStructErrors',
+         'version': 1,
+         'errors': {'task-0-0': 'Err1!', },
+         'expected': {'fail': 'Err!', },
+         'running': ['task-1-0', ],
+     }, {
+         'name': 'ArgsStructErrors',
+         'version': 1,
+         'errors': {
+             'task-0-0': 'Err1!',
+             'task-1-0': 'Err2!',
+          },
+         'order': ['task-1-0', 'task-0-0'],
+         'expected': {'fail': 'Err2!', },
+     }, {
+         'name': 'ArgsStructErrors',
+         'version': 1,
+         'errors': {
+             'task-0-0': 'Err1!',
+             'task-1-0': 'Err2!',
+          },
+         'order': ['task-0-0', 'task-1-0'],
+         'expected': {'fail': 'Err1!', },
+     }, {
+         'name': 'ArgsStructErrorsHandled',
+         'version': 1,
+         'errors': {
+             'task-0-0': 'Err1!',
+             'task-1-0': 'Err2!',
+          },
+         'order': ['task-0-0', 'task-1-0'],
+         'expected': {'finish': 8},
      }
 ]
