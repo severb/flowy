@@ -8,7 +8,7 @@ from flowy.result import result
 from flowy.result import SuspendTask
 from flowy.result import timeout
 from flowy.result import wait
-from flowy.serialization import dumps
+from flowy.serialization import traverse_dumps
 from flowy.serialization import loads
 from flowy.utils import logger
 
@@ -115,7 +115,7 @@ class Proxy(object):
 
     @staticmethod
     def serialize_input(*args, **kwargs):
-        return dumps([args, kwargs])
+        return traverse_dumps([args, kwargs])
 
     @staticmethod
     def deserialize_result(result):

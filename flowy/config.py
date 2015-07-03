@@ -8,6 +8,7 @@ from flowy.result import is_result_proxy
 from flowy.result import restart_type
 from flowy.result import TaskError
 from flowy.serialization import dumps
+from flowy.serialization import traverse_dumps
 from flowy.serialization import loads
 from flowy.utils import logger
 
@@ -59,7 +60,7 @@ class ActivityConfig(object):
 
     @staticmethod
     def serialize_result(result):
-        """Serialize and as a side effect, raise any SuspendTask/TaskErrors."""
+        """Serialize the result."""
         return dumps(result)
 
     def __call__(self, key=None):
@@ -144,8 +145,13 @@ class WorkflowConfig(ActivityConfig):
         self.proxy_factory_registry = {}
 
     def serialize_restart_input(self, *args, **kwargs):
-        """Serialize and as a side effect, raise any SuspendTask/TaskErrors."""
-        return dumps([args, kwargs])
+        """Try to serialize the result, returns any errors or placeholders."""
+        return traverse_dumps([args, kwargs])
+
+    @staticmethod
+    def serialize_result(result):
+        """Try to serialize the result, returns any errors or placeholders."""
+        return traverse_dumps(result)
 
     def _check_dep(self, dep_name):
         """Check if dep_name is a unique valid identifier name."""
