@@ -8,8 +8,9 @@ from flowy.result import result
 from flowy.result import SuspendTask
 from flowy.result import timeout
 from flowy.result import wait
-from flowy.serialization import traverse_dumps
+from flowy.serialization import dumps
 from flowy.serialization import loads
+from flowy.serialization import traverse_data
 from flowy.utils import logger
 
 
@@ -93,14 +94,15 @@ class Proxy(object):
                 order = task_exec_history.order(call_number, retry_number)
                 r = error(err, order)
                 break
-            errors, placeholders = scan_args(args, kwargs)
-            if errors:
-                r = copy_result_proxy(first(errors))
+            traversed_args, err, placeholders = traverse_data([args, kwargs])
+            if err:
+                r = copy_result_proxy(err)
                 break
             if placeholders:
                 break  # result = Placeholder
+            t_args, t_kwargs = traversed_args
             try:
-                input_data = self.serialize_input(*args, **kwargs)
+                input_data = self.serialize_input(*t_args, **t_kwargs)
             except Exception as e:
                 logger.exception('Error while serializing the task input:')
                 self.task_decision.fail(e)
@@ -115,7 +117,7 @@ class Proxy(object):
 
     @staticmethod
     def serialize_input(*args, **kwargs):
-        return traverse_dumps([args, kwargs])
+        return dumps([args, kwargs])
 
     @staticmethod
     def deserialize_result(result):

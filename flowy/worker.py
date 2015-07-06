@@ -51,12 +51,12 @@ class Worker(object):
             return  # Let it timeout
         try:
             serialized_result = wrapped_func(input_data, *extra_args)
-        except SuspendTask:
+        except SuspendTask:  # only from workflows
             decision.flush()
-        except TaskError as e:
+        except TaskError as e:  # only from workflows
             logger.exception('Unhandled task error in task:')
             decision.fail(e)
-        except Restart as e:
+        except Restart as e:  # only from workflows
             decision.restart(e.input_data)
         except Exception as e:
             logger.exception('Unhandled exception in task:')

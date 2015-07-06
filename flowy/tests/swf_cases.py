@@ -583,7 +583,7 @@ cases = [
          'name': 'ArgsStructErrors',
          'version': 1,
          'errors': {'task-0-0': 'Err1!', },
-         'expected': {'fail': 'Err!', },
+         'expected': {'fail': 'Err1!', },
          'running': ['task-1-0', ],
      }, {
          'name': 'ArgsStructErrors',

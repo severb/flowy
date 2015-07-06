@@ -6,10 +6,12 @@ import venusian
 
 from flowy.result import is_result_proxy
 from flowy.result import restart_type
+from flowy.result import SuspendTask
 from flowy.result import TaskError
+from flowy.result import wait
 from flowy.serialization import dumps
-from flowy.serialization import traverse_dumps
 from flowy.serialization import loads
+from flowy.serialization import traverse_data
 from flowy.utils import logger
 
 
@@ -146,12 +148,12 @@ class WorkflowConfig(ActivityConfig):
 
     def serialize_restart_input(self, *args, **kwargs):
         """Try to serialize the result, returns any errors or placeholders."""
-        return traverse_dumps([args, kwargs])
+        return dumps([args, kwargs])
 
     @staticmethod
     def serialize_result(result):
         """Try to serialize the result, returns any errors or placeholders."""
-        return traverse_dumps(result)
+        return dumps(result)
 
     def _check_dep(self, dep_name):
         """Check if dep_name is a unique valid identifier name."""
@@ -216,12 +218,36 @@ def _workflow_wrapper(self, factory, input_data, *extra_args):
     # fixes another issue, on python2 isinstance() swallows any
     # exception while python3 it doesn't.
     if not is_result_proxy(result) and isinstance(result, restart_type):
-        r_input_data = self.serialize_restart_input(*result.args, **result.kwargs)
-        raise Restart(r_input_data)
+        try:
+            traversed_input, error, placeholders =  traverse_data(
+                [result.args, result.kwargs])
+        except Exception:
+            logger.exception('Cannot traverse the restart arguments:')
+            raise ValueError(
+                'Cannot traverse the restart arguments: %r, %r' %
+                result.args, result.kwargs)
+        wait(error)  # raise if not None
+        if placeholders:
+            raise SuspendTask
+        r_args, r_kwargs = traversed_input
+        try:
+            serialized_input = self.serialize_restart_input(*r_args, **r_kwargs)
+        except Exception:
+            logger.exception('Cannot serialize the restart arguments:')
+            raise ValueError(
+                'Cannot serialize the restart arguments: %r, %r' %
+                result.args, result.kwargs)
+        raise Restart(serialized_input)
     try:
-        return self.serialize_result(result)
-    except TaskError:
-        raise  # let task errors go trough
+        traversed_result, error, placeholders = traverse_data(result)
+    except Exception:
+        logger.exception('Cannot traverse the result:')
+        raise ValueError('Cannot traverse the result: %r' % result)
+    wait(error)
+    if placeholders:
+        raise SuspendTask
+    try:
+        return self.serialize_result(traversed_result)
     except Exception:
         logger.exception('Cannot serialize the result:')
         raise ValueError('Cannot serialize the result: %r' % (result,))
