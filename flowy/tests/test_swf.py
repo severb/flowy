@@ -291,29 +291,3 @@ class TestFinishOrder(unittest.TestCase):
         e = error('err!', 3)
         p = placeholder()
         self.assertEquals(first([e, p, r, t]).__factory__, r.__factory__)
-
-
-class TestResultJsonTransport(unittest.TestCase):
-    def _get_uut(self):
-        from flowy.result import result
-        return result, serialize_result, deserialize_result
-
-    def test_int(self):
-        r, s, ds = self._get_uut()
-        self.assertEquals(ds(s(r(10, 0))), 10)
-
-    def test_str(self):
-        r, s, ds = self._get_uut()
-        self.assertEquals(ds(s(r('abc', 0))), 'abc')
-
-    def test_list(self):
-        r, s, ds = self._get_uut()
-        self.assertEquals(ds(s(r(['abc', 2, 3], 0))), ['abc', 2, 3])
-
-    def test_dict(self):
-        r, s, ds = self._get_uut()
-        self.assertEquals(ds(s(r({'a': 1, 'b': 2}, 0))), {'a': 1, 'b': 2})
-
-    def test_combined(self):
-        r, s, ds = self._get_uut()
-        self.assertEquals(ds(s(r([r(1, 0)], 0))), [1])
