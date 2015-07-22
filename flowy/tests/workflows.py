@@ -27,6 +27,30 @@ class Arguments(object):
         return a, b, c, d
 
 
+class ArgsStructErrors(object):
+    def __init__(self, task):
+        self.task = task
+
+    def __call__(self):
+        a = self.task()
+        b = self.task()
+        return self.task([[b], a])
+
+
+class ArgsStructErrorsHandled(object):
+    def __init__(self, task):
+        self.task = task
+
+    def __call__(self):
+        from flowy import TaskError
+        a = self.task()
+        b = self.task()
+        try:
+            return wait(self.task([[b], a]))
+        except TaskError:
+            return 8
+
+
 class Dependency(object):
     def __init__(self, task):
         self.task = task
