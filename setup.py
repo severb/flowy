@@ -6,11 +6,6 @@ from setuptools import setup
 install_requires = ['boto==2.33.0',
                     'venusian>=1.0a8',
                     'lazy_object_proxy==1.0.1']
-try:
-    import concurrent.futures
-except ImportError:
-    install_requires.append('futures')
-
 setup(name='flowy',
       version='0.4.dev0',
       description="A workflow modeling library with gradual concurrency inference.",
@@ -30,6 +25,7 @@ setup(name='flowy',
       extras_require={
           'docs': ['sphinx', 'sphinx_rtd_theme'],
           'trace': ['pygraphviz'],
+          ':python_version == "2.7"': ['futures'],
       },
       entry_points={
           "console_scripts": ["flowy = flowy.__main__:main",
