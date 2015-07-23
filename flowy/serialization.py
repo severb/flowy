@@ -25,7 +25,7 @@ from flowy.operations import first
 __all__ = ['traverse_data', 'dumps', 'loads']
 
 
-def traverse_data(value):
+def traverse_data(value, seen=None):
     """Traveres the data structure and collect errors or placeholders.
 
     Returns a 3-tuple: traversed data, oldest error, placehoders flag
@@ -87,7 +87,24 @@ def traverse_data(value):
     >>> r[0], r[1] is e1, r[2]
     (None, True, False)
 
+    It should fail on recursive data structures
+    >>> a = []
+    >>> a.append(a)
+    >>> traverse_data(a) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError
+
+    >>> a = {}
+    >>> a['x'] = {'y': a}
+    >>> traverse_data(a) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError
+
     """
+    if seen is None:
+        seen = set()
     try:
         wait(value)
     except TaskError:
@@ -100,13 +117,16 @@ def traverse_data(value):
         value = value.__wrapped__
     if isinstance(value, (bytes, uni)):
         return value, None, False
+    if id(value) in seen:
+        raise ValueError('Recursive structure.')
+    seen.add(id(value))
     if isinstance(value, collections.Mapping):
         d = {}
         for k, v in value.items():
-            k_, e, p1 = traverse_data(k)
+            k_, e, p1 = traverse_data(k, seen)
             if e is not None:
                 error = first(error, e) if error is not None else e
-            v_, e, p2 = traverse_data(v)
+            v_, e, p2 = traverse_data(v, seen)
             if e is not None:
                 error = first(error, e) if error is not None else e
             placeholders = placeholders or p1 or p2
@@ -116,7 +136,7 @@ def traverse_data(value):
     if isinstance(value, collections.Iterable):
         l = []
         for x in value:
-            x_, e, p = traverse_data(x)
+            x_, e, p = traverse_data(x, seen)
             if e is not None:
                 error = first(error, e) if error is not None else e
             placeholders = placeholders or p
