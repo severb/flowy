@@ -5,9 +5,11 @@ import webbrowser
 
 from flowy.operations import first
 from flowy.proxy import Proxy
-from flowy.result import is_result_proxy
-from flowy.utils import logger
 from flowy.proxy import scan_args
+from flowy.result import is_result_proxy
+from flowy.serialization import collect_err_and_results
+from flowy.serialization import traverse_data
+from flowy.utils import logger
 from flowy.utils import short_repr
 
 
@@ -34,29 +36,19 @@ class TracingProxy(Proxy):
 
     def __call__(self, *args, **kwargs):
         node_id = "%s-%s" % (self.trace_name, self.call_number)
-        r = super(TracingProxy, self).__call__(*args, **kwargs)
+        ((t_args, t_kwargs), (err, results)) = traverse_data(
+            [args, kwargs], f=collect_err_and_results, initial=(None, None)
+        )
+        r = super(TracingProxy, self).__call__(*t_args, **t_kwargs)
         assert is_result_proxy(r)
         factory = r.__factory__
         factory.node_id = node_id
-        deps = []
-        deps_ids = set()
-        for a in args:
-            if is_result_proxy(a):
-                if id(a) not in deps_ids:
-                    deps.append(a)
-                    deps_ids.add(id(a))
-        for k in kwargs.values():
-            if is_result_proxy(k):
-                if id(k) not in deps_ids:
-                    deps.append(k)
-                    deps_ids.add(id(k))
-        errors, placeholders = scan_args(args, kwargs)
-        if errors:
+        if err is not None:
             self.tracer.schedule_activity(node_id, self.trace_name)
             self.tracer.flush_scheduled()
-            error_factory = first(errors).__factory__
+            error_factory = err.__factory__
             self.tracer.error(node_id, str(error_factory.value))
-        for dep in deps:
+        for dep in results:
             self.tracer.add_dependency(dep.__factory__.node_id, node_id)
         return r
 

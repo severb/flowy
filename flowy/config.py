@@ -219,7 +219,7 @@ def _workflow_wrapper(self, factory, input_data, *extra_args):
     # exception while python3 it doesn't.
     if not is_result_proxy(result) and isinstance(result, restart_type):
         try:
-            traversed_input, error, placeholders =  traverse_data(
+            traversed_input, (error, placeholders) =  traverse_data(
                 [result.args, result.kwargs])
         except Exception:
             logger.exception('Cannot traverse the restart arguments:')
@@ -239,7 +239,7 @@ def _workflow_wrapper(self, factory, input_data, *extra_args):
                 result.args, result.kwargs)
         raise Restart(serialized_input)
     try:
-        traversed_result, error, placeholders = traverse_data(result)
+        traversed_result, (error, placeholders) = traverse_data(result)
     except Exception:
         logger.exception('Cannot traverse the result:')
         raise ValueError('Cannot traverse the result: %r' % result)

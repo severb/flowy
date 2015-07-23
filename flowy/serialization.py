@@ -25,20 +25,48 @@ from flowy.operations import first
 __all__ = ['traverse_data', 'dumps', 'loads']
 
 
-def traverse_data(value, seen=None):
-    """Traveres the data structure and collect errors or placeholders.
+def check_err_and_placeholders(result, value):
+    err, placeholders = result
+    try:
+        wait(value)
+    except TaskError:
+        if err is None:
+            err = value
+        else:
+            err = first(err, value)
+    except SuspendTask:
+        placeholders = True
+    return err, placeholders
 
-    Returns a 3-tuple: traversed data, oldest error, placehoders flag
-    The traversed suffers some changes:
-        * any mappable becomes a dict
-        * any iterator becomes a tuple
+
+def collect_err_and_results(result, value):
+    err, results = result
+    if results is None:
+        results = []
+    if is_result_proxy(value):
+        try:
+            wait(value)
+        except TaskError:
+            if err is None:
+                err = value
+            else:
+                err = first(err, value)
+        except SuspendTask:
+            pass
+        else:
+            results.append(value)
+    return err, results
+
+
+def traverse_data(value, f=check_err_and_placeholders, initial=(None, False), seen=None):
+    """Traverse the data structure.
 
     >>> traverse_data(1)
-    (1, None, False)
-    >>> traverse_data(u'abc') == (u'abc', None, False)
+    (1, (None, False))
+    >>> traverse_data(u'abc') == (u'abc', (None, False))
     True
     >>> traverse_data([1, 2, 3, (4,)])
-    ((1, 2, 3, (4,)), None, False)
+    ((1, 2, 3, (4,)), (None, False))
 
     >>> from flowy.result import error, placeholder, result
     >>> r0 = result(u'r0', 0)
@@ -49,43 +77,49 @@ def traverse_data(value, seen=None):
     >>> ph = placeholder()
 
     Results work just like values
-    >>> traverse_data([r0, r4]) == ((u'r0', 4), None, False)
+    >>> traverse_data(r0) == (u'r0', (None, False))
     True
-    >>> traverse_data({r0: r4}) == ({u'r0': 4}, None, False)
+    >>> traverse_data([r0, r4]) == ((u'r0', 4), (None, False))
     True
-    >>> traverse_data((1, 2, 'a', r0)) == ((1, 2, 'a', u'r0'), None, False)
+    >>> traverse_data({r0: r4}) == ({u'r0': 4}, (None, False))
+    True
+    >>> traverse_data((1, 2, 'a', r0)) == ((1, 2, 'a', u'r0'), (None, False))
     True
 
     Any placeholder should be detected
-    >>> traverse_data(ph)
-    (None, None, True)
-    >>> traverse_data([r0, [r4, [ph]]])
-    (None, None, True)
-    >>> traverse_data({'a': {r0: {'b': ph}}})
-    (None, None, True)
-    >>> traverse_data([[[ph], ph]])
-    (None, None, True)
+    >>> r = traverse_data(ph)
+    >>> r[0] is ph, r[1]
+    (True, (None, True))
+    >>> r, (e, p) = traverse_data([r0, [r4, [ph]]])
+    >>> r[0] == u'r0' and r[1][0] == 4 and r[1][1][0] is ph, e, p
+    (True, None, True)
+    >>> r, (e, p) = traverse_data({'a': {r0: {'b': ph}}})
+    >>> r['a'][u'r0']['b'] is ph, e, p
+    (True, None, True)
+    >>> r, (e, p) = traverse_data([[[ph], ph]])
+    >>> r[0][0][0] is ph and r[0][1] is ph, e, p
+    (True, None, True)
 
     (Oldest) Error has priority over placeholders flag
-    >>> r = traverse_data(e1)
-    >>> r[0], r[1] is e1, r[2]
-    (None, True, False)
+    >>> r, (e, p) = traverse_data(e1)
+    >>> r is e1, e is e1, p
+    (True, True, False)
 
-    >>> r = traverse_data([e3, e1, e2])
-    >>> r[0], r[1] is e1, r[2]
-    (None, True, False)
+    >>> r, (e, p) = traverse_data([e3, e1, e2])
+    >>> (r[0] is e3 and r[1] is e1 and r[2] is e2), e is e1, p
+    (True, True, False)
 
-    >>> r = traverse_data([e3, [e1, [e2]]])
-    >>> r[0], r[1] is e1, r[2]
-    (None, True, False)
+    >>> r, (e, p) = traverse_data([e3, [e1, [e2]]])
+    >>> r[0] is e3 and r[1][0] is e1 and r[1][1][0] is e2, e is e1, p
+    (True, True, False)
 
-    >>> r = traverse_data([r0, e2, r4])
-    >>> r[0], r[1] is e2, r[2]
-    (None, True, False)
+    >>> r, (e, p) = traverse_data([r0, e2, r4, ph])
+    >>> r[0] == u'r0' and r[1] is e2 and r[2] == 4 and r[3] is ph, e is e2, p
+    (True, True, True)
 
-    >>> r = traverse_data({r0: {'xyz': e3, (1, 2, r4): {'abc': e1}}})
-    >>> r[0], r[1] is e1, r[2]
-    (None, True, False)
+    >>> r, (e, p) = traverse_data({r0: {'xyz': e3, (1, 2, r4): {'abc': e1}}})
+    >>> r[u'r0']['xyz'] is e3 and r[u'r0'][(1, 2, 4)]['abc'] is e1, e is e1, p
+    (True, True, False)
 
     It should fail on recursive data structures
     >>> a = []
@@ -102,48 +136,48 @@ def traverse_data(value, seen=None):
         ...
     ValueError
 
+    >>> r, (e, tr) = traverse_data([r4, e1, e2, ph, 'x'], collect_err_and_results, (None, None))
+    >>> r[0] == 4 and r[1] is e1 and r[2] is e2 and r[3] is ph and r[4] == 'x', e is e1, tr
+    (True, True, [4])
+
     """
     if seen is None:
         seen = set()
-    try:
-        wait(value)
-    except TaskError:
-        return None, value, False
-    except SuspendTask:
-        return None, None, True
-    placeholders = False
-    error = None
+
     if is_result_proxy(value):
-        value = value.__wrapped__
+        try:
+            wait(value)
+        except TaskError:
+            return value, f(initial, value)
+        except SuspendTask:
+            return value, f(initial, value)
+
+        return value.__wrapped__, f(initial, value)
+
     if isinstance(value, (bytes, uni)):
-        return value, None, False
-    if id(value) in seen:
-        raise ValueError('Recursive structure.')
-    seen.add(id(value))
+        return value, f(initial, value)
+
+    res = initial
+
+    if isinstance(value, collections.Iterable):
+        if id(value) in seen:
+            raise ValueError('Recursive structure.')
+        seen.add(id(value))
+
     if isinstance(value, collections.Mapping):
         d = {}
         for k, v in value.items():
-            k_, e, p1 = traverse_data(k, seen)
-            if e is not None:
-                error = first(error, e) if error is not None else e
-            v_, e, p2 = traverse_data(v, seen)
-            if e is not None:
-                error = first(error, e) if error is not None else e
-            placeholders = placeholders or p1 or p2
+            k_, res = traverse_data(k, f, res, seen)
+            v_, res = traverse_data(v, f, res, seen)
             d[k_] = v_
-        return (d if error is None and not placeholders else None,
-                error, placeholders)
+        return d, res
     if isinstance(value, collections.Iterable):
         l = []
         for x in value:
-            x_, e, p = traverse_data(x, seen)
-            if e is not None:
-                error = first(error, e) if error is not None else e
-            placeholders = placeholders or p
+            x_, res = traverse_data(x, f, res, seen)
             l.append(x_)
-        return (tuple(l) if error is None and not placeholders else None,
-                error, placeholders)
-    return value, error, placeholders
+        return tuple(l), res
+    return value, f(initial, value)
 
 
 def dumps(value):

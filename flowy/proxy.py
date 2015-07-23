@@ -94,7 +94,7 @@ class Proxy(object):
                 order = task_exec_history.order(call_number, retry_number)
                 r = error(err, order)
                 break
-            traversed_args, err, placeholders = traverse_data([args, kwargs])
+            traversed_args, (err, placeholders) = traverse_data([args, kwargs])
             if err:
                 r = copy_result_proxy(err)
                 break
