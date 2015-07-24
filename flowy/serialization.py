@@ -136,6 +136,12 @@ def traverse_data(value, f=check_err_and_placeholders, initial=(None, False), se
         ...
     ValueError
 
+    >>> import itertools
+    >>> traverse_data(itertools.count()) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError
+
     >>> r, (e, tr) = traverse_data([r4, e1, e2, ph, 'x'], collect_err_and_results, (None, None))
     >>> r[0] == 4 and r[1] is e1 and r[2] is e2 and r[3] is ph and r[4] == 'x', e is e1, tr
     (True, True, [4])
@@ -172,8 +178,15 @@ def traverse_data(value, f=check_err_and_placeholders, initial=(None, False), se
             d[k_] = v_
         return d, res
     if isinstance(value, collections.Iterable):
+        max_size = None
+        if not isinstance(value, collections.Sized):
+            max_size = 2049
         l = []
         for x in value:
+            if max_size is not None:
+                max_size -= 1
+                if max_size == 0:
+                    raise ValueError('Unsized iterable too long.')
             x_, res = traverse_data(x, f, res, seen)
             l.append(x_)
         return tuple(l), res
