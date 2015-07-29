@@ -2,11 +2,12 @@ Next Release
 ------------
 
 * A large and backward-incompatible rewrite.
-* Added a local backend that can run workflows on a single machine using
-  multiple threads or processes. This is very handy for local development and
-  quick prototypes.
-* Added workflow execution tracing and visualization as dot graphs.
-* Task results use transparent proxy objects so that the workflow code can be
-  run as sequential, single threaded, Python code.
-* The workflow configuration is external, the same code can be configured to
-  run on different backends.
+* Added a local engine that can run workflows on a single machine using
+  threads or processes. This is handy for local development and quick
+  prototypes.
+* Added workflow execution tracing and visualization, as dot graphs, for the
+  local engine.
+* Proxy objects replaced task results. This allows a workflow to run as single
+  threaded Python code, without Flowy. It also makes testing more convenient.
+* Moved the workflow configuration outside of the workflow code. This makes it
+  easy to configure the same workflow to run on different engines.
