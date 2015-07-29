@@ -19,16 +19,25 @@ this:
 
    import time
    import flowy
+   from concurrent.futures import ThreadPoolExecutor
+
+   # The default executor uses multiple processes. This means it tries to
+   # pickle the activities to pass them around. This fails for doctests.
+
+   class LocalWorkflow(flowy.LocalWorkflow):
+       def __init__(self, w):
+           super(LocalWorkflow, self).__init__(w, executor=ThreadPoolExecutor)
+
+   flowy.LocalWorkflow = LocalWorkflow
+
 
 .. testcode:: example
 
    def sum_activity(a, b):
-       print '%d + %d' % (a, b)
        time.sleep(1)
        return a + b
 
    def square_activity(n):
-       print '%d ** 2' % n
        time.sleep(1)
        return n ** 2
 
@@ -45,12 +54,12 @@ this:
    w = flowy.LocalWorkflow(ExampleWorkflow)
    w.conf_activity('square', square_activity)
    w.conf_activity('sum', sum_activity)
-   print w.run(2, 10)
+   print(w.run(2, 10))
 
 .. testoutput:: example
    :hide:
 
-   4
+   104
 
 
 Getting Started

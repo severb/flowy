@@ -1,7 +1,4 @@
-try:
-    from concurrent.futures import ProcessPoolExecutor
-except ImportError:
-    from futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 
 from flowy.config import WorkflowConfig
 from flowy.local.decision import Decision

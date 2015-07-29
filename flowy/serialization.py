@@ -126,21 +126,18 @@ def traverse_data(value, f=check_err_and_placeholders, initial=(None, False), se
     >>> a.append(a)
     >>> traverse_data(a) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
-        ...
-    ValueError
+    ValueError:  Recursive structure.
 
     >>> a = {}
     >>> a['x'] = {'y': a}
     >>> traverse_data(a) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
-        ...
-    ValueError
+    ValueError: Recursive structure.
 
     >>> import itertools
     >>> traverse_data(itertools.count()) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
-        ...
-    ValueError
+    ValueError: Unsized iterable too long.
 
     >>> r, (e, tr) = traverse_data([r4, e1, e2, ph, 'x'], collect_err_and_results, (None, None))
     >>> r[0] == 4 and r[1] is e1 and r[2] is e2 and r[3] is ph and r[4] == 'x', e is e1, tr
