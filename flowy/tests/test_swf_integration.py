@@ -14,6 +14,7 @@ import vcr
 import vcr.cassette
 import vcr.errors
 import vcr.serialize
+import vcr.request
 from boto.swf.layer1 import Layer1
 from flowy import restart
 from flowy import wait
@@ -31,6 +32,8 @@ W_CASSETTE = os.path.join(HERE, 'cassettes/w.yml.gz')
 DOMAIN = 'IntegrationTest'
 TASKLIST = 'tl'
 IDENTITY = 'test'
+
+RECORDING = False
 
 exit_event = multiprocessing.Event()
 wf_finished_event = multiprocessing.Event()
@@ -58,6 +61,22 @@ def save_cassette(cassette_path, cassette_dict, serializer):
 
 vcr.cassette.load_cassette = load_cassette
 vcr.cassette.save_cassette = save_cassette
+
+# Patch requests_match in cassette for speed-up
+
+def requests_match(r1, r2, matchers):
+    """Skip logging and speed-up maching."""
+    return all(m(r1, r2) for m in matchers)
+
+vcr.cassette.requests_match = requests_match
+
+# Patch urpalse to speed-up for python3
+try:
+    from functools import lru_cache
+    from urllib.parse import urlparse
+    vcr.request.urlparse = lru_cache(maxsize=None)(urlparse)
+except ImportError:
+    pass
 
 
 # patch uuid4 for consistent keys
@@ -107,7 +126,7 @@ def tactivity(hb, a=None, b=None, sleep=None, heartbeat=False, err=None):
         result = a + b
     elif a is not None:
         result = a * a
-    if sleep is not None:
+    if sleep is not None and RECORDING:
         time.sleep(sleep)
     if heartbeat:
         hb()
@@ -234,8 +253,8 @@ vcr.default_vcr.register_matcher('dict_body', body_as_dict)
 vcr.default_vcr.register_matcher('esc_headers', body_as_dict)
 
 cassette_args = {
-    'match_on': ['method', 'uri', 'host', 'port', 'path', 'query', 'dict_body',
-                 'esc_headers'],
+    'match_on': ['dict_body', 'esc_headers', 'query', 'method', 'uri', 'host',
+                 'port', 'path'],
     'filter_headers': ['authorization', 'x-amz-date', 'content-length',
                        'user-agent']
 }
@@ -288,6 +307,7 @@ def start_workflow_worker():
 
 
 if __name__ == '__main__':
+    RECORDING = True
     try:
         os.remove(A_CASSETTE)
     except:

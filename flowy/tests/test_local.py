@@ -154,7 +154,7 @@ class TestExamples(unittest.TestCase):
     pass
 
 
-TIME_SCALE = 0.3
+TIME_SCALE = 0.1
 
 
 def make_t(wf_name, wf):
