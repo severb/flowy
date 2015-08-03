@@ -91,15 +91,8 @@ def traverse_data(value, f=check_err_and_placeholders, initial=(None, False), se
         isinstance(value, collections.Iterable)
         and isinstance(value, collections.Sized)
     ):
-        max_size = None
-        if not isinstance(value, collections.Sized):
-            max_size = 2049
         l = []
         for x in value:
-            if max_size is not None:
-                max_size -= 1
-                if max_size == 0:
-                    raise ValueError('Unsized iterable too long.')
             x_, res = traverse_data(x, f, res, seen, make_list=make_list)
             l.append(x_)
         if make_list:
