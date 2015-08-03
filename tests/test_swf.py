@@ -6,8 +6,8 @@ from flowy.swf.history import SWFExecutionHistory
 from flowy.proxy import Proxy
 from flowy.config import ActivityConfig
 
-from flowy.tests.swf_cases import worker
-from flowy.tests.swf_cases import cases
+from swf_cases import worker
+from swf_cases import cases
 
 
 serialize_result = ActivityConfig.serialize_result
@@ -215,8 +215,9 @@ class TestRegistration(unittest.TestCase):
 class TestScan(unittest.TestCase):
     def test_scan(self):
         from flowy import SWFWorkflowWorker
+        import workflows
         worker = SWFWorkflowWorker()
-        worker.scan()
+        worker.scan(package=workflows)
         assert ('NoTask', '1') in worker.registry
         assert ('Closure', '1') in worker.registry
         assert ('Named', '1') in worker.registry

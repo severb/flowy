@@ -1,7 +1,7 @@
 from flowy import SWFWorkflowConfig
 from flowy import SWFWorkflowWorker
 
-from flowy.tests.workflows import *
+from workflows import *
 
 no_activity_workflow = SWFWorkflowConfig()
 
