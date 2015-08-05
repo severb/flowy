@@ -104,12 +104,6 @@ def traverse_data(value, f=check_err_and_placeholders, initial=(None, False), se
 
 
 def dumps(value):
-    """Dump a JSON representation of the value, and some extra convenience.
-
-    >>> dumps([1, (2,), {u'x': b'abc'}, u'def'])
-    '[1, [2], {"x": {" b": "YWJj"}}, "def"]'
-
-    """
     return json.dumps(_tag(value))
 
 
@@ -128,13 +122,6 @@ def _tag(value):
 
 
 def loads(value):
-    """Load a JSON value created with dumps:
-
-    >>> (loads(dumps([1, (2,), {u'x': b'abc'}, u'def'])) == 
-    ... [1, [2], {u'x': b'abc'}, u'def'])
-    True
-
-    """
     return json.loads(value, object_hook=_obj_hook)
 
 

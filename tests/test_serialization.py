@@ -16,19 +16,17 @@ def make_traverse_cases():
         (1, (1, (1,))),
         (u'abc', (u'abc', (u'abc',))),
         (r0, (u'r0', (u'r0',))),
-        (ph, (ph, (ph,))),
-        (e1, (e1, (e1,))),
         (
-            [1, [2, 3], (r4, r0), [e1, e2, [e3]], {r4: ['xyz', ph]}],
+            [e1, [e2, e3], (r4, r0), [1, 2, [3]], {r4: ['xyz', ph]}],
             (
-                [1, [2, 3], [r4, r0], [e1, e2, [e3]], {r4: ['xyz', ph]}],
-                (1, 2, 3, r4, r0, e1, e2, e3, r4, 'xyz', ph)
+                [e1, [e2, e3], [4, u'r0'], [1, 2, [3]], {4: ['xyz', ph]}],
+                (e1, e2, e3, 4, u'r0', 1, 2, 3, 4, 'xyz', ph)
             )
         ), (
             [{(r4, tuple()): [r0, (e1, ph), tuple()]}],
             (
-                [{(r4, tuple()): [r0, [e1, ph], []]}],
-                (r4, r0, e1, ph)
+                [{(4, tuple()): [u'r0', [e1, ph], []]}],
+                (4, u'r0', e1, ph)
             )
         )
     )
@@ -36,6 +34,7 @@ def make_traverse_cases():
 
 @pytest.fixture
 def traverse():
+    """The traverse function with a flat tuple reducer."""
     from flowy.serialization import traverse_data
     from functools import partial
     def flat(result, n):
@@ -108,3 +107,18 @@ def test_collect_err_and_results(value, result):
     from flowy.serialization import collect_err_and_results
     r, v = value
     assert collect_err_and_results(r, v) == result
+
+
+
+import uuid
+x_uuid = uuid.uuid4()
+
+@pytest.mark.parametrize(['value', 'result'], (
+    (1, 1),
+    ([], []),
+    (tuple(), []),
+    ([1, (2, 3), {'4': b'5', u'6': x_uuid}], [1, [2, 3], {'4': b'5', u'6': x_uuid}])
+))
+def test_dumps_loads(value, result):
+    from flowy.serialization import dumps, loads
+    assert loads(dumps(value)) == result
