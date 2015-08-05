@@ -11,7 +11,7 @@ before_script:
   - tox --version
 script:
     # pypy on tox is busted
-    - tox -e py27,py34,doctests,docs
+    - tox -e py27,py34,doctests
 after_success:
   - coveralls
 notifications:
