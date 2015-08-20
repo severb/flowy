@@ -11,9 +11,9 @@ stores task results and a history of the entire workflow execution. An open
 source alternative to Amazon SWF is also available as part of the
 `Eucalyptus`_ project.
 
-Modeling workflows with Python code, gives the user great flexibility without
-sacrificing the readability. An toy example workflow, with Flowy, looks like
-this:
+Modeling workflows with Python code is easy and familiar. It also gives the
+user great flexibility without sacrificing the readability. A toy example
+workflow, with Flowy, looks like this:
 
 .. testsetup:: example
 
