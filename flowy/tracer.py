@@ -5,7 +5,6 @@ import webbrowser
 
 from flowy.operations import first
 from flowy.proxy import Proxy
-from flowy.proxy import scan_args
 from flowy.result import is_result_proxy
 from flowy.serialization import collect_err_and_results
 from flowy.serialization import traverse_data
