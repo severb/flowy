@@ -26,8 +26,7 @@ setup(name='flowy',
           ':python_version == "2.7"': ['futures'],
       },
       entry_points={
-          "console_scripts": ["flowy = flowy.__main__:main",
-                              "flowyexamples = flowy.examples:main", ]
+          "console_scripts": ["flowy = flowy.__main__:main"]
       },
       classifiers=["Development Status :: 5 - Production/Stable",
                    "Intended Audience :: Developers",

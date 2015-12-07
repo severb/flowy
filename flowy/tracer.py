@@ -47,7 +47,7 @@ class TracingProxy(Proxy):
             self.tracer.flush_scheduled()
             error_factory = err.__factory__
             self.tracer.error(node_id, str(error_factory.value))
-        for dep in results:
+        for dep in results or []:
             self.tracer.add_dependency(dep.__factory__.node_id, node_id)
         return r
 
