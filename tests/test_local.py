@@ -4,8 +4,8 @@ import unittest
 from functools import partial
 
 from flowy import LocalWorkflow
-from flowy import parallel_reduce
 from flowy import TaskError
+from flowy import parallel_reduce
 from flowy import restart
 
 try:
@@ -184,7 +184,7 @@ def make_t(wf_name, wf):
     return test
 
 
-import flowy.examples as examples
+import examples
 for wf_name, wf in vars(examples).items():
     if inspect.isclass(wf) and wf.__module__ == 'flowy.examples':
         setattr(TestExamples, 'test_%s' % wf_name, make_t(wf_name, wf))

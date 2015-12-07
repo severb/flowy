@@ -1,9 +1,9 @@
 import copy
-import json
 from functools import partial
 from threading import Event
 from threading import RLock
 
+from flowy import serialization
 from flowy.result import TaskError
 
 
@@ -99,7 +99,7 @@ class WorkflowRunner(object):
         self.trace_flush()
         for a in result.get('activities', []):
             try:
-                args, kwargs = json.loads(a['input_data'])
+                args, kwargs = serialization.loads(a['input_data'])
                 f = self.activity_executor.submit(a['f'], *args, **kwargs)
                 f.add_done_callback(partial(
                     self.complete_activity_and_reschedule_decision, a['id']))
@@ -126,7 +126,7 @@ class WorkflowRunner(object):
                 self.state.set_error(task_id, str(e))
                 self.trace_error(task_id, e)
             else:
-                self.state.set_result(task_id, json.dumps(r))
+                self.state.set_result(task_id, serialization.dumps(r))
                 self.trace_result(task_id, r)
             self.update_history_or_reschedule()
 
@@ -139,7 +139,7 @@ class WorkflowRunner(object):
     def complete_subwf_and_reschedule_decision(self, task_id, result):
         with self.lock:
             self.state.set_result(task_id, result)
-            self.trace_result(task_id, json.loads(result))
+            self.trace_result(task_id, serialization.loads(result))
             self.update_history_or_reschedule()
 
     def update_history_or_reschedule(self):
@@ -189,7 +189,7 @@ class RootWorkflowRunner(WorkflowRunner):
         self.stop_running(TaskError(result['reason']))
 
     def handle_finish(self, result):
-        self.stop_running(json.loads(result['result']))
+        self.stop_running(serialization.loads(result['result']))
 
     def fail(self, reason):
         self.stop_running(TaskError(str(reason)))
@@ -316,5 +316,3 @@ class State(object):
             order = ' '.join(map(str, self.finish_order))
         return "<RUNNING: %d, RESULTS: %d, ERRORS: %d, ORDER: %s>" % (
             len(self.running), len(self.results), len(self.errors), order)
-
-
