@@ -4,11 +4,11 @@ from setuptools import find_packages
 from setuptools import setup
 
 install_requires = ['boto==2.33.0',
-                    'venusian>=1.0a8',
-                    'lazy_object_proxy==1.0.1']
+                    'venusian>=1.0',
+                    'lazy_object_proxy==1.2.2']
 setup(name='flowy',
       version='0.4.0',
-      description="A workflow modeling ond execution library with gradual concurrency inference.",
+      description="A workflow modeling and execution library with gradual concurrency inference.",
       long_description=open('README.rst').read(),
       keywords='distributed workflow modeling SWF',
       author='Sever Banesiu',
