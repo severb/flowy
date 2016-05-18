@@ -7,7 +7,7 @@ install_requires = ['boto==2.33.0',
                     'venusian>=1.0a8',
                     'lazy_object_proxy==1.0.1']
 setup(name='flowy',
-      version='0.4.dev0',
+      version='0.4.0',
       description="A workflow modeling ond execution library with gradual concurrency inference.",
       long_description=open('README.rst').read(),
       keywords='distributed workflow modeling SWF',
