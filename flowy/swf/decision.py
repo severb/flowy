@@ -2,6 +2,7 @@ import uuid
 
 from boto.exception import SWFResponseError
 from boto.swf.layer1_decisions import Layer1Decisions
+from botocore.exceptions import ClientError
 
 from flowy.utils import logger
 
@@ -11,22 +12,38 @@ REASON_SIZE = 256
 
 
 class SWFActivityDecision(object):
-    def __init__(self, layer1, token):
-        self.layer1 = layer1
+    def __init__(self, swf_client, token):
+        """SWF activity type decision.
+
+        :type swf_client: :class:`flowy.swf.client.SWFClient`
+        :param swf_client: an instanced SWF client
+        :param token:
+        """
+        self.swf_client = swf_client
         self.token = token
 
-    def heartbeat(self):
+    def heartbeat(self, details=None):
+        """Used to report that the activity is still making progress. Details
+        about progress can be passed.
+
+        :type details: str
+        :param details: details about the progress made, None for not setting it
+
+        :rtype: bool
+        :returns:
+        """
         try:
-            self.layer1.record_activity_task_heartbeat(task_token=str(self.token))
-        except SWFResponseError:
+            self.swf_client.record_activity_task_heartbeat(self.token,
+                                                           details=details)
+        except ClientError:
             logger.exception('Error while sending the heartbeat:')
             return False
         return True
 
     def fail(self, reason):
         try:
-            self.layer1.respond_activity_task_failed(
-                reason=str(reason)[:256], task_token=str(self.token))
+            self.swf_client.respond_activity_task_failed(self.token,
+                                                         reason=reason)
         except SWFResponseError:
             logger.exception('Error while failing the activity:')
             return False
@@ -43,9 +60,9 @@ class SWFActivityDecision(object):
         if len(result) > RESULT_SIZE:
             self.fail("Result too large: %s/%s" % (len(result), RESULT_SIZE))
         try:
-            self.layer1.respond_activity_task_completed(
-                result=result, task_token=str(self.token))
-        except SWFResponseError:
+            self.swf_client.respond_activity_task_completed(self.token,
+                                                            result=result)
+        except ClientError:
             logger.exception('Error while finishing the activity:')
             return False
         return True

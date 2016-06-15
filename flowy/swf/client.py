@@ -131,6 +131,46 @@ class SWFClient(object):
         response = self.client.poll_for_activity_task(**kwargs)
         return response
 
+    def record_activity_task_heartbeat(self, task_token, details=None):
+        """Wrapper for `boto3.client('swf').record_activity_task_heartbeat`.
+
+        :raises: `botocore.exceptions.ClientError`
+        """
+        kwargs = {
+            'taskToken': str_or_none(task_token),
+            'details': str_or_none(details),
+        }
+        normalize_data(kwargs)
+        response = self.client.record_activity_task_heartbeat(**kwargs)
+        return response
+
+    def respond_activity_task_failed(self, task_token, reason=None, details=None):
+        """Wrapper for `boto3.client('swf').respond_activity_task_failed`.
+
+        :raises: `botocore.exceptions.ClientError`
+        """
+        kwargs = {
+            'taskToken': str_or_none(task_token),
+            'reason': str_or_none(reason),
+            'details': str_or_none(details)
+        }
+        normalize_data(kwargs)
+        response = self.client.respond_activity_task_failed(**kwargs)
+        return response
+
+    def respond_activity_task_completed(self, task_token, result=None):
+        """Wrapper for `boto3.client('swf').respond_activity_task_completed`.
+
+        :raises: `botocore.exceptions.ClientError`
+        """
+        kwargs = {
+            'taskToken': str_or_none(task_token),
+            'result': str_or_none(result)
+        }
+        normalize_data(kwargs)
+        response = self.client.respond_activity_task_completed(**kwargs)
+        return response
+
 
 def normalize_data(d):
     """Recursively goes through method kwargs and removes default values. This
