@@ -2,10 +2,10 @@ import boto3
 
 from flowy.utils import str_or_none
 
-__all__ = ['CHILD_POLICY', 'DURATION', 'SWFClient']
+__all__ = ['CHILD_POLICY', 'DURATION', 'IDENTITY_SIZE', 'SWFClient']
 
 
-# poor man's enums
+# poor man's enums and constants
 class CHILD_POLICY:
     TERMINATE = 'TERMINATE'
     REQUEST_CANCEL = 'REQUEST_CANCEL'
@@ -21,45 +21,61 @@ class DURATION:
     ALL = ('NONE', 31622400)
 
 
+IDENTITY_SIZE = 256
+
+
 class SWFClient(object):
-    """A thin wrapper around `boto3.client` for sanitizing parameters and maybe
-    error handling. This will be interfacing in the `boto.swf` for communicating
-    to AWS SWF. Custom clients may be used, interfacing this class.
+    """A thin wrapper around :func:`boto3.client('swf')` for sanitizing
+    parameters and maybe error handling. This will be interfacing in the
+    :mod:`flowy.swf` for communicating to AWS SWF. Custom clients may be used,
+    interfacing this class.
     """
 
-    def __init__(self, swf_client=None, config=None):
+    def __init__(self, client=None, config=None, kwargs=None):
         """Setup initial swf client. Can inject an initialized SWF client,
         ignoring the additional config or config can be passed to create the
         SWF client.
 
-        :type swf_client: botocore.client.BaseClient
-        :param swf_client: a low-level service client for swf.
-                            See :py:meth:`boto3.session.Session.client`
+        Additional keyword arguments can be passed to initialise the low level
+        client. The first arg (service_name) is by default 'swf' and kwarg
+        config from :param:`config`; this can be overwritten.
+        See :py:meth:`boto3.session.Session.client`.
+
+        :type client: botocore.client.BaseClient
+        :param client: a low-level service client for swf.
+            See :py:meth:`boto3.session.Session.client`
 
         :type config: botocore.client.Config
         :param config: custom config to instantiate the 'swf' client
+
+        :type kwargs: dict
+        :param kwargs: kwargs for passing to client initialisation. The config
+            param can be overwritten here
         """
-        self.client = swf_client or boto3.client('swf', config=config)
+        kwargs = kwargs if isinstance(kwargs, dict) else {}
+        kwargs.setdefault('config', config)
+
+        self.client = client or boto3.client('swf', **kwargs)
 
     def start_workflow_execution(self, domain, wid, name, version,
-                                 input=None, task_priority=None, task_list=None,
+                                 input=None, priority=None, task_list=None,
                                  execution_start_to_close_timeout=None,
                                  task_start_to_close_timeout=None,
                                  child_policy=None, tags=None,
                                  lambda_role=None):
-        """Wrapper for `boto3.client('swf').start_workflow_execution()`.
+        """Wrapper for `boto3.client('swf').start_workflow_execution`.
 
         :raises: `botocore.exceptions.ClientError`
         """
         kwargs = {
-            'domain': str(domain),
-            'workflowId': str(wid),
+            'domain': str_or_none(domain),
+            'workflowId': str_or_none(wid),
             'workflowType': {
-                'name': str(name),
-                'version': str(version)
+                'name': str_or_none(name),
+                'version': str_or_none(version)
             },
             'input': str_or_none(input),
-            'taskPriority': str_or_none(task_priority),
+            'taskPriority': str_or_none(priority),
             'taskList': {
                 'name': str_or_none(task_list)
             },
@@ -71,6 +87,48 @@ class SWFClient(object):
         }
         normalize_data(kwargs)
         response = self.client.start_workflow_execution(**kwargs)
+        return response
+
+    def poll_for_decision_task(self, domain, task_list, identity=None,
+                               next_page_token=None, max_page_size=1000,
+                               reverse_order=False):
+        """Wrapper for `boto3.client('swf').poll_for_decision_task`.
+
+        :raises: `botocore.exceptions.ClientError`, AssertionError
+        """
+        assert max_page_size <= 1000, 'Page size greater than 1000.'
+        identity = str(identity)[:IDENTITY_SIZE] if identity else identity
+
+        kwargs = {
+            'domain': str_or_none(domain),
+            'taskList': {
+                'name': str_or_none(task_list)
+            },
+            'identity': identity,
+            'nextPageToken': str_or_none(next_page_token),
+            'maximumPageSize': max_page_size,
+            'reverseOrder': reverse_order
+        }
+        normalize_data(kwargs)
+        response = self.client.poll_for_decision_task(**kwargs)
+        return response
+
+    def poll_for_activity_task(self, domain, task_list, identity=None):
+        """Wrapper for `boto3.client('swf').poll_for_activity_task`.
+
+        :raises: `botocore.exceptions.ClientError`
+        """
+        identity = str(identity)[:IDENTITY_SIZE] if identity else identity
+
+        kwargs = {
+            'domain': str_or_none(domain),
+            'taskList': {
+                'name': str_or_none(task_list),
+            },
+            'identity': identity,
+        }
+        normalize_data(kwargs)
+        response = self.client.poll_for_activity_task(**kwargs)
         return response
 
 
@@ -131,7 +189,7 @@ def duration_encode(val, name, limit=None):
 
 
 def tags_encode(tags):
-    """Encodes the list of tags. Maximum 5 tags allowed.
+    """Encodes the list of tags. Trimmed to maximum 5 tags.
 
     :param tags: the list of tags; max 5 will be taken
     :rtype: list of str

@@ -6,7 +6,6 @@ import multiprocessing
 import time
 import json
 import uuid
-import random
 import functools
 import gzip
 
@@ -15,12 +14,12 @@ import vcr.cassette
 import vcr.errors
 import vcr.serialize
 import vcr.request
-from boto.swf.layer1 import Layer1
 from flowy import restart
 from flowy import wait
 from flowy import TaskError
 from flowy import SWFActivityConfig
 from flowy import SWFActivityWorker
+from flowy import SWFClient
 from flowy import SWFWorkflowConfig
 from flowy import SWFWorkflowStarter
 from flowy import SWFWorkflowWorker
@@ -264,10 +263,11 @@ def test_activity_integration():
     with vcr.use_cassette(A_CASSETTE,
                           record_mode='none', **cassette_args) as cass:
         try:
-            l1 = Layer1(aws_access_key_id='x', aws_secret_access_key='x')
+            cl = SWFClient(kwargs={'aws_access_key_id': 'x',
+                                   'aws_secret_access_key': 'x'})
             aworker.run_forever(DOMAIN, TASKLIST,
                                 identity=IDENTITY,
-                                layer1=l1,
+                                swf_client=cl,
                                 setup_log=False)
         except vcr.errors.CannotOverwriteExistingCassetteException:
             pass
@@ -278,10 +278,11 @@ def test_workflow_integration():
     with vcr.use_cassette(W_CASSETTE,
                           record_mode='none', **cassette_args) as cass:
         try:
-            l1 = Layer1(aws_access_key_id='x', aws_secret_access_key='x')
+            cl = SWFClient(kwargs={'aws_access_key_id': 'x',
+                                   'aws_secret_access_key': 'x'})
             wworker.run_forever(DOMAIN, TASKLIST,
                                 identity=IDENTITY,
-                                layer1=l1,
+                                swf_client=cl,
                                 setup_log=False)
         except vcr.errors.CannotOverwriteExistingCassetteException:
             pass

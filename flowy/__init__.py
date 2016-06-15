@@ -1,6 +1,7 @@
 from flowy.local.config import LocalWorkflow
 from flowy.swf.config import SWFActivityConfig
 from flowy.swf.config import SWFWorkflowConfig
+from flowy.swf.client import SWFClient
 from flowy.swf.starter import SWFWorkflowStarter
 from flowy.swf.worker import SWFActivityWorker
 from flowy.swf.worker import SWFWorkflowWorker

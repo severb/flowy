@@ -41,7 +41,7 @@ def SWFWorkflowStarter(domain, name, version,
         try:
             r = swf.start_workflow_execution(
                 domain, l_wid, name, version, input=input_data,
-                task_priority=priority, task_list=task_list,
+                priority=priority, task_list=task_list,
                 execution_start_to_close_timeout=task_duration,
                 task_start_to_close_timeout=workflow_duration,
                 child_policy=child_policy, tags=tags, lambda_role=lambda_role)
