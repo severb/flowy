@@ -1,6 +1,5 @@
 import uuid
 
-from boto.exception import SWFResponseError
 from boto.swf.layer1_decisions import Layer1Decisions
 from botocore.exceptions import ClientError
 
@@ -17,7 +16,7 @@ class SWFActivityDecision(object):
 
         :type swf_client: :class:`flowy.swf.client.SWFClient`
         :param swf_client: an instanced SWF client
-        :param token:
+        :param token: the token identifying the ActivityTask worker
         """
         self.swf_client = swf_client
         self.token = token
@@ -30,7 +29,7 @@ class SWFActivityDecision(object):
         :param details: details about the progress made, None for not setting it
 
         :rtype: bool
-        :returns:
+        :returns: did someone heard my heartbeat?
         """
         try:
             self.swf_client.record_activity_task_heartbeat(self.token,
@@ -44,7 +43,7 @@ class SWFActivityDecision(object):
         try:
             self.swf_client.respond_activity_task_failed(self.token,
                                                          reason=reason)
-        except SWFResponseError:
+        except ClientError:
             logger.exception('Error while failing the activity:')
             return False
         return True
@@ -69,9 +68,22 @@ class SWFActivityDecision(object):
 
 
 class SWFWorkflowDecision(object):
-    def __init__(self, layer1, token, name, version, task_list,
+    def __init__(self, swf_client, token, name, version, task_list,
                  decision_duration, workflow_duration, tags, child_policy):
-        self.layer1 = layer1
+        """SWF workflow type decision.
+
+        :type swf_client: :class:`flowy.swf.client.SWFClient`
+        :param swf_client: an instanced SWF client
+        :param token: the token identifying the ActivityTask worker
+        :param name: name of the workflow
+        :param version: version of the workflow
+        :param task_list: the task list from which to poll for events
+        :param decision_duration: exec duration in seconds of a decision
+        :param workflow_duration: exec duration in seconds of workflow
+        :param tags: list of str tags, searchable later
+        :param child_policy: policy to use for the child workflow executions
+        """
+        self.swf_client = swf_client
         self.token = token
         self.task_list = task_list
         self.decision_duration = decision_duration
@@ -97,9 +109,9 @@ class SWFWorkflowDecision(object):
             return
         self.closed = True
         try:
-            self.layer1.respond_decision_task_completed(
-                task_token=str(self.token), decisions=self.decisions._data)
-        except SWFResponseError:
+            self.swf_client.respond_decision_task_completed(
+                self.token, decisions=self.decisions._data)
+        except ClientError:
             logger.exception('Error while sending the decisions:')
             # ignore the error and let the decision timeout and retry
 

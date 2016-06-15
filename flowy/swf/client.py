@@ -171,6 +171,21 @@ class SWFClient(object):
         response = self.client.respond_activity_task_completed(**kwargs)
         return response
 
+    def respond_decision_task_completed(self, task_token, decisions=None,
+                                        exec_context=None):
+        """Wrapper for `boto3.client('swf').respond_decision_task_completed`.
+
+        :raises: `botocore.exceptions.ClientError`
+        """
+        kwargs = {
+            'taskToken': str_or_none(task_token),
+            'decisions': decisions or [],
+            'executionContext': str_or_none(exec_context)
+        }
+        normalize_data(kwargs)
+        response = self.client.respond_decision_task_completed(**kwargs)
+        return response
+
 
 def normalize_data(d):
     """Recursively goes through method kwargs and removes default values. This
