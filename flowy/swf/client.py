@@ -57,6 +57,102 @@ class SWFClient(object):
 
         self.client = client or boto3.client('swf', **kwargs)
 
+    def register_activity_type(self, domain, name, version, desc=None,
+                               default_task_list=None,
+                               default_priority=None,
+                               default_heartbeat_timeout=None,
+                               default_exec_timeout=None,
+                               default_start_timeout=None,
+                               default_close_timeout=None):
+        """Wrapper for `boto3.client('swf').register_activity_type`.
+
+        :raises: `botocore.exceptions.ClientError`
+        """
+        kwargs = {
+            'domain': str_or_none(domain),
+            'name': str_or_none(name),
+            'version': str_or_none(version),
+            'description': str_or_none(desc),
+            'defaultTaskList': {
+                'name': str_or_none(default_task_list)
+            },
+            'defaultTaskPriority': str_or_none(default_priority),
+            'defaultTaskHeartbeatTimeout': duration_encode(default_heartbeat_timeout,
+                                                           'default_heartbeat_timeout'),
+            'defaultTaskStartToCloseTimeout': duration_encode(default_exec_timeout,
+                                                              'default_exec_timeout'),
+            'defaultTaskScheduleToStartTimeout': duration_encode(default_start_timeout,
+                                                                 'default_start_timeout'),
+            'defaultTaskScheduleToCloseTimeout': duration_encode(default_close_timeout,
+                                                                 'default_close_timeout')
+        }
+        normalize_data(kwargs)
+        response = self.client.register_activity_type(**kwargs)
+        return response
+
+    def register_workflow_type(self, domain, name, version, desc=None,
+                               default_task_list=None,
+                               default_priority=None,
+                               default_task_timeout=None,
+                               default_exec_timeout=None,
+                               default_child_policy=None,
+                               default_lambda_role=None):
+        """Wrapper for `boto3.client('swf').register_workflow_type`.
+
+        :raises: `botocore.exceptions.ClientError`
+        """
+        kwargs = {
+            'domain': str_or_none(domain),
+            'name': str_or_none(name),
+            'version': str_or_none(version),
+            'description': str_or_none(desc),
+            'defaultTaskList': {
+                'name': str_or_none(default_task_list)
+            },
+            'defaultTaskPriority': str_or_none(default_priority),
+            'defaultTaskStartToCloseTimeout': duration_encode(default_task_timeout,
+                                                              'default_task_timeout'),
+            'defaultExecutionStartToCloseTimeout': duration_encode(default_exec_timeout,
+                                                                   'default_exec_timeout'),
+            'defaultChildPolicy': cp_encode(default_child_policy),
+            'defaultLambdaRole': str_or_none(default_lambda_role)
+        }
+        normalize_data(kwargs)
+        response = self.client.register_workflow_type(**kwargs)
+        return response
+
+    def describe_activity_type(self, domain, name, version):
+        """Wrapper for `boto3.client('swf').describe_activity_type`.
+
+        :raises: `botocore.exceptions.ClientError`
+        """
+        kwargs = {
+            'domain': str_or_none(domain),
+            'activityType': {
+                'name': str_or_none(name),
+                'version': str_or_none(version)
+            }
+        }
+        normalize_data(kwargs)
+        response = self.client.describe_activity_type(**kwargs)
+        return response
+
+    def describe_workflow_type(self, domain, name, version):
+        """Wrapper for `boto3.client('swf').describe_workflow_type`.
+
+        :raises: `botocore.exceptions.ClientError`
+        """
+        kwargs = {
+            'domain': str_or_none(domain),
+            'workflowType': {
+                'name': str_or_none(name),
+                'version': str_or_none(version)
+            }
+        }
+        normalize_data(kwargs)
+        response = self.client.describe_workflow_type(**kwargs)
+        return response
+
     def start_workflow_execution(self, domain, wid, name, version,
                                  input=None, priority=None, task_list=None,
                                  execution_start_to_close_timeout=None,
