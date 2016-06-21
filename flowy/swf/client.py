@@ -1,4 +1,5 @@
 import boto3
+from botocore.client import Config
 
 from flowy.utils import str_or_none
 
@@ -36,23 +37,24 @@ class SWFClient(object):
         ignoring the additional config or config can be passed to create the
         SWF client.
 
-        Additional keyword arguments can be passed to initialise the low level
-        client. The first arg (service_name) is by default 'swf' and kwarg
-        config from :param:`config`; this can be overwritten.
-        See :py:meth:`boto3.session.Session.client`.
+        Additional keyword arguments can be passed in a dict to initialise the
+        low level client. The key 'config' takes precedence over the `config`
+        kwarg. See :py:meth:`boto3.session.Session.client`.
 
         :type client: botocore.client.BaseClient
         :param client: a low-level service client for swf.
             See :py:meth:`boto3.session.Session.client`
 
         :type config: botocore.client.Config
-        :param config: custom config to instantiate the 'swf' client
+        :param config: custom config to instantiate the 'swf' client; by default
+            it sets connection and read timeouts to 70 sec
 
         :type kwargs: dict
         :param kwargs: kwargs for passing to client initialisation. The config
             param can be overwritten here
         """
         kwargs = kwargs if isinstance(kwargs, dict) else {}
+        config = config or Config(connect_timeout=70, read_timeout=70)
         kwargs.setdefault('config', config)
 
         self.client = client or boto3.client('swf', **kwargs)
@@ -64,10 +66,7 @@ class SWFClient(object):
                                default_exec_timeout=None,
                                default_start_timeout=None,
                                default_close_timeout=None):
-        """Wrapper for `boto3.client('swf').register_activity_type`.
-
-        :raises: `botocore.exceptions.ClientError`
-        """
+        """Wrapper for `boto3.client('swf').register_activity_type`."""
         kwargs = {
             'domain': str_or_none(domain),
             'name': str_or_none(name),
@@ -97,10 +96,7 @@ class SWFClient(object):
                                default_exec_timeout=None,
                                default_child_policy=None,
                                default_lambda_role=None):
-        """Wrapper for `boto3.client('swf').register_workflow_type`.
-
-        :raises: `botocore.exceptions.ClientError`
-        """
+        """Wrapper for `boto3.client('swf').register_workflow_type`."""
         kwargs = {
             'domain': str_or_none(domain),
             'name': str_or_none(name),
@@ -122,10 +118,7 @@ class SWFClient(object):
         return response
 
     def describe_activity_type(self, domain, name, version):
-        """Wrapper for `boto3.client('swf').describe_activity_type`.
-
-        :raises: `botocore.exceptions.ClientError`
-        """
+        """Wrapper for `boto3.client('swf').describe_activity_type`."""
         kwargs = {
             'domain': str_or_none(domain),
             'activityType': {
@@ -138,10 +131,7 @@ class SWFClient(object):
         return response
 
     def describe_workflow_type(self, domain, name, version):
-        """Wrapper for `boto3.client('swf').describe_workflow_type`.
-
-        :raises: `botocore.exceptions.ClientError`
-        """
+        """Wrapper for `boto3.client('swf').describe_workflow_type`."""
         kwargs = {
             'domain': str_or_none(domain),
             'workflowType': {
@@ -159,10 +149,7 @@ class SWFClient(object):
                                  task_start_to_close_timeout=None,
                                  child_policy=None, tags=None,
                                  lambda_role=None):
-        """Wrapper for `boto3.client('swf').start_workflow_execution`.
-
-        :raises: `botocore.exceptions.ClientError`
-        """
+        """Wrapper for `boto3.client('swf').start_workflow_execution`."""
         kwargs = {
             'domain': str_or_none(domain),
             'workflowId': str_or_none(wid),
@@ -188,10 +175,7 @@ class SWFClient(object):
     def poll_for_decision_task(self, domain, task_list, identity=None,
                                next_page_token=None, max_page_size=1000,
                                reverse_order=False):
-        """Wrapper for `boto3.client('swf').poll_for_decision_task`.
-
-        :raises: `botocore.exceptions.ClientError`, AssertionError
-        """
+        """Wrapper for `boto3.client('swf').poll_for_decision_task`."""
         assert max_page_size <= 1000, 'Page size greater than 1000.'
         identity = str(identity)[:IDENTITY_SIZE] if identity else identity
 
@@ -210,10 +194,7 @@ class SWFClient(object):
         return response
 
     def poll_for_activity_task(self, domain, task_list, identity=None):
-        """Wrapper for `boto3.client('swf').poll_for_activity_task`.
-
-        :raises: `botocore.exceptions.ClientError`
-        """
+        """Wrapper for `boto3.client('swf').poll_for_activity_task`."""
         identity = str(identity)[:IDENTITY_SIZE] if identity else identity
 
         kwargs = {
@@ -228,10 +209,7 @@ class SWFClient(object):
         return response
 
     def record_activity_task_heartbeat(self, task_token, details=None):
-        """Wrapper for `boto3.client('swf').record_activity_task_heartbeat`.
-
-        :raises: `botocore.exceptions.ClientError`
-        """
+        """Wrapper for `boto3.client('swf').record_activity_task_heartbeat`."""
         kwargs = {
             'taskToken': str_or_none(task_token),
             'details': str_or_none(details),
@@ -241,10 +219,7 @@ class SWFClient(object):
         return response
 
     def respond_activity_task_failed(self, task_token, reason=None, details=None):
-        """Wrapper for `boto3.client('swf').respond_activity_task_failed`.
-
-        :raises: `botocore.exceptions.ClientError`
-        """
+        """Wrapper for `boto3.client('swf').respond_activity_task_failed`."""
         kwargs = {
             'taskToken': str_or_none(task_token),
             'reason': str_or_none(reason),
@@ -255,10 +230,7 @@ class SWFClient(object):
         return response
 
     def respond_activity_task_completed(self, task_token, result=None):
-        """Wrapper for `boto3.client('swf').respond_activity_task_completed`.
-
-        :raises: `botocore.exceptions.ClientError`
-        """
+        """Wrapper for `boto3.client('swf').respond_activity_task_completed`."""
         kwargs = {
             'taskToken': str_or_none(task_token),
             'result': str_or_none(result)
@@ -269,10 +241,7 @@ class SWFClient(object):
 
     def respond_decision_task_completed(self, task_token, decisions=None,
                                         exec_context=None):
-        """Wrapper for `boto3.client('swf').respond_decision_task_completed`.
-
-        :raises: `botocore.exceptions.ClientError`
-        """
+        """Wrapper for `boto3.client('swf').respond_decision_task_completed`."""
         kwargs = {
             'taskToken': str_or_none(task_token),
             'decisions': decisions or [],
