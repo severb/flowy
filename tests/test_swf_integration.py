@@ -28,7 +28,7 @@ VERSION = 2
 HERE = os.path.dirname(os.path.realpath(__file__))
 A_CASSETTE = os.path.join(HERE, 'cassettes/a.yml.gz')
 W_CASSETTE = os.path.join(HERE, 'cassettes/w.yml.gz')
-DOMAIN = 'IntegrationTest'
+DOMAIN = 'FlowyIntegrationTest'     # a domain where you have access
 TASKLIST = 'tl'
 IDENTITY = 'test'
 
