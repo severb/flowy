@@ -252,6 +252,337 @@ class SWFClient(object):
         return response
 
 
+class SWFDecisions(object):
+    """
+    Helper class for creating decision responses.
+    """
+    def __init__(self):
+        """
+        Use this object to build a list of decisions for a decision response.
+        Each method call will add append a new decision.  Retrieve the list
+        of decisions from the _data attribute.
+        """
+        self._data = []
+
+    def schedule_activity_task(self,
+                               activity_id,
+                               activity_type_name,
+                               activity_type_version,
+                               task_list=None,
+                               task_priority=None,
+                               control=None,
+                               heartbeat_timeout=None,
+                               schedule_to_close_timeout=None,
+                               schedule_to_start_timeout=None,
+                               start_to_close_timeout=None,
+                               input=None):
+        """
+        Schedules an activity task.
+
+        :type activity_id: string
+        :param activity_id: The activityId of the type of the activity
+            being scheduled.
+
+        :type activity_type_name: string
+        :param activity_type_name: The name of the type of the activity
+            being scheduled.
+
+        :type activity_type_version: string|int|float
+        :param activity_type_version: The version of the type of the
+            activity being scheduled.
+
+        :type task_list: string
+        :param task_list: If set, specifies the name of the task list in
+            which to schedule the activity task. If not specified, the
+            defaultTaskList registered with the activity type will be used.
+            Note: a task list for this activity task must be specified either
+            as a default for the activity type or through this field. If
+            neither this field is set nor a default task list was specified
+            at registration time then a fault will be returned.
+        """
+        d = {
+            'decisionType': 'ScheduleActivityTask',
+            'scheduleActivityTaskDecisionAttributes': {
+                'activityId': activity_id,
+                'activityType': {
+                    'name': activity_type_name,
+                    'version': str(activity_type_version)
+                },
+                'taskList': task_list,
+                'taskPriority': str_or_none(task_priority),
+                'control': control,
+                'heartbeatTimeout': duration_encode(heartbeat_timeout,
+                                                    'heartbeat_timeout'),
+                'scheduleToCloseTimeout': duration_encode(
+                    schedule_to_close_timeout, 'schedule_to_close_timeout'),
+                'scheduleToStartTimeout': duration_encode(
+                    schedule_to_start_timeout, 'schedule_to_start_timeout'),
+                'startToCloseTimeout': duration_encode(start_to_close_timeout,
+                                                       'start_to_close_timeout'),
+                'input': str_or_none(input)
+            }
+        }
+        normalize_data(d)
+        self._data.append(d)
+
+    def request_cancel_activity_task(self, activity_id):
+        """
+        Attempts to cancel a previously scheduled activity task. If
+        the activity task was scheduled but has not been assigned to a
+        worker, then it will be canceled. If the activity task was
+        already assigned to a worker, then the worker will be informed
+        that cancellation has been requested in the response to
+        RecordActivityTaskHeartbeat.
+
+        :param str activity_id: The activityId of the type of the activity
+            being canceled.
+        """
+        d = {
+            'decisionType': 'RequestCancelActivityTask',
+            'requestCancelActivityTaskDecisionAttributes': {
+                'activityId': activity_id
+            }
+        }
+        self._data.append(d)
+
+    def record_marker(self, marker_name, details=None):
+        """
+        Records a MarkerRecorded event in the history. Markers can be
+        used for adding custom information in the history for instance
+        to let deciders know that they do not need to look at the
+        history beyond the marker event.
+
+        :param str marker_name: the name if the marker
+        """
+        d = {
+            'decisionType': 'RecordMarker',
+            'recordMarkerDecisionAttributes': {
+                'markerName': marker_name,
+                'details': str_or_none(details)
+            }
+        }
+        normalize_data(d)
+        self._data.append(d)
+
+    def complete_workflow_execution(self, result=None):
+        """
+        Closes the workflow execution and records a WorkflowExecutionCompleted
+        event in the history
+        """
+        d = {
+            'decisionType': 'CompleteWorkflowExecution',
+            'completeWorkflowExecutionDecisionAttributes': {
+                'result': str_or_none(result)
+            }
+        }
+        normalize_data(d)
+        self._data.append(d)
+
+    def fail_workflow_execution(self, reason=None, details=None):
+        """
+        Closes the workflow execution and records a WorkflowExecutionFailed
+        event in the history.
+        """
+        d = {
+            'decisionType': 'FailWorkflowExecution',
+            'failWorkflowExecutionDecisionAttributes': {
+                'reason': str_or_none(reason),
+                'details': str_or_none(details)
+            },
+        }
+        normalize_data(d)
+        self._data.append(d)
+
+    def cancel_workflow_execution(self, details=None):
+        """
+        Closes the workflow execution and records a WorkflowExecutionCanceled
+        event in the history.
+        """
+        d = {
+            'decisionType': 'CancelWorkflowExecution',
+            'cancelWorkflowExecutionDecisionAttributes': {
+                'details': str_or_none(details)
+            }
+        }
+        normalize_data(d)
+        self._data.append(d)
+
+    def continue_as_new_workflow_execution(self,
+                                           child_policy=None,
+                                           execution_start_to_close_timeout=None,
+                                           input=None,
+                                           tag_list=None,
+                                           task_list=None,
+                                           task_priority=None,
+                                           start_to_close_timeout=None,
+                                           workflow_type_version=None,
+                                           lambda_role=None):
+        """
+        Closes the workflow execution and starts a new workflow execution of
+        the same type using the same workflow id and a unique run Id. A
+        WorkflowExecutionContinuedAsNew event is recorded in the history.
+        """
+        d = {
+            'decisionType': 'ContinueAsNewWorkflowExecution',
+            'continueAsNewWorkflowExecutionDecisionAttributes': {
+                'input': str_or_none(input),
+                'executionStartToCloseTimeout': duration_encode(
+                    execution_start_to_close_timeout, 'execution_start_to_close_timeout'),
+                'taskList': {'name': str_or_none(task_list)},
+                'taskPriority': str_or_none(task_priority),
+                'taskStartToCloseTimeout': duration_encode(
+                    start_to_close_timeout, 'start_to_close_timeout'),
+                'childPolicy': cp_encode(child_policy),
+                'tagList': tags_encode(tag_list),
+                'workflowTypeVersion': str_or_none(workflow_type_version),
+                'lambdaRole': str_or_none(lambda_role)
+            }
+        }
+        normalize_data(d)
+        self._data.append(d)
+
+    def start_timer(self,
+                    start_to_fire_timeout,
+                    timer_id,
+                    control=None):
+        """
+        Starts a timer for this workflow execution and records a TimerStarted
+        event in the history.  This timer will fire after the specified delay
+        and record a TimerFired event.
+
+        :param int start_to_fire_timeout: the duration in seconds to wait before
+            firing the timer
+        :param timer_id: the unique ID of the timer
+        :param control: data attached to the event that can be used by the
+            decider in subsequent workflow tasks
+        """
+        d = {
+            'decisionType': 'StartTimer',
+            'startTimerDecisionAttributes': {
+                'timerId': timer_id,
+                'control': str_or_none(control),
+                'startToFireTimeout': duration_encode(start_to_fire_timeout,
+                                                      'start_to_fire_timeout')
+            }
+        }
+        normalize_data(d)
+        self._data.append(d)
+
+    def cancel_timer(self, timer_id):
+        """
+        Cancels a previously started timer and records a TimerCanceled
+        event in the history.
+
+        :param timer_id: the unique ID of the timer
+        """
+        d = {
+            'decisionType': 'CancelTimer',
+            'cancelTimerDecisionAttributes': {
+                'timerId': timer_id
+            }
+        }
+        self._data.append(d)
+
+    def signal_external_workflow_execution(self,
+                                           workflow_id,
+                                           signal_name,
+                                           run_id=None,
+                                           control=None,
+                                           input=None):
+        """
+        Requests a signal to be delivered to the specified external workflow
+        execution and records a SignalExternalWorkflowExecutionInitiated
+        event in the history.
+
+        :param str workflow_id: the id of the workflow execution to be signaled
+        :param str signal_name: the name of the signal
+        :param str run_id: The runId of the workflow execution to be signaled
+        :param str control: data attached to event, used by the decider
+        :param str input: input data to be provided with the signal
+        """
+        d = {
+            'decisionType': 'SignalExternalWorkflowExecution',
+            'signalExternalWorkflowExecutionDecisionAttributes': {
+                'workflowId': workflow_id,
+                'runId': str_or_none(run_id),
+                'signalName': signal_name,
+                'input': str_or_none(input),
+                'control': str_or_none(control)
+
+            }
+        }
+        normalize_data(d)
+        self._data.append(d)
+
+    def request_cancel_external_workflow_execution(self,
+                                                   workflow_id,
+                                                   control=None,
+                                                   run_id=None):
+        """
+        Requests that a request be made to cancel the specified
+        external workflow execution and records a
+        RequestCancelExternalWorkflowExecutionInitiated event in the
+        history.
+
+        :param str workflow_id: the id of the workflow execution to cancel
+        :param str run_id: The runId of the workflow execution to cancel
+        :param str control: data attached to event, used by the decider
+        """
+        d = {
+            'decisionType': 'RequestCancelExternalWorkflowExecution',
+            'requestCancelExternalWorkflowExecutionDecisionAttributes': {
+                'workflowId': workflow_id,
+                'run_id': run_id,
+                'control': control
+            }
+        }
+        normalize_data(d)
+        self._data.append(d)
+
+    def start_child_workflow_execution(self,
+                                       workflow_type_name,
+                                       workflow_type_version,
+                                       workflow_id,
+                                       child_policy=None,
+                                       control=None,
+                                       execution_start_to_close_timeout=None,
+                                       input=None,
+                                       tag_list=None,
+                                       task_list=None,
+                                       task_priority=None,
+                                       task_start_to_close_timeout=None,
+                                       lambda_role=None):
+        """
+        Requests that a child workflow execution be started and
+        records a StartChildWorkflowExecutionInitiated event in the
+        history.  The child workflow execution is a separate workflow
+        execution with its own history.
+        """
+        d = {
+            'decisionType': 'StartChildWorkflowExecution',
+            'startChildWorkflowExecutionDecisionAttributes': {
+                'workflowType': {
+                    'name': workflow_type_name,
+                    'version': str(workflow_type_version)
+                },
+                'workflowId': workflow_id,
+                'control': control,
+                'input': input,
+                'executionStartToCloseTimeout': duration_encode(
+                    execution_start_to_close_timeout, 'execution_start_to_close_timeout'),
+                'taskList': {'name': task_list},
+                'taskPriority': task_priority,
+                'taskStartToCloseTimeout': duration_encode(
+                    task_start_to_close_timeout, 'task_start_to_close_timeout'),
+                'childPolicy': cp_encode(child_policy),
+                'tagList': tags_encode(tag_list),
+                'lambdaRole': lambda_role,
+            }
+        }
+        normalize_data(d)
+        self._data.append(d)
+
+
 def normalize_data(d):
     """Recursively goes through method kwargs and removes default values. This
     has side effect on the input.

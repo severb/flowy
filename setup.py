@@ -3,8 +3,7 @@
 from setuptools import find_packages
 from setuptools import setup
 
-install_requires = ['boto==2.33.0',
-                    'boto3==1.3.1',
+install_requires = ['boto3==1.3.1',
                     'venusian>=1.0',
                     'lazy_object_proxy==1.2.2']
 setup(name='flowy',

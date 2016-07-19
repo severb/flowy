@@ -1,8 +1,8 @@
 import uuid
 
-from boto.swf.layer1_decisions import Layer1Decisions
 from botocore.exceptions import ClientError
 
+from flowy.swf.client import SWFDecisions
 from flowy.utils import logger
 
 
@@ -90,7 +90,7 @@ class SWFWorkflowDecision(object):
         self.workflow_duration = workflow_duration
         self.tags = tags
         self.child_policy = child_policy
-        self.decisions = Layer1Decisions()
+        self.decisions = SWFDecisions()
         self.closed = False
 
     def fail(self, reason):
@@ -99,7 +99,7 @@ class SWFWorkflowDecision(object):
         Any other decisions queued are cleared.
         The reason is truncated if too large.
         """
-        decisions = self.decisions = Layer1Decisions()
+        decisions = self.decisions = SWFDecisions()
         decisions.fail_workflow_execution(reason=str(reason)[:REASON_SIZE])
         self.flush()
 
@@ -120,7 +120,7 @@ class SWFWorkflowDecision(object):
 
         Any other decisions queued are cleared.
         """
-        decisions = self.decisions = Layer1Decisions()
+        decisions = self.decisions = SWFDecisions()
         input_data = str(input_data)
         if len(input_data) > INPUT_SIZE:
             self.fail("Restart input too large: %s/%s" % (len(input_data), INPUT_SIZE))
@@ -139,7 +139,7 @@ class SWFWorkflowDecision(object):
 
         Any other decisions queued are cleared.
         """
-        decisions = self.decisions = Layer1Decisions()
+        decisions = self.decisions = SWFDecisions()
         result = str(result)
         if len(result) > RESULT_SIZE:
             self.fail("Result too large: %s/%s" % (len(result), RESULT_SIZE))
@@ -220,8 +220,6 @@ class SWFActivityTaskDecision(SWFWorkflowTaskDecision):
             self.proxy_factory.task_list, self.proxy_factory.heartbeat,
             self.proxy_factory.schedule_to_close, self.proxy_factory.schedule_to_start,
             self.proxy_factory.start_to_close)
-
-
 
 
 def timer_key(call_key):
