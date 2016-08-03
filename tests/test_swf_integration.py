@@ -264,7 +264,8 @@ def test_activity_integration():
                           record_mode='none', **cassette_args) as cass:
         try:
             cl = SWFClient(kwargs={'aws_access_key_id': 'x',
-                                   'aws_secret_access_key': 'x'})
+                                   'aws_secret_access_key': 'x',
+                                   'region_name': 'us-east-1'})
             aworker.run_forever(DOMAIN, TASKLIST,
                                 identity=IDENTITY,
                                 swf_client=cl,
@@ -279,7 +280,8 @@ def test_workflow_integration():
                           record_mode='none', **cassette_args) as cass:
         try:
             cl = SWFClient(kwargs={'aws_access_key_id': 'x',
-                                   'aws_secret_access_key': 'x'})
+                                   'aws_secret_access_key': 'x',
+                                   'region_name': 'us-east-1'})
             wworker.run_forever(DOMAIN, TASKLIST,
                                 identity=IDENTITY,
                                 swf_client=cl,
