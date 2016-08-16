@@ -308,7 +308,7 @@ class SWFDecisions(object):
                     'name': activity_type_name,
                     'version': str(activity_type_version)
                 },
-                'taskList': task_list,
+                'taskList': {'name': str_or_none(task_list)},
                 'taskPriority': str_or_none(task_priority),
                 'control': control,
                 'heartbeatTimeout': duration_encode(heartbeat_timeout,
