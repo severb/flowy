@@ -1,5 +1,4 @@
 import functools
-import json
 import keyword
 
 import venusian
@@ -7,7 +6,6 @@ import venusian
 from flowy.result import is_result_proxy
 from flowy.result import restart_type
 from flowy.result import SuspendTask
-from flowy.result import TaskError
 from flowy.result import wait
 from flowy.serialization import dumps
 from flowy.serialization import loads
@@ -22,7 +20,7 @@ class ActivityConfig(object):
     """A simple/generic activity configuration object.
 
     It only knows about input/result deserialization/serialization and does a
-    generic implementation initializaiton.
+    generic implementation initialization.
 
     It also implements the venusian registration as a syntactic sugar for
     registration.

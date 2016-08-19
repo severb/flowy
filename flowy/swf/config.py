@@ -1,8 +1,9 @@
 import functools
 
-from boto.exception import SWFResponseError
-from boto.swf.exceptions import SWFTypeAlreadyExistsError
+from botocore.exceptions import ClientError
 
+from flowy.swf.client import cp_encode
+from flowy.swf.client import duration_encode
 from flowy.swf.proxy import SWFActivityProxyFactory
 from flowy.swf.proxy import SWFWorkflowProxyFactory
 from flowy.config import ActivityConfig
@@ -13,7 +14,7 @@ from flowy.utils import str_or_none
 
 
 class SWFConfigMixin(object):
-    def register_remote(self, swf_layer1, domain, name, version):
+    def register_remote(self, swf_client, domain, name, version):
         """Register the config in Amazon SWF if it's missing.
 
         If the task registration fails because there is another task registered
@@ -25,9 +26,9 @@ class SWFConfigMixin(object):
         SWFRegistrationError. ValueError is raised if any configuration values
         can't be converted to the required types.
         """
-        registered_as_new = self.try_register_remote(swf_layer1, domain, name, version)
+        registered_as_new = self.try_register_remote(swf_client, domain, name, version)
         if not registered_as_new:
-            self.check_compatible(swf_layer1, domain, name, version)  # raises if incompatible
+            self.check_compatible(swf_client, domain, name, version)    # raises if incompatible
 
     def register(self, registry, key, func):
         name, version = key
@@ -75,13 +76,13 @@ class SWFActivityConfig(SWFConfigMixin, ActivityConfig):
     def _cvt_values(self):
         """Convert values to their expected types or bailout."""
         d_t_l = str_or_none(self.default_task_list)
-        d_h = timer_encode(self.default_heartbeat, 'default_heartbeat')
-        d_sch_c = timer_encode(self.default_schedule_to_close, 'default_schedule_to_close')
-        d_sch_s = timer_encode(self.default_schedule_to_start, 'default_schedule_to_start')
-        d_s_c = timer_encode(self.default_start_to_close, 'default_start_to_close')
+        d_h = duration_encode(self.default_heartbeat, 'default_heartbeat')
+        d_sch_c = duration_encode(self.default_schedule_to_close, 'default_schedule_to_close')
+        d_sch_s = duration_encode(self.default_schedule_to_start, 'default_schedule_to_start')
+        d_s_c = duration_encode(self.default_start_to_close, 'default_start_to_close')
         return d_t_l, d_h, d_sch_c, d_sch_s, d_s_c
 
-    def try_register_remote(self, swf_layer1, domain, name, version):
+    def try_register_remote(self, swf_client, domain, name, version):
         """Register the activity remotely.
 
         Returns True if registration is successful and False if another
@@ -90,39 +91,47 @@ class SWFActivityConfig(SWFConfigMixin, ActivityConfig):
         Raise SWFRegistrationError in case of SWF communication errors and
         ValueError if any configuration values can't be converted to the
         required types.
+
+        :type swf_client: :class:`flowy.swf.client.SWFClient`
+        :param swf_client: an implementation or duck typing of `SWFClient`
+        :param domain: the domain name where to register the activity
+        :param name: name of the activity
+        :param version: version of the activity
+        :rtype: bool
         """
         d_t_l, d_h, d_sch_c, d_sch_s, d_s_c = self._cvt_values()
         try:
-            swf_layer1.register_activity_type(
-                str(domain),
-                name=str(name),
-                version=str(version),
-                task_list=d_t_l,
-                default_task_heartbeat_timeout=d_h,
-                default_task_schedule_to_close_timeout=d_sch_c,
-                default_task_schedule_to_start_timeout=d_sch_s,
-                default_task_start_to_close_timeout=d_s_c)
-        except SWFTypeAlreadyExistsError:
-            return False
-        except SWFResponseError as e:
-            if 'TypeAlreadyExistsFault' in str(e):  # eucalyptus
+            swf_client.register_activity_type(domain, name, version,
+                                              default_task_list=d_t_l,
+                                              default_heartbeat_timeout=d_h,
+                                              default_exec_timeout=d_s_c,
+                                              default_start_timeout=d_sch_s,
+                                              default_close_timeout=d_sch_c)
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'TypeAlreadyExistsFault':
                 return False
             logger.exception('Error while registering the activity:')
             raise SWFRegistrationError(e)
         return True
 
-    def check_compatible(self, swf_layer1, domain, name, version):
+    def check_compatible(self, swf_client, domain, name, version):
         """Check if the remote config has the same defaults as this one.
 
         Raise SWFRegistrationError in case of SWF communication errors or
         incompatibility and ValueError if any configuration values can't be
         converted to the required types.
+
+        :type swf_client: :class:`flowy.swf.client.SWFClient`
+        :param swf_client: an implementation or duck typing of `SWFClient`
+        :param domain: the domain name where to register the activity
+        :param name: name of the activity
+        :param version: version of the activity
         """
         d_t_l, d_h, d_sch_c, d_sch_s, d_s_c = self._cvt_values()
         try:
-            a_descr = swf_layer1.describe_activity_type(str(domain), str(name), str(version))
+            a_descr = swf_client.describe_activity_type(domain, name, version)
             a_descr = a_descr['configuration']
-        except SWFResponseError as e:
+        except ClientError as e:
             logger.exception('Error while checking activity compatibility:')
             raise SWFRegistrationError(e)
         r_d_t_l = a_descr.get('defaultTaskList', {}).get('name')
@@ -193,12 +202,12 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
     def _cvt_values(self):
         """Convert values to their expected types or bailout."""
         d_t_l = str_or_none(self.default_task_list)
-        d_w_d = timer_encode(self.default_workflow_duration, 'default_workflow_duration')
-        d_d_d = timer_encode(self.default_decision_duration, 'default_decision_duration')
+        d_w_d = duration_encode(self.default_workflow_duration, 'default_workflow_duration')
+        d_d_d = duration_encode(self.default_decision_duration, 'default_decision_duration')
         d_c_p = cp_encode(self.default_child_policy)
         return d_t_l, d_w_d, d_d_d, d_c_p
 
-    def try_register_remote(self, swf_layer1, domain, name, version):
+    def try_register_remote(self, swf_client, domain, name, version):
         """Register the workflow remotely.
 
         Returns True if registration is successful and False if another
@@ -210,38 +219,46 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
         Raise SWFRegistrationError in case of SWF communication errors and
         ValueError if any configuration values can't be converted to the
         required types.
+
+        :type swf_client: :class:`flowy.swf.client.SWFClient`
+        :param swf_client: an implementation or duck typing of `SWFClient`
+        :param domain: the domain name where to register the workflow
+        :param name: name of the workflow
+        :param version: version of the workflow
+        :rtype: bool
         """
         d_t_l, d_w_d, d_d_d, d_c_p = self._cvt_values()
         try:
-            swf_layer1.register_workflow_type(
-                str(domain),
-                name=str(name),
-                version=str(version),
-                task_list=d_t_l,
-                default_execution_start_to_close_timeout=d_w_d,
-                default_task_start_to_close_timeout=d_d_d,
-                default_child_policy=d_c_p)
-        except SWFTypeAlreadyExistsError:
-            return False
-        except SWFResponseError as e:
-            if 'TypeAlreadyExistsFault' in str(e):  # eucalyptus
+            swf_client.register_workflow_type(domain, name, version,
+                                              default_task_list=d_t_l,
+                                              default_task_timeout=d_d_d,
+                                              default_exec_timeout=d_w_d,
+                                              default_child_policy=d_c_p)
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'TypeAlreadyExistsFault':
                 return False
             logger.exception('Error while registering the workflow:')
             raise SWFRegistrationError(e)
         return True
 
-    def check_compatible(self, swf_layer1, domain, name, version):
+    def check_compatible(self, swf_client, domain, name, version):
         """Check if the remote config has the same defaults as this one.
 
         Raise SWFRegistrationError in case of SWF communication errors or
         incompatibility and ValueError if any configuration values can't be
         converted to the required types.
+
+        :type swf_client: :class:`flowy.swf.client.SWFClient`
+        :param swf_client: an implementation or duck typing of `SWFClient`
+        :param domain: the domain name where to check the workflow
+        :param name: name of the workflow
+        :param version: version of the workflow
         """
         d_t_l, d_w_d, d_d_d, d_c_p = self._cvt_values()
         try:
-            w_descr = swf_layer1.describe_workflow_type(str(domain), str(name), str(version))
+            w_descr = swf_client.describe_workflow_type(str(domain), str(name), str(version))
             w_descr = w_descr['configuration']
-        except SWFResponseError as e:
+        except ClientError as e:
             logger.exception('Error while checking workflow compatibility:')
             raise SWFRegistrationError(e)
         r_d_t_l = w_descr.get('defaultTaskList', {}).get('name')
@@ -301,10 +318,10 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
             name=str(name),
             version=str(version),
             task_list=str_or_none(task_list),
-            heartbeat=timer_encode(heartbeat, 'heartbeat'),
-            schedule_to_close=timer_encode(schedule_to_close, 'schedule_to_close'),
-            schedule_to_start=timer_encode(schedule_to_start, 'schedule_to_start'),
-            start_to_close=timer_encode(start_to_close, 'start_to_close'),
+            heartbeat=duration_encode(heartbeat, 'heartbeat'),
+            schedule_to_close=duration_encode(schedule_to_close, 'schedule_to_close'),
+            schedule_to_start=duration_encode(schedule_to_start, 'schedule_to_start'),
+            start_to_close=duration_encode(start_to_close, 'start_to_close'),
             serialize_input=serialize_input,
             deserialize_result=deserialize_result,
             retry=retry)
@@ -327,8 +344,8 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
             name=str(name),
             version=str(version),
             task_list=str_or_none(task_list),
-            workflow_duration=timer_encode(workflow_duration, 'workflow_duration'),
-            decision_duration=timer_encode(decision_duration, 'decision_duration'),
+            workflow_duration=duration_encode(workflow_duration, 'workflow_duration'),
+            decision_duration=duration_encode(decision_duration, 'decision_duration'),
             child_policy=cp_encode(child_policy),
             serialize_input=serialize_input,
             deserialize_result=deserialize_result,
@@ -349,22 +366,3 @@ class SWFWorkflowConfig(SWFConfigMixin, WorkflowConfig):
 
 class SWFRegistrationError(Exception):
     """Can't register a task remotely."""
-
-
-def cp_encode(val):
-    if val is not None:
-        val = str(val).upper()
-    if val not in ['TERMINATE', 'REQUEST_CANCEL', 'ABANDON', None]:
-        raise ValueError('Invalid child policy value: %r' % val)
-    return val
-
-
-def timer_encode(val, name):
-    if val is None:
-        return None
-    val = max(int(val), 0)
-    if val == 0:
-        raise ValueError(
-            'The value of %r must be a strictly positive integer: %r' %
-            (name, val))
-    return str(val)
